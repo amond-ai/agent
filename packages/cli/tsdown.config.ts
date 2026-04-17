@@ -1,10 +1,9 @@
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-	entry: ['bin/flue.js'],
+	entry: ['bin/flue.ts'],
 	format: ['esm'],
 	dts: false,
 	clean: true,
 	outDir: 'dist',
-	external: [/sandbox\/sandbox\.mjs/],
 });
