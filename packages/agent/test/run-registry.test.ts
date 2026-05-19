@@ -432,6 +432,34 @@ describe('Bare /runs/:runId routes via flue()', () => {
 		expect(res.headers.get('allow')).toBe('GET');
 	});
 
+	it('preserves the original agent request body for Cloudflare route forwarding', async () => {
+		const routedBodies: string[] = [];
+
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [{ name: 'hello', triggers: { webhook: true } }] },
+			webhookAgents: ['hello'],
+			allowNonWebhook: false,
+			routeAgentRequest: async (request) => {
+				routedBodies.push(await request.text());
+				return Response.json({ ok: true });
+			},
+		});
+
+		const app = new Hono();
+		app.route('/', flue());
+		const original = new Request('http://localhost/agents/hello/inst-1', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ caseNumber: '02101282' }),
+		});
+
+		const res = await app.fetch(original);
+		expect(res.status).toBe(200);
+		expect(routedBodies).toEqual(['{"caseNumber":"02101282"}']);
+		expect(await original.text()).toBe('{"caseNumber":"02101282"}');
+	});
+
 	it('flushes queued non-terminal events before run_end is persisted', async () => {
 		const runStore = new SlowNonTerminalRunStore();
 		const runRegistry = new InMemoryRunRegistry();

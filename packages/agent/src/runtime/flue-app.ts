@@ -363,7 +363,7 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 	if (!rt.routeAgentRequest) {
 		throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
 	}
-	const response = await rt.routeAgentRequest(c.req.raw, c.env);
+	const response = await rt.routeAgentRequest(c.req.raw.clone(), c.env);
 	if (response) return response;
 
 	throw new RouteNotFoundError({
