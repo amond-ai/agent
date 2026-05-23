@@ -1,6 +1,15 @@
 import { HttpClient, type HttpClientOptions, type RequestHeaders } from './http.ts';
 import { invokeAgent, type SyncInvokeResult, type WebhookInvokeResult } from './public/invoke.ts';
 import { type StreamOptions, streamRunEvents } from './public/stream.ts';
+import {
+	connectAgentSocket,
+	connectWorkflowSocket,
+	defaultWebSocketFactory,
+	type AgentSocket,
+	type WebSocketFactory,
+	webSocketUrl,
+	type WorkflowSocket,
+} from './public/websocket.ts';
 import type { AgentManifestEntry, InstanceSummary, ListResponse, RunPointer, RunRecord, RunStatus } from './types.ts';
 
 export type { RequestHeaders };
@@ -8,6 +17,7 @@ export type { RequestHeaders };
 export interface CreateFlueClientOptions extends HttpClientOptions {
 	/** Mount path for `admin()`. Defaults to `/admin`. */
 	adminBasePath?: string;
+	websocket?: WebSocketFactory;
 }
 
 export interface FlueClient {
@@ -20,6 +30,10 @@ export interface FlueClient {
 		invoke(name: string, id: string, options: { mode: 'stream'; payload?: unknown; signal?: AbortSignal }): AsyncIterable<import('./types.ts').FlueEvent>;
 		invoke(name: string, id: string, options: { mode: 'sync'; payload?: unknown; signal?: AbortSignal }): Promise<SyncInvokeResult>;
 		invoke(name: string, id: string, options: { mode: 'webhook'; payload?: unknown; signal?: AbortSignal }): Promise<WebhookInvokeResult>;
+		connect(name: string, id: string): AgentSocket;
+	};
+	workflows: {
+		connect(name: string): WorkflowSocket;
 	};
 	admin: {
 		agents: { list(): Promise<ListResponse<AgentManifestEntry>> };
@@ -45,6 +59,7 @@ export interface ListRunsOptions extends ListOptions {
 
 export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 	const http = new HttpClient(options);
+	const websocket = options.websocket ?? defaultWebSocketFactory;
 	const adminBasePath = normalizeBasePath(options.adminBasePath ?? '/admin');
 	return {
 		runs: {
@@ -59,6 +74,17 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 		agents: {
 			invoke: ((name: string, id: string, opts: Parameters<typeof invokeAgent>[3]) =>
 				invokeAgent(http, name, id, opts)) as FlueClient['agents']['invoke'],
+			connect: (name, id) =>
+				connectAgentSocket(
+					websocket,
+					webSocketUrl(http.url(`/agents/${encodeURIComponent(name)}/${encodeURIComponent(id)}`)),
+					name,
+					id,
+				),
+		},
+		workflows: {
+			connect: (name) =>
+				connectWorkflowSocket(websocket, webSocketUrl(http.url(`/workflows/${encodeURIComponent(name)}`)), name),
 		},
 		admin: {
 			agents: {

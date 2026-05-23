@@ -1,0 +1,165 @@
+import { describe, expect, it } from 'vitest';
+import { createFlueClient, FlueSocketError, type WebSocketLike } from '../src/index.ts';
+
+class FakeSocket implements WebSocketLike {
+	readonly sent: string[] = [];
+	readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
+	private readonly listeners = new Map<string, Array<(event: unknown) => void>>();
+
+	addEventListener(type: 'message' | 'close' | 'error', listener: (event: unknown) => void): void {
+		const listeners = this.listeners.get(type) ?? [];
+		listeners.push(listener);
+		this.listeners.set(type, listeners);
+	}
+
+	send(data: string): void {
+		this.sent.push(data);
+	}
+
+	close(code?: number, reason?: string): void {
+		this.closeCalls.push({ code, reason });
+	}
+
+	message(value: unknown): void {
+		this.emit('message', { data: JSON.stringify(value) });
+	}
+
+	malformed(value: string): void {
+		this.emit('message', { data: value });
+	}
+
+	closed(): void {
+		this.emit('close', {});
+	}
+
+	private emit(type: string, event: unknown): void {
+		for (const listener of this.listeners.get(type) ?? []) listener(event);
+	}
+}
+
+function socketClient() {
+	const sockets: Array<{ url: string; socket: FakeSocket }> = [];
+	const client = createFlueClient({
+		baseUrl: 'https://flue.test/api/',
+		websocket: (url) => {
+			const socket = new FakeSocket();
+			sockets.push({ url, socket });
+			return socket;
+		},
+	});
+	return { client, sockets };
+}
+
+describe('WebSocket clients', () => {
+	it('connects to an agent with a secure WebSocket URL and streams correlated events', async () => {
+		const { client, sockets } = socketClient();
+		const agent = client.agents.connect('assistant bot', 'customer/123');
+		const connection = sockets[0];
+		expect(connection?.url).toBe('wss://flue.test/agents/assistant%20bot/customer%2F123');
+		connection?.socket.message({ version: 1, type: 'ready', target: 'agent', name: 'assistant bot', instanceId: 'customer/123' });
+		await agent.ready;
+
+		const events: unknown[] = [];
+		agent.onEvent((event, context) => events.push({ event, context }));
+		const pending = agent.prompt('Hello', { session: 'chat' });
+		await Promise.resolve();
+		const request = JSON.parse(connection?.socket.sent[0] ?? '{}') as { requestId: string };
+		expect(request).toMatchObject({ version: 1, type: 'prompt', message: 'Hello', session: 'chat' });
+		connection?.socket.message({ version: 1, type: 'started', requestId: request.requestId, runId: 'run_1' });
+		connection?.socket.message({ version: 1, type: 'event', requestId: request.requestId, runId: 'run_1', event: { type: 'text_delta', text: 'Hi' } });
+		connection?.socket.message({ version: 1, type: 'result', requestId: request.requestId, runId: 'run_1', result: 'done' });
+
+		await expect(pending).resolves.toEqual({ result: 'done', runId: 'run_1' });
+		expect(events).toEqual([{ event: { type: 'text_delta', text: 'Hi' }, context: { requestId: request.requestId, runId: 'run_1' } }]);
+	});
+
+	it('supports sequential agent prompts and ping on one socket', async () => {
+		const { client, sockets } = socketClient();
+		const agent = client.agents.connect('assistant', 'inst-1');
+		const socket = sockets[0]?.socket;
+		socket?.message({ version: 1, type: 'ready', target: 'agent', name: 'assistant', instanceId: 'inst-1' });
+
+		const first = agent.prompt('first');
+		await Promise.resolve();
+		const firstRequest = JSON.parse(socket?.sent[0] ?? '{}') as { requestId: string };
+		socket?.message({ version: 1, type: 'result', requestId: firstRequest.requestId, runId: 'run_1', result: 1 });
+		await expect(first).resolves.toEqual({ result: 1, runId: 'run_1' });
+
+		const second = agent.prompt('second');
+		await Promise.resolve();
+		const secondRequest = JSON.parse(socket?.sent[1] ?? '{}') as { requestId: string };
+		socket?.message({ version: 1, type: 'result', requestId: secondRequest.requestId, runId: 'run_2', result: 2 });
+		await expect(second).resolves.toEqual({ result: 2, runId: 'run_2' });
+
+		const ping = agent.ping();
+		await Promise.resolve();
+		const pingRequest = JSON.parse(socket?.sent[2] ?? '{}') as { requestId: string };
+		socket?.message({ version: 1, type: 'pong', requestId: pingRequest.requestId });
+		await expect(ping).resolves.toBeUndefined();
+	});
+
+	it('maps operation errors to FlueSocketError without closing an agent socket', async () => {
+		const { client, sockets } = socketClient();
+		const agent = client.agents.connect('assistant', 'inst-1');
+		const socket = sockets[0]?.socket;
+		socket?.message({ version: 1, type: 'ready', target: 'agent', name: 'assistant', instanceId: 'inst-1' });
+		const pending = agent.prompt('fail');
+		await Promise.resolve();
+		const request = JSON.parse(socket?.sent[0] ?? '{}') as { requestId: string };
+		socket?.message({
+			version: 1,
+			type: 'error',
+			requestId: request.requestId,
+			runId: 'run_fail',
+			error: { type: 'TEST', message: 'failed', details: 'failed' },
+		});
+		await expect(pending).rejects.toBeInstanceOf(FlueSocketError);
+		expect(socket?.closeCalls).toEqual([]);
+	});
+
+	it('closes on unscoped protocol errors and preserves the structured cause', async () => {
+		const { client, sockets } = socketClient();
+		const agent = client.agents.connect('assistant', 'inst-1');
+		const socket = sockets[0]?.socket;
+		socket?.message({ version: 1, type: 'ready', target: 'agent', name: 'assistant', instanceId: 'inst-1' });
+		socket?.message({ version: 1, type: 'error', error: { type: 'PROTOCOL', message: 'bad frame', details: 'bad frame' } });
+		expect(socket?.closeCalls).toEqual([{ code: 1011, reason: 'WebSocket error' }]);
+		await expect(agent.prompt('after failure')).rejects.toBeInstanceOf(FlueSocketError);
+	});
+
+	it('invokes a workflow once and rejects further local invocations', async () => {
+		const { client, sockets } = socketClient();
+		const workflow = client.workflows.connect('triage');
+		const connection = sockets[0];
+		expect(connection?.url).toBe('wss://flue.test/workflows/triage');
+		connection?.socket.message({ version: 1, type: 'ready', target: 'workflow', name: 'triage' });
+		const pending = workflow.invoke({ issue: 123 });
+		await Promise.resolve();
+		const request = JSON.parse(connection?.socket.sent[0] ?? '{}') as { requestId: string };
+		expect(request).toMatchObject({ version: 1, type: 'invoke', payload: { issue: 123 } });
+		connection?.socket.message({ version: 1, type: 'result', requestId: request.requestId, runId: 'run_workflow', result: { ok: true } });
+		await expect(pending).resolves.toEqual({ result: { ok: true }, runId: 'run_workflow' });
+		await expect(workflow.invoke({ issue: 456 })).rejects.toThrow('only one invocation');
+	});
+
+	it('fails pending work on invalid server protocol frames or connection close', async () => {
+		const invalid = socketClient();
+		const invalidAgent = invalid.client.agents.connect('assistant', 'inst-1');
+		const invalidSocket = invalid.sockets[0]?.socket;
+		invalidSocket?.message({ version: 1, type: 'ready', target: 'agent', name: 'assistant', instanceId: 'inst-1' });
+		const invalidPending = invalidAgent.prompt('hello');
+		await Promise.resolve();
+		invalidSocket?.message({ version: 1, type: 'event', requestId: 'request', runId: 'run_1' });
+		await expect(invalidPending).rejects.toThrow('invalid protocol message');
+		expect(invalidSocket?.closeCalls).toEqual([{ code: 1008, reason: 'Invalid protocol message' }]);
+
+		const disconnected = socketClient();
+		const disconnectedAgent = disconnected.client.agents.connect('assistant', 'inst-1');
+		const disconnectedSocket = disconnected.sockets[0]?.socket;
+		disconnectedSocket?.message({ version: 1, type: 'ready', target: 'agent', name: 'assistant', instanceId: 'inst-1' });
+		const disconnectedPending = disconnectedAgent.prompt('hello');
+		await Promise.resolve();
+		disconnectedSocket?.closed();
+		await expect(disconnectedPending).rejects.toThrow('connection closed');
+	});
+});
