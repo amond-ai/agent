@@ -49,6 +49,7 @@ import type {
 	BranchSummaryEntry,
 	CallHandle,
 	CompactionEntry,
+	DirectMessageMetadata,
 	DispatchMessageMetadata,
 	FlueEvent,
 	FlueEventCallback,
@@ -278,7 +279,12 @@ export class SessionHistory {
 		return undefined;
 	}
 
-	appendMessage(message: AgentMessage, source?: MessageSource, dispatch?: DispatchMessageMetadata): string {
+	appendMessage(
+		message: AgentMessage,
+		source?: MessageSource,
+		dispatch?: DispatchMessageMetadata,
+		direct?: DirectMessageMetadata,
+	): string {
 		const entry: MessageEntry = {
 			type: 'message',
 			id: generateEntryId(this.byId),
@@ -288,8 +294,15 @@ export class SessionHistory {
 			source,
 		};
 		if (dispatch) entry.dispatch = dispatch;
+		if (direct) entry.direct = direct;
 		this.appendEntry(entry);
 		return entry.id;
+	}
+
+	findDirectInput(runId: string): MessageEntry | undefined {
+		return this.getActivePath().find(
+			(entry): entry is MessageEntry => entry.type === 'message' && entry.direct?.runId === runId,
+		);
 	}
 
 	appendMessages(messages: AgentMessage[], source?: MessageSource, dispatch?: DispatchMessageMetadata): string[] {
@@ -627,6 +640,12 @@ export class Session implements FlueSession {
 					signal,
 				});
 			}),
+		);
+	}
+
+	processDirectInput(input: { runId: string; message: string }): CallHandle<PromptResponse> {
+		return createCallHandle(undefined, (signal) =>
+			this.runOperation('prompt', signal, () => this.runPersistedDirectInput(input)),
 		);
 	}
 
@@ -1627,6 +1646,57 @@ export class Session implements FlueSession {
 			}
 		}
 		return undefined;
+	}
+
+	private async runPersistedDirectInput(input: { runId: string; message: string }): Promise<PromptResponse> {
+		return this.withScopedRuntime(
+			{
+				tools: [],
+				model: undefined,
+				thinkingLevel: undefined,
+				callSite: 'this direct input',
+			},
+			async ({ resolvedModel }) => {
+				let inputEntry = this.history.findDirectInput(input.runId);
+				if (!inputEntry) {
+					this.history.appendMessage(
+						createUserContextMessage(input.message, new Date().toISOString()),
+						'prompt',
+						undefined,
+						{ runId: input.runId },
+					);
+					this.harness.state.messages = this.history.buildContext();
+					await this.save();
+					inputEntry = this.history.findDirectInput(input.runId);
+				}
+				if (!inputEntry) throw new Error('[flue] Failed to persist direct agent input.');
+				const following = this.history.getActivePathSince(inputEntry.id);
+				if (following.some((entry) => entry.type === 'message' && entry.message.role === 'user')) {
+					throw new Error('[flue] Cannot recover direct agent input after the session has advanced.');
+				}
+				const persistedAssistant = [...following].reverse().find(
+					(entry): entry is MessageEntry => entry.type === 'message' && entry.message.role === 'assistant',
+				);
+				if (!persistedAssistant) {
+					const beforeLength = this.harness.state.messages.length;
+					await this.harness.continue();
+					await this.harness.waitForIdle();
+					await this.syncHarnessMessagesSince(beforeLength, 'prompt');
+					await this.checkLatestAssistantForCompaction();
+					this.throwIfError('prompt');
+				} else {
+					const assistant = persistedAssistant.message as AssistantMessage;
+					if (assistant.stopReason === 'error' || assistant.stopReason === 'aborted') {
+						throw new Error(`[flue] prompt failed: ${assistant.errorMessage ?? assistant.stopReason}`);
+					}
+				}
+				return {
+					text: this.getAssistantText(),
+					usage: this.aggregateUsageSince(inputEntry.id),
+					model: { id: resolvedModel.id },
+				};
+			},
+		);
 	}
 
 	/**

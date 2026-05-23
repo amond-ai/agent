@@ -499,13 +499,14 @@ function fakeDispatchHarness(sessions: string[], processed: DispatchInput[]): Fl
 	};
 }
 
-function createTestContext(id: string, runId: string, payload: unknown, req: Request) {
+function createTestContext(id: string, runId: string, payload: unknown, req: Request, initialEventIndex?: number) {
 	return createFlueContext({
 		id,
 		runId,
 		payload,
 		env: {},
 		req,
+		initialEventIndex,
 		agentConfig: testAgentConfig(),
 		createDefaultEnv: async () => fakeEnv(),
 		defaultStore: new InMemorySessionStore(),

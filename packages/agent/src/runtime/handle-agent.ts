@@ -14,6 +14,10 @@ export type AgentHandler = (ctx: FlueContextInternal) => unknown | Promise<unkno
 export type CreatedAgentHandler = CreatedAgent;
 export type WorkflowHandler = (ctx: FlueContextInternal) => unknown | Promise<unknown>;
 
+interface DirectRequestSession {
+	processDirectInput(input: { runId: string; message: string }): PromiseLike<unknown>;
+}
+
 interface DispatchSession {
 	processDispatchInput(input: DispatchInput): PromiseLike<unknown>;
 }
@@ -62,8 +66,15 @@ export function createDirectAgentHandler(agent: CreatedAgentHandler): AgentHandl
 		const payload = parseDirectAgentPayload(ctx.payload);
 		const harness = await ctx.initializeCreatedAgent(agent, undefined);
 		const session = await harness.session(payload.session);
-		return session.prompt(payload.message);
+		if (!isDirectRequestSession(session)) {
+			throw new Error('[flue] Internal session does not support direct input processing.');
+		}
+		return session.processDirectInput({ runId: ctx.runId, message: payload.message });
 	};
+}
+
+function isDirectRequestSession(value: unknown): value is DirectRequestSession {
+	return !!value && typeof value === 'object' && typeof (value as DirectRequestSession).processDirectInput === 'function';
 }
 
 function parseDirectAgentPayload(payload: unknown): DirectAgentPayload {
@@ -91,6 +102,7 @@ export type CreateContextFn = (
 	runId: string,
 	payload: unknown,
 	request: Request,
+	initialEventIndex?: number,
 ) => FlueContextInternal;
 
 /**
@@ -384,7 +396,39 @@ export interface AttachedInvocationResult {
 	result: unknown;
 }
 
-const activeAttachedAgentSessions = new Set<string>();
+export interface RecoverRunOptions {
+	label: string;
+	owner: RunOwner;
+	id: string;
+	runId: string;
+	handler: AgentHandler | WorkflowHandler;
+	payload: unknown;
+	request: Request;
+	createContext: CreateContextFn;
+	releaseSessionLock?: () => void;
+	runStore?: RunStore;
+	runSubscribers?: RunSubscriberRegistry;
+	runRegistry?: RunRegistry;
+}
+
+export interface FailRecoveredRunOptions extends Omit<RecoverRunOptions, 'handler'> {
+	error: unknown;
+}
+
+export interface RecoveredRunResult {
+	result?: unknown;
+	isError: boolean;
+	error?: unknown;
+}
+
+const activeAttachedAgentSessions = new Map<string, symbol>();
+
+export function reserveRecoveredAgentSession(
+	owner: Extract<RunOwner, { kind: 'agent' }>,
+	payload: unknown,
+): (() => void) | undefined {
+	return acquireAgentSessionLock({ owner, payload });
+}
 
 interface WebhookOptions {
 	label: string;
@@ -477,6 +521,150 @@ async function runWebhookMode(opts: WebhookOptions): Promise<Response> {
 		status: 202,
 		headers: { 'content-type': 'application/json', 'X-Flue-Run-Id': runId },
 	});
+}
+
+export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<void> {
+	const events = opts.runStore ? await opts.runStore.getEvents(opts.runId) : [];
+	const terminalEvent = findTerminalRunEvent(events);
+	const run = await opts.runStore?.getRun(opts.runId);
+	if (terminalEvent || (run && run.status !== 'active')) {
+		await reconcileTerminalRun(opts, run, terminalEvent, events);
+		return;
+	}
+	if (run) await safeRegistry('recordRunStart(recovery)', () => opts.runRegistry?.recordRunStart({
+		runId: opts.runId,
+		owner: run.owner,
+		startedAt: run.startedAt,
+	}));
+	const initialEventIndex = nextEventIndex(events);
+	const startedAt = run?.startedAt ?? new Date().toISOString();
+	const startedAtMs = Date.parse(startedAt);
+	const lifecycle: RunLifecycle = {
+		...opts,
+		ctx: opts.createContext(opts.id, opts.runId, opts.payload, opts.request, initialEventIndex),
+		startedAt,
+		startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
+	};
+	await emitRunEnd(lifecycle, { isError: true, error: opts.error });
+}
+
+export async function recoverAgentRun(opts: RecoverRunOptions): Promise<RecoveredRunResult> {
+	const releaseSessionLock = opts.releaseSessionLock ?? acquireAgentSessionLock(opts);
+	try {
+		const events = opts.runStore ? await opts.runStore.getEvents(opts.runId) : [];
+		const terminalEvent = findTerminalRunEvent(events);
+		const run = await opts.runStore?.getRun(opts.runId);
+		if (terminalEvent || (run && run.status !== 'active')) {
+			return reconcileTerminalRun(opts, run, terminalEvent, events);
+		}
+		if (run) await safeRegistry('recordRunStart(recovery)', () => opts.runRegistry?.recordRunStart({
+			runId: opts.runId,
+			owner: run.owner,
+			startedAt: run.startedAt,
+		}));
+		const initialEventIndex = nextEventIndex(events);
+		const startedAt = run?.startedAt ?? new Date().toISOString();
+		const startedAtMs = Date.parse(startedAt);
+		const lifecycle: RunLifecycle = {
+			...opts,
+			ctx: opts.createContext(opts.id, opts.runId, opts.payload, opts.request, initialEventIndex),
+			startedAt,
+			startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
+		};
+		const result = await invokeRunLifecycle(lifecycle, () => opts.handler(lifecycle.ctx), !events.some((event) => event.type === 'run_start'));
+		return { result, isError: false };
+	} catch (error) {
+		try {
+			await failRecoveredRun({ ...opts, error });
+		} catch (terminalizationError) {
+			console.error('[flue] Failed to persist recovered run error event:', terminalizationError);
+			const endedAt = new Date().toISOString();
+			await safeRunStore('endRun(recovery-fallback)', () => opts.runStore?.endRun({
+				runId: opts.runId,
+				endedAt,
+				isError: true,
+				durationMs: 0,
+				error: serializeError(error),
+			}));
+			await safeRegistry('recordRunStart(recovery-fallback)', () => opts.runRegistry?.recordRunStart({
+				runId: opts.runId,
+				owner: opts.owner,
+				startedAt: endedAt,
+			}));
+			await safeRegistry('recordRunEnd(recovery-fallback)', () => opts.runRegistry?.recordRunEnd({
+				runId: opts.runId,
+				endedAt,
+				durationMs: 0,
+				isError: true,
+			}));
+			throw terminalizationError;
+		}
+		return { isError: true, error };
+	} finally {
+		releaseSessionLock?.();
+	}
+}
+
+async function reconcileTerminalRun(
+	opts: Omit<RecoverRunOptions, 'handler'>,
+	run: Awaited<ReturnType<RunStore['getRun']>> | undefined,
+	terminalEvent: Extract<FlueEvent, { type: 'run_end' }> | undefined,
+	events: FlueEvent[],
+): Promise<RecoveredRunResult> {
+	const isError = terminalEvent?.isError ?? run?.isError ?? false;
+	const result = terminalEvent?.result ?? run?.result;
+	const error = terminalEvent?.error ?? run?.error;
+	const endedAt = terminalEvent?.timestamp ?? run?.endedAt ?? new Date().toISOString();
+	const durationMs = terminalEvent?.durationMs ?? run?.durationMs ?? 0;
+	if (!terminalEvent && run && run.status !== 'active') {
+		try {
+			await opts.runStore?.appendEvent(opts.runId, {
+				type: 'run_end',
+				runId: opts.runId,
+				result: result === undefined ? null : result,
+				isError,
+				error,
+				durationMs,
+				eventIndex: nextEventIndex(events),
+				timestamp: endedAt,
+			});
+		} catch (eventError) {
+			console.error('[flue:run-store] appendEvent(run_end recovery) failed:', eventError);
+		}
+	}
+	if (terminalEvent && (!run || run.status === 'active')) {
+		await opts.runStore?.endRun({
+			runId: opts.runId,
+			endedAt,
+			isError,
+			durationMs,
+			result,
+			error,
+		});
+	}
+	await safeRegistry('recordRunStart(recovery)', () => opts.runRegistry?.recordRunStart({
+		runId: opts.runId,
+		owner: run?.owner ?? opts.owner,
+		startedAt: run?.startedAt ?? endedAt,
+	}));
+	await safeRegistry('recordRunEnd(recovery)', () => opts.runRegistry?.recordRunEnd({
+		runId: opts.runId,
+		endedAt,
+		durationMs,
+		isError,
+	}));
+	opts.runSubscribers?.complete(opts.runId);
+	return { result, isError, error };
+}
+
+function findTerminalRunEvent(events: FlueEvent[]): Extract<FlueEvent, { type: 'run_end' }> | undefined {
+	return [...events].reverse().find(
+		(event): event is Extract<FlueEvent, { type: 'run_end' }> => event.type === 'run_end',
+	);
+}
+
+function nextEventIndex(events: FlueEvent[]): number {
+	return events.reduce((next, event) => Math.max(next, (event.eventIndex ?? -1) + 1), 0);
 }
 
 /**
@@ -601,7 +789,7 @@ async function invokeAttachedUnlocked(opts: InvokeAttachedOptions): Promise<Atta
 	}
 }
 
-function acquireAgentSessionLock(opts: InvokeAttachedOptions): (() => void) | undefined {
+function acquireAgentSessionLock(opts: Pick<InvokeAttachedOptions, 'owner' | 'payload'>): (() => void) | undefined {
 	if (opts.owner.kind !== 'agent') return undefined;
 	const payload = opts.payload as { session?: unknown } | null;
 	const session = typeof payload?.session === 'string' && payload.session.trim() !== '' ? payload.session : 'default';
@@ -609,8 +797,11 @@ function acquireAgentSessionLock(opts: InvokeAttachedOptions): (() => void) | un
 	if (activeAttachedAgentSessions.has(key)) {
 		throw new InvalidRequestError({ reason: 'This agent session already has an active prompt.' });
 	}
-	activeAttachedAgentSessions.add(key);
-	return () => activeAttachedAgentSessions.delete(key);
+	const token = Symbol(key);
+	activeAttachedAgentSessions.set(key, token);
+	return () => {
+		if (activeAttachedAgentSessions.get(key) === token) activeAttachedAgentSessions.delete(key);
+	};
 }
 
 // ─── Run lifecycle ──────────────────────────────────────────────────────────
@@ -666,8 +857,16 @@ async function withRunLifecycle<T>(
 	lifecycle: RunLifecycle,
 	body: () => T | Promise<T>,
 ): Promise<T> {
+	return invokeRunLifecycle(lifecycle, body, true);
+}
+
+async function invokeRunLifecycle<T>(
+	lifecycle: RunLifecycle,
+	body: () => T | Promise<T>,
+	emitStart: boolean,
+): Promise<T> {
 	const flushFanout = subscribeRunFanout(lifecycle);
-	emitRunStart(lifecycle);
+	if (emitStart) emitRunStart(lifecycle);
 	let didFlushFanout = false;
 	let result: T;
 	try {

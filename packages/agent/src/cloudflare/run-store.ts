@@ -46,8 +46,8 @@ class DurableRunStore implements RunStore {
 		const instanceId = input.owner.instanceId;
 		this.sql.exec(
 			`INSERT OR REPLACE INTO flue_runs
-			 (run_id, owner_kind, instance_id, agent_name, workflow_name, status, started_at, ended_at, is_error, duration_ms, result, error)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)`,
+			 (run_id, owner_kind, instance_id, agent_name, workflow_name, status, started_at, payload, ended_at, is_error, duration_ms, result, error)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)`,
 			input.runId,
 			input.owner.kind,
 			instanceId,
@@ -55,6 +55,7 @@ class DurableRunStore implements RunStore {
 			workflowName,
 			'active',
 			input.startedAt,
+			JSON.stringify(input.payload ?? null),
 		);
 	}
 
@@ -132,11 +133,13 @@ function ensureRunTables(sql: SqlStorage): void {
 		 instance_id TEXT,
 		 agent_name TEXT,
 		 workflow_name TEXT,
-		 owner_run_id TEXT,
-		 status TEXT NOT NULL,
-		 started_at TEXT NOT NULL,
-		 ended_at TEXT,
-		 is_error INTEGER,
+			 owner_run_id TEXT,
+			 status TEXT NOT NULL,
+			 started_at TEXT NOT NULL,
+			 payload TEXT,
+			 ended_at TEXT,
+			 is_error INTEGER,
+
 		 duration_ms INTEGER,
 		 result TEXT,
 		 error TEXT
@@ -148,6 +151,7 @@ function ensureRunTables(sql: SqlStorage): void {
 	// `WorkflowRunOwner` DO. Workflows are now per-class DOs keyed by
 	// `instance_id`, but old rows may still have the runId in `owner_run_id`.
 	ensureColumn(sql, 'flue_runs', 'owner_run_id', 'TEXT');
+	ensureColumn(sql, 'flue_runs', 'payload', 'TEXT');
 	sql.exec(
 		`UPDATE flue_runs
 		 SET owner_kind = 'agent'
@@ -190,6 +194,7 @@ function ensureColumn(sql: SqlStorage, table: string, column: string, definition
 }
 
 function rowToRunRecord(row: SqlRow): RunRecord {
+	const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : undefined;
 	const result = typeof row.result === 'string' ? JSON.parse(row.result) : undefined;
 	const error = typeof row.error === 'string' ? JSON.parse(row.error) : undefined;
 	const runId = String(row.run_id);
@@ -219,6 +224,7 @@ function rowToRunRecord(row: SqlRow): RunRecord {
 			: {}),
 		status: row.status as RunRecord['status'],
 		startedAt: String(row.started_at),
+		payload,
 		endedAt: typeof row.ended_at === 'string' ? row.ended_at : undefined,
 		isError: row.is_error === null || row.is_error === undefined ? undefined : Boolean(row.is_error),
 		durationMs: typeof row.duration_ms === 'number' ? row.duration_ms : undefined,

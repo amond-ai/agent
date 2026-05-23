@@ -25,6 +25,28 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).not.toContain('createRegistryIdentity');
 	});
 
+	it('recovers agent turns from persisted runs and fails interrupted Flue workflows', async () => {
+		const entry = await new CloudflarePlugin().generateEntryPoint(testBuildContext());
+
+		expect(entry).toContain('recoverAgentRun');
+		expect(entry).toContain('reserveRecoveredAgentSession');
+		expect(entry).toContain('failRecoveredRun');
+		expect(entry).toContain("ctx.name.startsWith('flue:webhook:')");
+		expect(entry).toContain('const run = await runStore.getRun(runId);');
+		expect(entry).toContain("const startEvent = events.find((event) => event.type === 'run_start');");
+		expect(entry).toContain('const payload = run?.payload !== undefined ? run.payload : startEvent?.payload;');
+		expect(entry).toContain("ctx.name !== 'flue:workflow:' + doInstance.name");
+		expect(entry).toContain('Flue workflow execution was interrupted. Use Cloudflare Workflows for durable execution.');
+		expect(entry).toContain("return doInstance.runFiber('flue:workflow:' + runId");
+		expect(entry).toContain("return doInstance.runFiber('flue:webhook:' + runId");
+		expect(entry).not.toContain('flue_fiber_recovery');
+		expect(entry).not.toContain('fiber?.stash?.');
+		expect(entry).not.toContain('recoverWebhookRun');
+		expect(entry).toContain("runId = decodeURIComponent(segments[1] || '');");
+		expect(entry).toContain('createContext: (id_, runId, payload, req, initialEventIndex)');
+		expect(entry).not.toContain("assertAgentsDurabilityApi(doInstance, 'startFiber');");
+	});
+
 	it('generates exclusive hibernating WebSocket handling inside owning Durable Objects', async () => {
 		const entry = await new CloudflarePlugin().generateEntryPoint(testBuildContext());
 

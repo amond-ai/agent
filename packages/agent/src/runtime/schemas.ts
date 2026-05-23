@@ -25,6 +25,7 @@ export const RunRecordSchema = v.object({
 	instanceId: v.optional(v.string()),
 	status: RunStatusSchema,
 	startedAt: v.string(),
+	payload: v.optional(v.unknown()),
 	endedAt: v.optional(v.string()),
 	isError: v.optional(v.boolean()),
 	durationMs: v.optional(v.number()),

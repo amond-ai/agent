@@ -44,7 +44,10 @@ export type {
 	CreateContextFn,
 	HandleAgentOptions,
 	HandleWorkflowOptions,
+	FailRecoveredRunOptions,
 	InvokeAttachedOptions,
+	RecoveredRunResult,
+	RecoverRunOptions,
 	RunHandlerFn,
 	StartWebhookFn,
 	WorkflowHandler,
@@ -70,9 +73,12 @@ export type {
 export {
 	createAgentDispatchProcessor,
 	createDirectAgentHandler,
+	failRecoveredRun,
 	handleAgentRequest,
 	handleWorkflowRequest,
 	invokeAttached,
+	recoverAgentRun,
+	reserveRecoveredAgentSession,
 } from './runtime/handle-agent.ts';
 export { generateRunId, generateWorkflowRunId, parseWorkflowRunId } from './runtime/ids.ts';
 export { createWebSocketErrorMessage, parseAgentWebSocketMessage, parseWorkflowWebSocketMessage } from './runtime/websocket-protocol.ts';

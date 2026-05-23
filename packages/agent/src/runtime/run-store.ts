@@ -12,6 +12,7 @@ export interface RunRecord {
 	instanceId?: string;
 	status: RunStatus;
 	startedAt: string;
+	payload?: unknown;
 	endedAt?: string;
 	isError?: boolean;
 	durationMs?: number;

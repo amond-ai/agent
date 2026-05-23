@@ -39,6 +39,7 @@ export interface FlueContextConfig {
 	 * points (e.g. future cron triggers) leave it undefined.
 	 */
 	req?: Request;
+	initialEventIndex?: number;
 }
 
 /** Extends FlueContext with server-only methods. Agent handlers only see FlueContext. */
@@ -53,7 +54,7 @@ export interface FlueContextInternal extends FlueContext {
 export function createFlueContext(config: FlueContextConfig): FlueContextInternal {
 	const subscribers = new Set<FlueEventCallback>();
 	let handlerUnsubscribe: (() => void) | undefined;
-	let eventIndex = 0;
+	let eventIndex = config.initialEventIndex ?? 0;
 	const initializedHarnessNames = new Set<string>();
 
 	const emitEvent = (event: FlueEvent): FlueEvent => {

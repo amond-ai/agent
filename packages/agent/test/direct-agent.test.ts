@@ -1,3 +1,4 @@
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import { flue } from '../src/app.ts';
@@ -12,7 +13,8 @@ import {
 	InMemorySessionStore,
 } from '../src/internal.ts';
 import { createAgent } from '../src/agent-definition.ts';
-import type { FlueHarness, FlueSession, SessionData, SessionEnv, SessionStore } from '../src/types.ts';
+import { Harness } from '../src/harness.ts';
+import type { AgentConfig, FlueHarness, FlueSession, SessionData, SessionEnv, SessionStore } from '../src/types.ts';
 
 describe('direct attached agent delivery', () => {
 	it('routes direct HTTP through init and the default session without receive or dispatch', async () => {
@@ -101,6 +103,86 @@ describe('direct attached agent delivery', () => {
 
 		expect(res.status).toBe(200);
 		expect(prompts).toEqual([{ session: 'case:123', message: 'hello' }]);
+	});
+
+	it('persists direct input before inference and reuses it during recovery', async () => {
+		const store = new InMemorySessionStore();
+		const harness = new Harness('inst-1', 'default', testAgentConfig(), fakeEnv(), store);
+		const session = await harness.session('case:123');
+		const agent = Reflect.get(session, 'harness') as {
+			state: { messages: AgentMessage[] };
+			continue: () => Promise<void>;
+			waitForIdle: () => Promise<void>;
+		};
+		let continuations = 0;
+		agent.continue = async () => {
+			continuations++;
+			const admitted = await store.load('agent-session:["inst-1","default","case:123"]');
+			expect(admitted?.entries).toEqual([
+				expect.objectContaining({ source: 'prompt', direct: { runId: 'run-direct' } }),
+			]);
+			agent.state.messages.push({
+				role: 'assistant',
+				content: [{ type: 'text', text: 'processed' }],
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				timestamp: Date.now(),
+			} as AgentMessage);
+		};
+		agent.waitForIdle = async () => {};
+
+		const direct = session as FlueSession & { processDirectInput(input: { runId: string; message: string }): PromiseLike<unknown> };
+		await direct.processDirectInput({ runId: 'run-direct', message: 'hello' });
+		await direct.processDirectInput({ runId: 'run-direct', message: 'hello' });
+
+		const data = await store.load('agent-session:["inst-1","default","case:123"]');
+		expect(continuations).toBe(1);
+		expect(data?.entries.filter((entry) => entry.type === 'message' && entry.message.role === 'user')).toHaveLength(1);
+		expect(data?.entries[0]).toMatchObject({ direct: { runId: 'run-direct' } });
+	});
+
+	it('does not complete recovery from a persisted errored assistant turn', async () => {
+		const store = new InMemorySessionStore();
+		const harness = new Harness('inst-error', 'default', testAgentConfig(), fakeEnv(), store);
+		const session = await harness.session();
+		const agent = Reflect.get(session, 'harness') as {
+			state: { messages: AgentMessage[]; errorMessage?: string };
+			continue: () => Promise<void>;
+			waitForIdle: () => Promise<void>;
+		};
+		let continuations = 0;
+		agent.continue = async () => {
+			continuations++;
+			agent.state.messages.push({
+				role: 'assistant',
+				content: [{ type: 'text', text: '' }],
+				stopReason: 'error',
+				errorMessage: 'provider failed',
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				timestamp: Date.now(),
+			} as AgentMessage);
+			agent.state.errorMessage = 'provider failed';
+		};
+		agent.waitForIdle = async () => {};
+		const direct = session as FlueSession & { processDirectInput(input: { runId: string; message: string }): PromiseLike<unknown> };
+
+		await expect(direct.processDirectInput({ runId: 'run-error', message: 'hello' })).rejects.toThrow('provider failed');
+		agent.state.errorMessage = undefined;
+		await expect(direct.processDirectInput({ runId: 'run-error', message: 'hello' })).rejects.toThrow('provider failed');
+		expect(continuations).toBe(1);
 	});
 
 	it('keeps external-channel agents directly addressable', async () => {
@@ -249,13 +331,14 @@ function fakeHarness(prompts: Array<{ session: string; message: string }>): Flue
 	};
 }
 
-function fakeSession(session: string, prompts: Array<{ session: string; message: string }>): FlueSession {
+function fakeSession(session: string, prompts: Array<{ session: string; message: string }>): FlueSession & { processDirectInput(input: { message: string }): PromiseLike<unknown> } {
 	return {
 		name: session,
-		prompt: ((message: string) => {
+		prompt: (() => Promise.resolve({ text: '', usage: {}, model: { id: 'test' } })) as never,
+		processDirectInput: ({ message }: { message: string }) => {
 			prompts.push({ session, message });
 			return Promise.resolve({ text: `reply:${message}`, usage: {}, model: { id: 'test' } });
-		}) as never,
+		},
 		shell: (() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 })) as never,
 		fs: {} as never,
 		skill: (() => Promise.resolve({ text: '', usage: {}, model: { id: 'test' } })) as never,
@@ -292,6 +375,16 @@ function createTestContext(id: string, runId: string, payload: unknown, req: Req
 		createDefaultEnv: async () => ({}) as never,
 		defaultStore: new InMemorySessionStore(),
 	});
+}
+
+function testAgentConfig(): AgentConfig {
+	return {
+		systemPrompt: '',
+		skills: {},
+		subagents: {},
+		model: { id: 'test-model', provider: 'test', api: 'test' } as never,
+		resolveModel: () => ({ id: 'test-model', provider: 'test', api: 'test' }) as never,
+	};
 }
 
 function fakeEnv(): SessionEnv {

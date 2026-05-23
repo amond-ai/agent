@@ -683,11 +683,13 @@ describe('Bare /runs/:runId routes via flue()', () => {
 			agentName: string;
 			instanceId: string;
 			status: string;
+			payload: unknown;
 		};
 		expect(bareBody.runId).toBe(runId);
 		expect(bareBody.agentName).toBe('hello');
 		expect(bareBody.instanceId).toBe('inst-1');
 		expect(bareBody.status).toBe('completed');
+		expect(bareBody.payload).toEqual({});
 
 		const legacy = await app.fetch(
 			new Request(`http://localhost/agents/hello/inst-1/runs/${runId}`),
