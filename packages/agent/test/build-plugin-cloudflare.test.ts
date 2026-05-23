@@ -57,8 +57,8 @@ describe('Cloudflare build plugin', () => {
 
 function testBuildContext(): BuildContext {
 	return {
-		agents: [{ name: 'moderator', filePath: '/tmp/moderator.ts', hasChannels: true, hasReceive: true, hasDefaultAgent: true }],
-		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts', hasChannels: true }],
+		agents: [{ name: 'moderator', filePath: '/tmp/moderator.ts', hasChannels: true, attachedChannels: {}, hasReceive: true, hasDefaultAgent: true }],
+		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts', hasChannels: true, attachedChannels: {} }],
 		manifest: {
 			agents: [{ name: 'moderator', channels: {}, receive: true, created: true }],
 			workflows: [{ name: 'daily-report', channels: {} }],

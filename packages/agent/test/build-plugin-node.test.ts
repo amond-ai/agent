@@ -301,8 +301,8 @@ async function waitForServer(child: ChildProcess, port: number): Promise<void> {
 
 function testBuildContext(): BuildContext {
 	return {
-		agents: [{ name: 'triage', filePath: '/tmp/triage.ts', hasChannels: true, hasReceive: true, hasDefaultAgent: true }],
-		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts', hasChannels: true }],
+		agents: [{ name: 'triage', filePath: '/tmp/triage.ts', hasChannels: true, attachedChannels: {}, hasReceive: true, hasDefaultAgent: true }],
+		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts', hasChannels: true, attachedChannels: {} }],
 		manifest: {
 			agents: [{ name: 'triage', channels: {}, receive: true, created: true }],
 			workflows: [{ name: 'daily-report', channels: {} }],
