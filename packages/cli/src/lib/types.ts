@@ -11,6 +11,7 @@ export interface AgentInfo {
 	name: string;
 	filePath: string;
 	hasChannels: boolean;
+	attachedChannels: { http?: true; websocket?: true };
 	hasReceive: boolean;
 	hasDefaultAgent: boolean;
 }
@@ -19,6 +20,7 @@ export interface WorkflowInfo {
 	name: string;
 	filePath: string;
 	hasChannels: boolean;
+	attachedChannels: { http?: true; websocket?: true };
 }
 
 export interface BuildContext {

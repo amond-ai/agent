@@ -16,12 +16,14 @@ import type {
 
 interface ParsedAgentFile {
 	hasChannels: boolean;
+	attachedChannels: { http?: true; websocket?: true };
 	hasReceive: boolean;
 	hasDefaultAgent: boolean;
 }
 
 interface ParsedWorkflowFile {
 	hasChannels: boolean;
+	attachedChannels: { http?: true; websocket?: true };
 }
 
 /** Extract static agent metadata at build time without evaluating the agent module. */
@@ -35,6 +37,8 @@ function parseAgentFile(filePath: string): ParsedAgentFile {
 		scriptKindForFile(filePath),
 	);
 	let hasChannels = false;
+	let attachedChannels: { http?: true; websocket?: true } = {};
+	const attachedChannelImports = findAttachedChannelImports(ast);
 	let hasReceive = false;
 	let hasInit = false;
 	let hasDefaultAgent = false;
@@ -86,6 +90,7 @@ function parseAgentFile(filePath: string): ParsedAgentFile {
 			if (hasChannels) throwUnsupportedAgentChannels(filePath, 'multiple channels exports were found');
 			if (!declaration.initializer) throwUnsupportedAgentChannels(filePath, 'missing initializer');
 			hasChannels = true;
+			attachedChannels = extractAttachedChannels(declaration.initializer, attachedChannelImports);
 		}
 	}
 
@@ -100,7 +105,7 @@ function parseAgentFile(filePath: string): ParsedAgentFile {
 		throwUnsupportedAgentExports(filePath, '"receive" requires a "channels" export');
 	}
 
-	return { hasChannels, hasReceive, hasDefaultAgent };
+	return { hasChannels, attachedChannels, hasReceive, hasDefaultAgent };
 }
 
 function parseWorkflowFile(filePath: string): ParsedWorkflowFile {
@@ -114,6 +119,8 @@ function parseWorkflowFile(filePath: string): ParsedWorkflowFile {
 	);
 	let hasRun = false;
 	let hasChannels = false;
+	let attachedChannels: { http?: true; websocket?: true } = {};
+	const attachedChannelImports = findAttachedChannelImports(ast);
 
 	for (const statement of ast.statements) {
 		if (isDefaultExport(statement)) {
@@ -154,13 +161,43 @@ function parseWorkflowFile(filePath: string): ParsedWorkflowFile {
 			if (hasChannels) throwUnsupportedWorkflowChannels(filePath, 'multiple channels exports were found');
 			if (!declaration.initializer) throwUnsupportedWorkflowChannels(filePath, 'missing initializer');
 			hasChannels = true;
+			attachedChannels = extractAttachedChannels(declaration.initializer, attachedChannelImports);
 		}
 	}
 
 	if (!hasRun) {
 		throwUnsupportedWorkflowRun(filePath, 'required direct export "export async function run(...)" was not found');
 	}
-	return { hasChannels };
+	return { hasChannels, attachedChannels };
+}
+
+function findAttachedChannelImports(ast: ts.SourceFile): Map<string, 'http' | 'websocket'> {
+	const imports = new Map<string, 'http' | 'websocket'>();
+	for (const statement of ast.statements) {
+		if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+		if (!['@flue/runtime', '@flue/runtime/channels'].includes(statement.moduleSpecifier.text)) continue;
+		const bindings = statement.importClause?.namedBindings;
+		if (!bindings || !ts.isNamedImports(bindings)) continue;
+		for (const specifier of bindings.elements) {
+			const importedName = specifier.propertyName?.text ?? specifier.name.text;
+			if (importedName === 'http' || importedName === 'websocket') imports.set(specifier.name.text, importedName);
+		}
+	}
+	return imports;
+}
+
+function extractAttachedChannels(
+	initializer: ts.Expression,
+	imports: Map<string, 'http' | 'websocket'>,
+): { http?: true; websocket?: true } {
+	if (!ts.isArrayLiteralExpression(initializer)) return {};
+	const channels: { http?: true; websocket?: true } = {};
+	for (const element of initializer.elements) {
+		if (!ts.isCallExpression(element) || element.arguments.length !== 0 || !ts.isIdentifier(element.expression)) continue;
+		const channel = imports.get(element.expression.text);
+		if (channel) channels[channel] = true;
+	}
+	return channels;
 }
 
 function isDefaultExport(statement: ts.Statement): boolean {
@@ -341,20 +378,27 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 	fs.mkdirSync(output, { recursive: true });
 
 	const manifest = {
-		agents: agents.map((a) => ({
-			name: a.name,
-			channels: {},
-			receive: a.hasReceive,
-			created: a.hasDefaultAgent,
+		agents: agents.map((agent) => ({
+			name: agent.name,
+			channels: agent.attachedChannels,
+			receive: agent.hasReceive,
+			created: agent.hasDefaultAgent,
 		})),
 		workflows: workflows.map((workflow) => ({
 			name: workflow.name,
-			channels: {},
+			channels: workflow.attachedChannels,
 		})),
 	};
 	const manifestPath = path.join(output, 'manifest.json');
-	fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
-	console.log(`[flue] Generated: ${manifestPath}`);
+	const manifestContents = JSON.stringify(manifest, null, 2);
+	let anyChanged = false;
+	if (!fs.existsSync(manifestPath) || fs.readFileSync(manifestPath, 'utf-8') !== manifestContents) {
+		fs.writeFileSync(manifestPath, manifestContents, 'utf-8');
+		console.log(`[flue] Generated: ${manifestPath}`);
+		anyChanged = true;
+	} else {
+		console.log(`[flue] Manifest unchanged: ${manifestPath}`);
+	}
 
 	const ctx: BuildContext = {
 		agents,
@@ -369,7 +413,6 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 
 	const serverCode = await plugin.generateEntryPoint(ctx);
 	const bundleStrategy = plugin.bundle ?? 'esbuild';
-	let anyChanged = false;
 
 	if (bundleStrategy === 'esbuild') {
 		// Single-bundle mode: the plugin produces a TS entry, esbuild
@@ -543,6 +586,7 @@ function discoverAgents(sourceRoot: string): AgentInfo[] {
 			name: f.replace(/\.(ts|js|mts|mjs)$/, ''),
 			filePath,
 			hasChannels: parsed.hasChannels,
+			attachedChannels: parsed.attachedChannels,
 			hasReceive: parsed.hasReceive,
 			hasDefaultAgent: parsed.hasDefaultAgent,
 		}];
@@ -575,11 +619,12 @@ function discoverWorkflows(sourceRoot: string): WorkflowInfo[] {
 
 	return files.map((file) => {
 		const filePath = path.join(workflowsDir, file);
-		const { hasChannels } = parseWorkflowFile(filePath);
+		const { hasChannels, attachedChannels } = parseWorkflowFile(filePath);
 		return {
 			name: file.replace(/\.(ts|js|mts|mjs)$/, ''),
 			filePath,
 			hasChannels,
+			attachedChannels,
 		};
 	});
 }
