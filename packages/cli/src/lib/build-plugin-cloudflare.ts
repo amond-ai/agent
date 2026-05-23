@@ -149,7 +149,7 @@ export class CloudflarePlugin implements BuildPlugin {
 
   async onFiberRecovered(ctx) {
     if (ctx.name?.startsWith('flue:workflow:')) {
-      return handleFlueWorkflowFiberRecovered(ctx, this);
+      return handleFlueWorkflowFiberRecovered(ctx, this, ${JSON.stringify(workflow.name)});
     }
     if (typeof super.onFiberRecovered === 'function') {
       return super.onFiberRecovered(ctx);
@@ -191,6 +191,9 @@ import {
   handleAgentRequest,
   handleWorkflowRequest,
   handleRunRouteRequest,
+  recoverAgentRun,
+  reserveRecoveredAgentSession,
+  failRecoveredRun,
   configureFlueRuntime,
   createDefaultFlueApp,
   createDirectAgentHandler,
@@ -405,7 +408,7 @@ function createDOStore(sql) {
   };
 }
 
-function createContextForRequest(id, runId, payload, doInstance, req) {
+function createContextForRequest(id, runId, payload, doInstance, req, initialEventIndex) {
   // Use DO SQLite storage by default, fall back to in-memory
   const defaultStore = doInstance?.ctx?.storage?.sql
     ? createDOStore(doInstance.ctx.storage.sql)
@@ -417,6 +420,7 @@ function createContextForRequest(id, runId, payload, doInstance, req) {
     payload,
     env: doInstance?.env ?? {},
     req,
+    initialEventIndex,
     agentConfig: {
       systemPrompt, skills, model: undefined, resolveModel,
     },
@@ -484,14 +488,115 @@ function assertAgentsDurabilityApi(doInstance, method) {
 	}
 }
 
-async function handleFlueFiberRecovered(ctx, _doInstance, agentName) {
-  if (!ctx.name || !ctx.name.startsWith('flue:')) return;
-  console.warn('[flue] Cloudflare fiber interrupted:', agentName, ctx.name, ctx.snapshot ?? null);
+async function handleFlueFiberRecovered(ctx, doInstance, agentName) {
+  if (!ctx.name || !ctx.name.startsWith('flue:webhook:')) return;
+  const runId = ctx.name.slice('flue:webhook:'.length);
+  const runStore = createRunStoreForRequest(doInstance);
+  const run = await runStore.getRun(runId);
+  const events = await runStore.getEvents(runId);
+  const startEvent = events.find((event) => event.type === 'run_start');
+  const payload = run?.payload !== undefined ? run.payload : startEvent?.payload;
+  const owner = { kind: 'agent', agentName, instanceId: doInstance.name };
+  const request = new Request('https://flue.invalid/agents/' + encodeURIComponent(agentName) + '/' + encodeURIComponent(doInstance.name), { method: 'POST' });
+  if (!run || run.owner.kind !== 'agent' || run.owner.agentName !== agentName || run.owner.instanceId !== doInstance.name) {
+    console.warn('[flue] Cloudflare fiber could not be recovered:', agentName, ctx.name);
+    return;
+  }
+  const handler = directHandlers[agentName];
+  if (!handler) {
+    await failRecoveredRun({
+      label: agentName,
+      owner,
+      id: doInstance.name,
+      runId,
+      payload,
+      request,
+      error: new Error('Flue recovery handler unavailable after deployment.'),
+      runStore,
+      runSubscribers,
+      runRegistry: createRunRegistryForRequest(doInstance.env),
+      createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+    });
+    return;
+  }
+  const identity = agentRuntimeIdentity(agentName);
+  let releaseSessionLock;
+  try {
+    releaseSessionLock = reserveRecoveredAgentSession(owner, payload);
+  } catch (error) {
+    await failRecoveredRun({
+      label: agentName,
+      owner,
+      id: doInstance.name,
+      runId,
+      payload,
+      request,
+      error,
+      runStore,
+      runSubscribers,
+      runRegistry: createRunRegistryForRequest(doInstance.env),
+      createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+    });
+    return;
+  }
+  const terminalize = async (error) => {
+    try {
+      await failRecoveredRun({
+        label: agentName,
+        owner,
+        id: doInstance.name,
+        runId,
+        payload,
+        request,
+        error,
+        runStore,
+        runSubscribers,
+        runRegistry: createRunRegistryForRequest(doInstance.env),
+        createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+      });
+    } finally {
+      releaseSessionLock?.();
+    }
+    console.error('[flue] Cloudflare fiber recovery error:', agentName, ctx.name, error);
+  };
+  try {
+    assertAgentsDurabilityApi(doInstance, 'runFiber');
+    void doInstance.runFiber(ctx.name, () => runWithInstanceContext(doInstance, identity, () => recoverAgentRun({
+      label: agentName,
+      owner,
+      id: doInstance.name,
+      runId,
+      handler,
+      payload,
+      request,
+      releaseSessionLock,
+      runStore,
+      runSubscribers,
+      runRegistry: createRunRegistryForRequest(doInstance.env),
+      createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+    }))).catch(terminalize);
+  } catch (error) {
+    await terminalize(error);
+  }
 }
 
-async function handleFlueWorkflowFiberRecovered(ctx) {
-  if (!ctx.name || !ctx.name.startsWith('flue:workflow:')) return;
-  console.warn('[flue] Cloudflare workflow fiber interrupted:', ctx.name, ctx.snapshot ?? null);
+async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
+  if (!ctx.name || ctx.name !== 'flue:workflow:' + doInstance.name) return;
+  const runStore = createRunStoreForRequest(doInstance);
+  const run = await runStore.getRun(doInstance.name);
+  await failRecoveredRun({
+    label: workflowName,
+    owner: { kind: 'workflow', workflowName, instanceId: doInstance.name },
+    id: doInstance.name,
+    runId: doInstance.name,
+    payload: run?.payload,
+    request: new Request('https://flue.invalid/workflows/' + encodeURIComponent(workflowName), { method: 'POST' }),
+    error: new Error('Flue workflow execution was interrupted. Use Cloudflare Workflows for durable execution.'),
+    runStore,
+    runSubscribers,
+    runRegistry: createRunRegistryForRequest(doInstance.env),
+    createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+  });
 }
 
 // ─── Per-DO Dispatch ───────────────────────────────────────────────────────
@@ -526,14 +631,10 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
       runStore: createRunStoreForRequest(doInstance),
       runSubscribers,
       runRegistry: createRunRegistryForRequest(doInstance.env),
-      createContext: (id_, runId, payload, req) => createContextForRequest(id_, runId, payload, doInstance, req),
+      createContext: (id_, runId, payload, req, initialEventIndex) => createContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex),
       startWebhook: (runId, run) => {
-        const wrapped = (fiber) => {
-          fiber?.stash?.({ version: 1, kind: 'workflow', workflowName, runId, phase: 'running', startedAt: Date.now() });
-          return runWithInstanceContext(doInstance, identity, run);
-        };
         assertAgentsDurabilityApi(doInstance, 'runFiber');
-        return doInstance.runFiber('flue:workflow:' + runId, wrapped);
+        return doInstance.runFiber('flue:workflow:' + runId, () => runWithInstanceContext(doInstance, identity, run));
       },
       runHandler: (ctx, h) => {
         assertAgentsDurabilityApi(doInstance, 'keepAliveWhile');
@@ -564,22 +665,10 @@ async function dispatchAgent(request, doInstance, agentName, handler) {
       runStore: createRunStoreForRequest(doInstance),
       runSubscribers,
       runRegistry: createRunRegistryForRequest(doInstance.env),
-      createContext: (id_, runId, payload, req) => createContextForRequest(id_, runId, payload, doInstance, req),
+      createContext: (id_, runId, payload, req, initialEventIndex) => createContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex),
       startWebhook: (runId, run) => {
-        const wrapped = (fiber) => {
-          fiber?.stash?.({
-            version: 1,
-            kind: 'webhook',
-            agentName,
-            id,
-            runId,
-            phase: 'running',
-            startedAt: Date.now(),
-          });
-          return runWithInstanceContext(doInstance, identity, run);
-        };
         assertAgentsDurabilityApi(doInstance, 'runFiber');
-        return doInstance.runFiber('flue:webhook:' + runId, wrapped);
+        return doInstance.runFiber('flue:webhook:' + runId, () => runWithInstanceContext(doInstance, identity, run));
       },
       runHandler: (ctx, h) => {
         assertAgentsDurabilityApi(doInstance, 'keepAliveWhile');
@@ -705,7 +794,12 @@ function parseWorkflowStart(request, workflowName) {
 function parseRunRoute(request) {
   const segments = new URL(request.url).pathname.split('/').filter(Boolean);
   if (segments.length < 2 || segments[0] !== 'runs') return null;
-  const runId = segments[1];
+  let runId;
+  try {
+    runId = decodeURIComponent(segments[1] || '');
+  } catch {
+    return null;
+  }
   const child = segments[2];
   if (!runId) return null;
   if (!child) return { action: 'get', runId };
