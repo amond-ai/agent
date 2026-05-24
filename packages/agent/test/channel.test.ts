@@ -25,7 +25,7 @@ describe('defineChannel', () => {
 
 		const result = await channel.emit('message', { event: { text: 'hello' }, thread: { id: 'thread:1' } });
 
-		expect(channel.app).toBe(app);
+		expect(channel).toMatchObject({ __flueDefinedChannel: true, app });
 		expect(received).toEqual(['thread:1:hello']);
 		expect(result).toEqual({ invoked: 1, errors: [] });
 	});

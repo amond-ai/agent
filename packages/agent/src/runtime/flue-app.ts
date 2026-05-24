@@ -63,6 +63,7 @@ export interface FlueRuntime {
 	agentWebSocketMiddleware?: Record<string, MiddlewareHandler>;
 	workflowRouteMiddleware?: Record<string, MiddlewareHandler>;
 	workflowWebSocketMiddleware?: Record<string, MiddlewareHandler>;
+	channelApps?: Record<string, Hono<any, any, any>>;
 	nodeWebSocketAgentRoute?: MiddlewareHandler;
 	nodeWebSocketWorkflowRoute?: MiddlewareHandler;
 
@@ -231,6 +232,9 @@ export function flue(): Hono {
 	const app = new Hono();
 
 	app.get('/openapi.json', lazyOpenApiRouteHandler(app, publicOpenApiOptions));
+
+	app.all('/channels/:name', channelAppRouteHandler);
+	app.all('/channels/:name/:path{.+}', channelAppRouteHandler);
 
 	app.post(
 		'/workflows/:name',
@@ -454,6 +458,15 @@ function runRouteSpec(action: HandleRunRouteOptions['action']) {
 		},
 	};
 }
+
+const channelAppRouteHandler: MiddlewareHandler = async (c) => {
+	const rt = requiredRuntime();
+	const name = c.req.param('name') ?? '';
+	const channelApp = rt.channelApps?.[name];
+	if (!channelApp) throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
+	const suffix = c.req.param('path') ?? '';
+	return channelApp.fetch(normalizeAttachedRequest(c.req.raw, `/${suffix}`), c.env);
+};
 
 const workflowSocketRouteHandler: MiddlewareHandler = async (c, next) => {
 	if (!isWebSocketUpgrade(c.req.raw)) return next();

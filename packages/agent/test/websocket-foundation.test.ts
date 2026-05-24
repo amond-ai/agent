@@ -70,6 +70,22 @@ describe('WebSocket transport foundation', () => {
 		expect(await response.json()).toMatchObject({ error: { type: 'workflow_not_http' } });
 	});
 
+	it('mounts configured channel applications lazily below a flue prefix', async () => {
+		const mounted = new Hono();
+		mounted.post('/events', async (c) => c.json({ path: new URL(c.req.url).pathname }));
+		const app = new Hono();
+		app.route('/api', flue());
+		configureFlueRuntime({
+			target: 'node',
+			channelApps: { slack: mounted },
+		});
+
+		const response = await app.fetch(new Request('http://localhost/api/channels/slack/events', { method: 'POST' }));
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ path: '/events' });
+	});
+
 	it('forwards Cloudflare upgrades only for WebSocket-exposed targets and normalizes mounted paths', async () => {
 		const forwarded: string[] = [];
 		configureFlueRuntime({

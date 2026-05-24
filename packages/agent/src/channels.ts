@@ -26,6 +26,7 @@ export function defineChannel<TEvents extends ChannelEventMap, TThread, const TN
 	if (typeof optionsOrType === 'string') return { __flueChannel: true, name: optionsOrType };
 	const listeners = new Map<string, Set<ChannelListener<unknown, TThread>>>();
 	return {
+		__flueDefinedChannel: true,
 		app: optionsOrType.app,
 		on(type, listener) {
 			let registered = listeners.get(type);

@@ -15,6 +15,7 @@ describe('Node build plugin', () => {
 
 		expect(entry).toContain("import * as handler_triage_0 from '/tmp/triage.ts'");
 		expect(entry).toContain("import * as workflow_daily_report_0 from '/tmp/daily-report.ts'");
+		expect(entry).toContain("import * as channel_slack_0 from '/tmp/slack.ts'");
 		expect(entry).toContain('const workflowHandlers = {};');
 		expect(entry).toContain('const websocketAgentHandlers = {};');
 		expect(entry).toContain('const websocketWorkflowHandlers = {};');
@@ -23,8 +24,9 @@ describe('Node build plugin', () => {
 		expect(entry).toContain('const dispatchAgentNames = new Map();');
 		expect(entry).toContain('dispatchAgentNames.set(mod.default, name);');
 		expect(entry).toContain('resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),');
-		expect(entry).toContain('const normalized = normalizeBuiltModules(agentModules, workflowModules);');
-		expect(entry).not.toContain('channelModules');
+		expect(entry).toContain('const channelModules = {');
+		expect(entry).toContain('const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);');
+		expect(entry).toContain('channelApps,');
 	});
 
 	it('starts a generated server and invokes an HTTP workflow', async () => {
@@ -81,6 +83,60 @@ describe('Node build plugin', () => {
 			expect(allowed.status).toBe(200);
 			expect(allowed.headers.get('x-route')).toBe('yes');
 			expect(await allowed.json()).toMatchObject({ result: { ok: true } });
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
+	it('mounts discovered channel applications with registered agent listeners', async () => {
+		const root = createFixtureRoot('flue-mounted-channel-');
+		fs.mkdirSync(path.join(root, 'agents'));
+		fs.mkdirSync(path.join(root, 'channels'));
+		fs.writeFileSync(
+			path.join(root, 'channels', 'events.ts'),
+			`import { Hono } from 'hono';\n` +
+				`import { defineChannel } from '@flue/runtime';\n` +
+				`const app = new Hono();\n` +
+				`const channel = defineChannel({ app });\n` +
+				`app.post('/emit', async (c) => c.json(await channel.emit('message', { event: { text: 'hello' }, thread: { id: 'one' } })));\n` +
+				`export default channel;\n`,
+		);
+		fs.writeFileSync(
+			path.join(root, 'agents', 'assistant.ts'),
+			`import { createAgent } from '@flue/runtime';\n` +
+				`import events from '../channels/events.ts';\n` +
+				`events.on('message', async () => {});\n` +
+				`export default createAgent(() => ({ model: false }));\n`,
+		);
+		await build({ root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const response = await fetch(`http://localhost:${port}/channels/events/emit`, { method: 'POST' });
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual({ invoked: 1, errors: [] });
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
+	it('mounts discovered channel applications below custom app prefixes', async () => {
+		const root = createFixtureRoot('flue-prefixed-channel-');
+		fs.mkdirSync(path.join(root, 'agents'));
+		fs.mkdirSync(path.join(root, 'channels'));
+		fs.writeFileSync(path.join(root, 'agents', 'assistant.ts'), `import { createAgent } from '@flue/runtime';\nexport default createAgent(() => ({ model: false }));\n`);
+		fs.writeFileSync(
+			path.join(root, 'channels', 'hooks.ts'),
+			`import { Hono } from 'hono';\nimport { defineChannel } from '@flue/runtime';\nconst app = new Hono();\napp.get('/health', (c) => c.text('ok'));\nexport default defineChannel({ app });\n`,
+		);
+		fs.writeFileSync(path.join(root, 'app.ts'), `import { Hono } from 'hono';\nimport { flue } from '@flue/runtime/app';\nconst app = new Hono();\napp.route('/api', flue());\nexport default app;\n`);
+		await build({ root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const response = await fetch(`http://localhost:${port}/api/channels/hooks/health`);
+			expect(response.status).toBe(200);
+			expect(await response.text()).toBe('ok');
 		} finally {
 			child.kill('SIGTERM');
 		}
@@ -471,6 +527,7 @@ function testBuildContext(): BuildContext {
 	return {
 		agents: [{ name: 'triage', filePath: '/tmp/triage.ts' }],
 		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts' }],
+		channels: [{ name: 'slack', filePath: '/tmp/slack.ts' }],
 		root: '/tmp/flue-test',
 		output: '/tmp/flue-test/dist',
 		runtimeVersion: '0.0.0-test',

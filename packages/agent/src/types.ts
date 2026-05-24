@@ -38,6 +38,7 @@ export interface ChannelEmitResult {
 }
 
 export interface DefinedChannel<TEvents extends ChannelEventMap, TThread> {
+	readonly __flueDefinedChannel: true;
 	readonly app?: Hono<any, any, any>;
 	on<TKey extends keyof TEvents & string>(
 		type: TKey,
