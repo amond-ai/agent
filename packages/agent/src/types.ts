@@ -1,9 +1,15 @@
 import type { AgentMessage, AgentTool, ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { ImageContent, Model, TSchema } from '@earendil-works/pi-ai';
+import type { MiddlewareHandler } from 'hono';
 import type * as v from 'valibot';
 
 
 export type { ThinkingLevel };
+
+export type AgentRouteHandler = MiddlewareHandler;
+export type AgentWebSocketHandler = MiddlewareHandler;
+export type WorkflowRouteHandler = MiddlewareHandler;
+export type WorkflowWebSocketHandler = MiddlewareHandler;
 
 export interface WorkflowChannel<TName extends 'http' | 'websocket' = 'http' | 'websocket'> {
 	readonly __flueChannel: true;
@@ -28,14 +34,26 @@ export interface Delivery {
 	raw?: unknown;
 }
 
-export interface DispatchRequest {
-	agent?: string;
+export interface AgentDispatchRequest {
 	id: string;
-	session: string;
+	session?: string;
 	input: unknown;
 }
 
-export type Dispatch = (request: DispatchRequest) => Promise<void>;
+export interface NamedAgentDispatchRequest extends AgentDispatchRequest {
+	agent: string;
+}
+
+export interface DispatchReceipt {
+	dispatchId: string;
+	acceptedAt: string;
+}
+
+export interface DispatchRequest extends AgentDispatchRequest {
+	agent?: string;
+}
+
+export type Dispatch = (request: DispatchRequest) => Promise<DispatchReceipt>;
 
 export interface ReceiveContext {
 	delivery: Delivery;
@@ -703,7 +721,7 @@ export interface DirectMessageMetadata {
 export interface DispatchMessageMetadata {
 	dispatchId: string;
 	deliveryId?: string;
-	sourceAgent: string;
+	sourceAgent?: string;
 	targetAgent: string;
 	agent: string;
 	id: string;

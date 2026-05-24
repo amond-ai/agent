@@ -105,6 +105,158 @@ describe('WebSocket transport foundation', () => {
 		expect(forwarded[1]).toMatch(/^\/workflows\/job:workflow:job:/);
 	});
 
+	it('runs exported Cloudflare resource middleware before HTTP and socket forwarding', async () => {
+		const forwarded: string[] = [];
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: {
+				agents: [{ name: 'assistant', channels: { http: true, websocket: true }, receive: false, created: true }],
+			},
+			agentRouteMiddleware: {
+				assistant: async (c, next) => {
+					if (c.req.query('token') !== 'ok') return c.text('HTTP Unauthorized', 401);
+					await next();
+				},
+			},
+			agentWebSocketMiddleware: {
+				assistant: async (c, next) => {
+					if (c.req.query('token') !== 'ok') return c.text('Socket Unauthorized', 401);
+					await next();
+				},
+			},
+			routeAgentRequest: async (request) => {
+				forwarded.push(`${request.method}:${new URL(request.url).pathname}`);
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const upgrade = { method: 'GET', headers: { upgrade: 'websocket' } };
+
+		expect((await app.fetch(new Request('http://localhost/agents/assistant/one', { method: 'POST' }))).status).toBe(401);
+		expect((await app.fetch(new Request('http://localhost/agents/assistant/one?token=ok', { method: 'POST' }))).status).toBe(200);
+		expect((await app.fetch(new Request('http://localhost/agents/assistant/one', upgrade))).status).toBe(401);
+		expect((await app.fetch(new Request('http://localhost/agents/assistant/one?token=ok', upgrade))).status).toBe(200);
+		expect(forwarded).toEqual(['POST:/agents/assistant/one', 'GET:/agents/assistant/one']);
+	});
+
+	it('does not execute an attached handler twice when exported middleware calls next twice', async () => {
+		let forwarded = 0;
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, receive: false, created: true }] },
+			agentRouteMiddleware: {
+				assistant: async (_c, next) => {
+					await next();
+					await next();
+				},
+			},
+			routeAgentRequest: async () => {
+				forwarded += 1;
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+
+		const response = await app.fetch(new Request('http://localhost/agents/assistant/one', { method: 'POST' }));
+
+		expect(response.status).toBe(500);
+		expect(forwarded).toBe(1);
+	});
+
+	it('rejects exported route middleware that neither responds nor continues', async () => {
+		let forwarded = false;
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, receive: false, created: true }] },
+			agentRouteMiddleware: { assistant: async () => undefined },
+			routeAgentRequest: async () => {
+				forwarded = true;
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+
+		const response = await app.fetch(new Request('http://localhost/agents/assistant/one', { method: 'POST' }));
+
+		expect(response.status).toBe(500);
+		expect(forwarded).toBe(false);
+	});
+
+	it('permits exported route middleware to short-circuit by assigning c.res', async () => {
+		let forwarded = false;
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, receive: false, created: true }] },
+			agentRouteMiddleware: {
+				assistant: async (c) => {
+					c.res = c.text('Assigned Unauthorized', 401);
+				},
+			},
+			routeAgentRequest: async () => {
+				forwarded = true;
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+
+		const response = await app.fetch(new Request('http://localhost/agents/assistant/one', { method: 'POST' }));
+
+		expect(response.status).toBe(401);
+		expect(await response.text()).toBe('Assigned Unauthorized');
+		expect(forwarded).toBe(false);
+	});
+
+	it('rejects exported socket middleware that neither responds nor continues', async () => {
+		let forwarded = false;
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, receive: false, created: true }] },
+			agentWebSocketMiddleware: { assistant: async () => undefined },
+			routeAgentRequest: async () => {
+				forwarded = true;
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const upgrade = { method: 'GET', headers: { upgrade: 'websocket' } };
+
+		const response = await app.fetch(new Request('http://localhost/agents/assistant/one', upgrade));
+
+		expect(response.status).toBe(500);
+		expect(forwarded).toBe(false);
+	});
+
+	it('permits exported socket middleware to short-circuit by assigning c.res', async () => {
+		let forwarded = false;
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, receive: false, created: true }] },
+			agentWebSocketMiddleware: {
+				assistant: async (c) => {
+					c.res = c.text('Assigned Socket Unauthorized', 401);
+				},
+			},
+			routeAgentRequest: async () => {
+				forwarded = true;
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const upgrade = { method: 'GET', headers: { upgrade: 'websocket' } };
+
+		const response = await app.fetch(new Request('http://localhost/agents/assistant/one', upgrade));
+
+		expect(response.status).toBe(401);
+		expect(await response.text()).toBe('Assigned Socket Unauthorized');
+		expect(forwarded).toBe(false);
+	});
+
 	it('runs Cloudflare custom app middleware before a mounted socket upgrade is forwarded', async () => {
 		let forwarded = false;
 		configureFlueRuntime({

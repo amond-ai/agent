@@ -18,6 +18,11 @@ describe('Node build plugin', () => {
 		expect(entry).toContain('const workflowHandlers = {};');
 		expect(entry).toContain('const websocketAgentHandlers = {};');
 		expect(entry).toContain('const websocketWorkflowHandlers = {};');
+		expect(entry).toContain('const agentRouteMiddleware = {};');
+		expect(entry).toContain('const workflowWebSocketMiddleware = {};');
+		expect(entry).toContain('const dispatchAgentNames = new Map();');
+		expect(entry).toContain('dispatchAgentNames.set(mod.default, name);');
+		expect(entry).toContain('resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),');
 		expect(entry).toContain('const normalized = normalizeBuiltModules(agentModules, workflowModules);');
 		expect(entry).not.toContain('channelModules');
 	});
@@ -50,6 +55,109 @@ describe('Node build plugin', () => {
 			});
 			expect(response.status).toBe(200);
 			expect(await response.json()).toMatchObject({ result: { ok: true } });
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
+	it('exposes and wraps an HTTP workflow through its route export', async () => {
+		const root = createFixtureRoot('flue-route-workflow-');
+		fs.mkdirSync(path.join(root, 'workflows'));
+		fs.writeFileSync(
+			path.join(root, 'workflows', 'protected-job.ts'),
+			`export const route = async (c, next) => { if (c.req.header('authorization') !== 'Bearer allowed') return c.text('Unauthorized', 401); await next(); c.header('x-route', 'yes'); };\n` +
+				`export async function run() { return { ok: true }; }\n`,
+		);
+		await build({ root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const rejected = await fetch(`http://localhost:${port}/workflows/protected-job?wait=result`, { method: 'POST' });
+			expect(rejected.status).toBe(401);
+			const allowed = await fetch(`http://localhost:${port}/workflows/protected-job?wait=result`, {
+				method: 'POST',
+				headers: { authorization: 'Bearer allowed' },
+			});
+			expect(allowed.status).toBe(200);
+			expect(allowed.headers.get('x-route')).toBe('yes');
+			expect(await allowed.json()).toMatchObject({ result: { ok: true } });
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
+	it('exposes an agent HTTP endpoint through its route export', async () => {
+		const root = createFixtureRoot('flue-route-agent-');
+		fs.mkdirSync(path.join(root, 'agents'));
+		fs.writeFileSync(
+			path.join(root, 'agents', 'assistant.ts'),
+			`import { createAgent } from '@flue/runtime';\n` +
+				`export const route = async (c) => c.text('Blocked', 403);\n` +
+				`export default createAgent(() => ({ model: false }));\n`,
+		);
+		await build({ root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const response = await fetch(`http://localhost:${port}/agents/assistant/instance-1`, { method: 'POST' });
+			expect(response.status).toBe(403);
+			expect(await response.text()).toBe('Blocked');
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
+	it('dispatches from a workflow to a discovered created agent by reference', async () => {
+		const root = createFixtureRoot('flue-global-dispatch-workflow-');
+		fs.mkdirSync(path.join(root, 'agents'));
+		fs.mkdirSync(path.join(root, 'workflows'));
+		fs.writeFileSync(
+			path.join(root, 'agents', 'assistant.ts'),
+			`import { createAgent } from '@flue/runtime';\n` +
+				`export default createAgent(() => ({ model: false }));\n`,
+		);
+		fs.writeFileSync(
+			path.join(root, 'workflows', 'notify.ts'),
+			`import { dispatch } from '@flue/runtime';\n` +
+				`import assistant from '../agents/assistant.ts';\n` +
+				`export const route = async (c, next) => { await next(); };\n` +
+				`export async function run() { const receipt = await dispatch(assistant, { id: 'thread-1', input: { text: 'hello' } }); return { accepted: typeof receipt.dispatchId === 'string' }; }\n`,
+		);
+		await build({ root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const response = await fetch(`http://localhost:${port}/workflows/notify?wait=result`, { method: 'POST' });
+			expect(response.status).toBe(200);
+			expect(await response.json()).toMatchObject({ result: { accepted: true } });
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
+	it('invokes a WebSocket-exported workflow without exposing HTTP POST', async () => {
+		const root = createFixtureRoot('flue-exported-websocket-workflow-');
+		fs.mkdirSync(path.join(root, 'workflows'));
+		fs.writeFileSync(
+			path.join(root, 'workflows', 'socket-job.ts'),
+			`export const websocket = async (c, next) => { if (c.req.query('token') !== 'ok') return c.text('Unauthorized', 401); await next(); };\n` +
+				`export async function run(ctx) { return { echoed: ctx.payload }; }\n`,
+		);
+		await build({ root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const http = await fetch(`http://localhost:${port}/workflows/socket-job`, { method: 'POST' });
+			expect(http.status).toBe(404);
+			const rejected = new WebSocket(`ws://localhost:${port}/workflows/socket-job`);
+			expect(await waitForSocketFailure(rejected)).toBe(true);
+			const socket = new WebSocket(`ws://localhost:${port}/workflows/socket-job?token=ok`);
+			const messages = collectMessages(socket);
+			await waitForOpen(socket);
+			socket.send(JSON.stringify({ version: 1, type: 'invoke', requestId: 'req-1', payload: { ok: true } }));
+			const result = await waitForMessage(messages, (message) => message.type === 'result');
+			expect(result).toMatchObject({ type: 'result', requestId: 'req-1', result: { echoed: { ok: true } } });
+			await waitForClose(socket);
 		} finally {
 			child.kill('SIGTERM');
 		}
@@ -201,6 +309,31 @@ describe('Node build plugin', () => {
 		}
 	});
 
+	it('rejects shared created-agent identities for reference-based dispatch', async () => {
+		const root = createFixtureRoot('flue-shared-agent-identity-');
+		fs.mkdirSync(path.join(root, 'agents'));
+		fs.writeFileSync(
+			path.join(root, 'shared.ts'),
+			`import { createAgent } from '@flue/runtime';\nexport default createAgent(() => ({ model: false }));\n`,
+		);
+		fs.writeFileSync(path.join(root, 'agents', 'first.ts'), `export { default } from '../shared.ts';\n`);
+		fs.writeFileSync(path.join(root, 'agents', 'second.ts'), `export { default } from '../shared.ts';\n`);
+		await build({ root, target: 'node' });
+
+		const port = await findAvailablePort();
+		const child = spawn('node', [path.join(root, 'dist', 'server.mjs')], {
+			cwd: root,
+			stdio: ['ignore', 'pipe', 'pipe'],
+			env: { ...process.env, PORT: String(port), FLUE_MODE: 'local' },
+		});
+		try {
+			const stderr = await waitForProcessExit(child);
+			expect(stderr).toContain('default-export the same created agent value');
+		} finally {
+			if (child.exitCode === null) child.kill('SIGTERM');
+		}
+	});
+
 	it('loads external-channel agent receive handlers exported as values', async () => {
 		const root = createFixtureRoot('flue-agent-module-exports-');
 		fs.mkdirSync(path.join(root, 'agents'));
@@ -267,6 +400,21 @@ async function waitForSocketFailure(socket: WebSocket): Promise<boolean> {
 		socket.addEventListener('open', () => resolve(false), { once: true });
 		socket.addEventListener('error', () => resolve(true), { once: true });
 	});
+}
+
+async function waitForProcessExit(child: ChildProcess): Promise<string> {
+	let output = '';
+	child.stderr?.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stdout?.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	await new Promise<void>((resolve, reject) => {
+		child.once('exit', () => resolve());
+		child.once('error', reject);
+	});
+	return output;
 }
 
 async function waitForMessage(

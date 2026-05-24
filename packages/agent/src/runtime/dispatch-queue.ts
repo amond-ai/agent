@@ -1,17 +1,18 @@
-import type { DispatchRequest } from '../types.ts';
+import type { DispatchReceipt } from '../types.ts';
 
-export interface DispatchInput extends Required<DispatchRequest> {
+export interface DispatchInput {
 	dispatchId: string;
 	deliveryId?: string;
-	sourceAgent: string;
+	sourceAgent?: string;
 	targetAgent: string;
+	agent: string;
+	id: string;
+	session: string;
+	input: unknown;
 	acceptedAt: string;
 }
 
-export interface DispatchReceipt {
-	dispatchId: string;
-	acceptedAt: string;
-}
+export type { DispatchReceipt } from '../types.ts';
 
 export interface DispatchProcessor {
 	process(input: DispatchInput): Promise<void> | void;

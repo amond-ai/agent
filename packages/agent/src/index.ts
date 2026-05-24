@@ -43,10 +43,17 @@ export type {
 	ToolParameters,
 	ThinkingLevel,
 	ProviderSettings,
+	AgentRouteHandler,
+	AgentWebSocketHandler,
+	WorkflowRouteHandler,
+	WorkflowWebSocketHandler,
 	WorkflowChannel,
 	ChannelDefinition,
 	ChannelWebhookHandler,
 	Delivery,
+	AgentDispatchRequest,
+	NamedAgentDispatchRequest,
+	DispatchReceipt,
 	Dispatch,
 	DispatchRequest,
 	ReceiveContext,
@@ -62,6 +69,7 @@ export { createTools, BUILTIN_TOOL_NAMES } from './agent.ts';
 export { defineTool } from './tool.ts';
 export { createAgent, defineAgentProfile } from './agent-definition.ts';
 export { defineChannel } from './channels.ts';
+export { dispatch } from './runtime/flue-app.ts';
 export { createGitHubChannel, createGitHubChannelRouter, createGitHubWebhook, type GitHubWebhookOptions } from './github.ts';
 export { http, websocket } from './workflow-channels.ts';
 export type { McpServerConnection, McpServerOptions, McpTransport } from './mcp.ts';

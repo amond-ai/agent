@@ -55,6 +55,10 @@ describe('Cloudflare build plugin', () => {
 
 		expect(entry).toContain('const websocketAgentHandlers = {};');
 		expect(entry).toContain('const websocketWorkflowHandlers = {};');
+		expect(entry).toContain('const agentRouteMiddleware = {};');
+		expect(entry).toContain('const workflowWebSocketMiddleware = {};');
+		expect(entry).toContain('agentWebSocketMiddleware,');
+		expect(entry).toContain('workflowWebSocketMiddleware,');
 		expect(entry).toContain('connectCloudflareAgentWebSocket');
 		expect(entry).toContain('messageCloudflareWorkflowWebSocket');
 		expect(entry).toContain('if (isWebSocketUpgrade(request)) {');

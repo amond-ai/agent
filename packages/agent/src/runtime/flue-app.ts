@@ -17,6 +17,7 @@ import {
 	validateAgentRequest,
 	validateWorkflowRequest,
 } from '../errors.ts';
+import type { AgentDispatchRequest, CreatedAgent, DispatchReceipt, NamedAgentDispatchRequest } from '../types.ts';
 import {
 	type AgentHandler,
 	type CreateContextFn,
@@ -27,7 +28,7 @@ import {
 	type WorkflowHandler,
 } from './handle-agent.ts';
 import type { DispatchQueue } from './dispatch-queue.ts';
-import { receiveExternalDelivery as receiveExternalDeliveryWithRuntime, type AgentReceiveHandler } from './external-channels.ts';
+import { enqueueDispatch, receiveExternalDelivery as receiveExternalDeliveryWithRuntime, type AgentReceiveHandler } from './external-channels.ts';
 import { type HandleRunRouteOptions, handleRunRouteRequest } from './handle-run-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
 import type { RunPointer, RunRegistry } from './run-registry.ts';
@@ -58,6 +59,10 @@ export interface FlueRuntime {
 	handlers?: Record<string, AgentHandler>;
 	receiveHandlers?: Record<string, AgentReceiveHandler>;
 	workflowHandlers?: Record<string, WorkflowHandler>;
+	agentRouteMiddleware?: Record<string, MiddlewareHandler>;
+	agentWebSocketMiddleware?: Record<string, MiddlewareHandler>;
+	workflowRouteMiddleware?: Record<string, MiddlewareHandler>;
+	workflowWebSocketMiddleware?: Record<string, MiddlewareHandler>;
 	nodeWebSocketAgentRoute?: MiddlewareHandler;
 	nodeWebSocketWorkflowRoute?: MiddlewareHandler;
 
@@ -126,6 +131,9 @@ export interface FlueRuntime {
 
 	/** Internal dispatch admission queue. Defaults to process-lifetime memory. */
 	dispatchQueue?: DispatchQueue;
+
+	/** Resolve discovered/default-exported created agent identities for global dispatch. */
+	resolveDispatchAgentName?: (agent: CreatedAgent) => string | undefined;
 }
 
 export interface FlueManifest {
@@ -161,6 +169,48 @@ export async function receiveExternalDelivery(
 		);
 	}
 	return receiveExternalDeliveryWithRuntime(delivery, rt, options);
+}
+
+export function dispatch(agent: CreatedAgent, request: AgentDispatchRequest): Promise<DispatchReceipt>;
+export function dispatch(request: NamedAgentDispatchRequest): Promise<DispatchReceipt>;
+export async function dispatch(
+	agentOrRequest: CreatedAgent | NamedAgentDispatchRequest,
+	maybeRequest?: AgentDispatchRequest,
+): Promise<DispatchReceipt> {
+	const rt = runtimeConfig;
+	if (!rt) {
+		throw new Error(
+			'[flue] dispatch() called before runtime was configured. ' +
+				'This usually means it was used outside a Flue-built server entry.',
+		);
+	}
+	if (rt.target === 'cloudflare') {
+		throw new Error('[flue] dispatch() is not supported on Cloudflare until target agent Durable Object forwarding is configured.');
+	}
+	if (!rt.dispatchQueue) {
+		throw new Error('[flue] dispatch() cannot be accepted because no dispatch queue is configured.');
+	}
+	const request = isCreatedAgentValue(agentOrRequest)
+		? resolveCreatedAgentDispatchRequest(agentOrRequest, maybeRequest, rt)
+		: agentOrRequest;
+	return enqueueDispatch({ request, dispatchQueue: rt.dispatchQueue, rt });
+}
+
+function isCreatedAgentValue(value: CreatedAgent | NamedAgentDispatchRequest): value is CreatedAgent {
+	return '__flueCreatedAgent' in value && value.__flueCreatedAgent === true && typeof value.initialize === 'function';
+}
+
+function resolveCreatedAgentDispatchRequest(
+	agent: CreatedAgent,
+	request: AgentDispatchRequest | undefined,
+	rt: FlueRuntime,
+): NamedAgentDispatchRequest {
+	if (!request) throw new Error('[flue] dispatch(agent, request) requires a dispatch request.');
+	const name = rt.resolveDispatchAgentName?.(agent);
+	if (!name) {
+		throw new Error('[flue] dispatch() target created agent is not a discovered default-exported agent in this built application.');
+	}
+	return { agent: name, id: request.id, session: request.session, input: request.input };
 }
 
 let runtimeConfig: FlueRuntime | undefined;
@@ -415,17 +465,19 @@ const workflowSocketRouteHandler: MiddlewareHandler = async (c, next) => {
 	if (!registeredWorkflowsForChannel(rt, 'websocket').includes(name)) {
 		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 	}
-	if (rt.target === 'node') {
-		if (!rt.nodeWebSocketWorkflowRoute) throw new Error('[flue] Node runtime is missing WebSocket workflow routing.');
-		return rt.nodeWebSocketWorkflowRoute(c, next);
-	}
-	if (!rt.routeWorkflowRequest) throw new Error('[flue] Cloudflare runtime is missing workflow route forwarding.');
-	const response = await rt.routeWorkflowRequest(normalizeAttachedRequest(c.req.raw, `/workflows/${encodeURIComponent(name)}`), c.env, {
-		workflowName: name,
-		instanceId: generateWorkflowRunId(name),
+	return runAttachedMiddleware(c, rt.workflowWebSocketMiddleware?.[name], async () => {
+		if (rt.target === 'node') {
+			if (!rt.nodeWebSocketWorkflowRoute) throw new Error('[flue] Node runtime is missing WebSocket workflow routing.');
+			return (await rt.nodeWebSocketWorkflowRoute(c, next)) ?? undefined;
+		}
+		if (!rt.routeWorkflowRequest) throw new Error('[flue] Cloudflare runtime is missing workflow route forwarding.');
+		const response = await rt.routeWorkflowRequest(normalizeAttachedRequest(c.req.raw, `/workflows/${encodeURIComponent(name)}`), c.env, {
+			workflowName: name,
+			instanceId: generateWorkflowRunId(name),
+		});
+		if (response) return response;
+		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 	});
-	if (response) return response;
-	throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 };
 
 const agentSocketRouteHandler: MiddlewareHandler = async (c, next) => {
@@ -436,14 +488,16 @@ const agentSocketRouteHandler: MiddlewareHandler = async (c, next) => {
 	if (!registeredAgentsForChannel(rt, 'websocket').includes(name) || id.trim() === '') {
 		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 	}
-	if (rt.target === 'node') {
-		if (!rt.nodeWebSocketAgentRoute) throw new Error('[flue] Node runtime is missing WebSocket agent routing.');
-		return rt.nodeWebSocketAgentRoute(c, next);
-	}
-	if (!rt.routeAgentRequest) throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
-	const response = await rt.routeAgentRequest(normalizeAttachedRequest(c.req.raw, `/agents/${encodeURIComponent(name)}/${encodeURIComponent(id)}`), c.env);
-	if (response) return response;
-	throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
+	return runAttachedMiddleware(c, rt.agentWebSocketMiddleware?.[name], async () => {
+		if (rt.target === 'node') {
+			if (!rt.nodeWebSocketAgentRoute) throw new Error('[flue] Node runtime is missing WebSocket agent routing.');
+			return (await rt.nodeWebSocketAgentRoute(c, next)) ?? undefined;
+		}
+		if (!rt.routeAgentRequest) throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
+		const response = await rt.routeAgentRequest(normalizeAttachedRequest(c.req.raw, `/agents/${encodeURIComponent(name)}/${encodeURIComponent(id)}`), c.env);
+		if (response) return response;
+		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
+	});
 };
 
 const workflowRouteHandler: MiddlewareHandler = async (c) => {
@@ -464,37 +518,39 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 		httpWorkflows: registeredWorkflowsForChannel(rt, 'http'),
 	});
 
-	if (rt.target === 'node') {
-		const handler = rt.workflowHandlers?.[name];
-		const createContext = rt.createContext;
-		if (!handler || !createContext) {
-			throw new Error('[flue] Node runtime is missing workflow handler configuration.');
+	return runAttachedMiddleware(c, rt.workflowRouteMiddleware?.[name], async () => {
+		if (rt.target === 'node') {
+			const handler = rt.workflowHandlers?.[name];
+			const createContext = rt.createContext;
+			if (!handler || !createContext) {
+				throw new Error('[flue] Node runtime is missing workflow handler configuration.');
+			}
+			return handleWorkflowRequest({
+				request: c.req.raw,
+				workflowName: name,
+				handler,
+				createContext,
+				startWebhook: rt.startWebhook,
+				runHandler: rt.runHandler,
+				runStore: rt.runStore,
+				runSubscribers: rt.runSubscribers,
+				runRegistry: rt.runRegistry,
+			});
 		}
-		return handleWorkflowRequest({
-			request: c.req.raw,
-			workflowName: name,
-			handler,
-			createContext,
-			startWebhook: rt.startWebhook,
-			runHandler: rt.runHandler,
-			runStore: rt.runStore,
-			runSubscribers: rt.runSubscribers,
-			runRegistry: rt.runRegistry,
-		});
-	}
 
-	if (!rt.routeWorkflowRequest) {
-		throw new Error('[flue] Cloudflare runtime is missing workflow route forwarding.');
-	}
-	// One workflow run = one workflow DO instance. The instanceId IS the
-	// runId; the DO it lands on then re-uses that value to seed its run
-	// record via handleWorkflowRequest({ runId: instanceId, ... }).
-	const response = await rt.routeWorkflowRequest(c.req.raw.clone(), c.env, {
-		workflowName: name,
-		instanceId: generateWorkflowRunId(name),
+		if (!rt.routeWorkflowRequest) {
+			throw new Error('[flue] Cloudflare runtime is missing workflow route forwarding.');
+		}
+		// One workflow run = one workflow DO instance. The instanceId IS the
+		// runId; the DO it lands on then re-uses that value to seed its run
+		// record via handleWorkflowRequest({ runId: instanceId, ... }).
+		const response = await rt.routeWorkflowRequest(c.req.raw.clone(), c.env, {
+			workflowName: name,
+			instanceId: generateWorkflowRunId(name),
+		});
+		if (response) return response;
+		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 	});
-	if (response) return response;
-	throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 };
 
 const agentRouteHandler: MiddlewareHandler = async (c) => {
@@ -516,35 +572,37 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 		registeredAgents: registeredAgentsForChannel(rt, 'http'),
 	});
 
-	if (rt.target === 'node') {
-		const handler = rt.handlers?.[name];
-		const createContext = rt.createContext;
-		if (!handler || !createContext) {
-			throw new Error('[flue] Node runtime is missing agent handler configuration.');
+	return runAttachedMiddleware(c, rt.agentRouteMiddleware?.[name], async () => {
+		if (rt.target === 'node') {
+			const handler = rt.handlers?.[name];
+			const createContext = rt.createContext;
+			if (!handler || !createContext) {
+				throw new Error('[flue] Node runtime is missing agent handler configuration.');
+			}
+			return handleAgentRequest({
+				request: c.req.raw,
+				agentName: name,
+				id,
+				handler,
+				createContext,
+				startWebhook: rt.startWebhook,
+				runHandler: rt.runHandler,
+				runStore: rt.runStore,
+				runSubscribers: rt.runSubscribers,
+				runRegistry: rt.runRegistry,
+			});
 		}
-		return handleAgentRequest({
-			request: c.req.raw,
-			agentName: name,
-			id,
-			handler,
-			createContext,
-			startWebhook: rt.startWebhook,
-			runHandler: rt.runHandler,
-			runStore: rt.runStore,
-			runSubscribers: rt.runSubscribers,
-			runRegistry: rt.runRegistry,
+
+		if (!rt.routeAgentRequest) {
+			throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
+		}
+		const response = await rt.routeAgentRequest(c.req.raw.clone(), c.env);
+		if (response) return response;
+
+		throw new RouteNotFoundError({
+			method: c.req.method,
+			path: new URL(c.req.url).pathname,
 		});
-	}
-
-	if (!rt.routeAgentRequest) {
-		throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
-	}
-	const response = await rt.routeAgentRequest(c.req.raw.clone(), c.env);
-	if (response) return response;
-
-	throw new RouteNotFoundError({
-		method: c.req.method,
-		path: new URL(c.req.url).pathname,
 	});
 };
 
@@ -650,6 +708,26 @@ function requiredRuntime(): FlueRuntime {
 		);
 	}
 	return runtimeConfig;
+}
+
+async function runAttachedMiddleware(
+	c: Parameters<MiddlewareHandler>[0],
+	middleware: MiddlewareHandler | undefined,
+	handle: () => Promise<Response | undefined>,
+): Promise<Response | undefined> {
+	if (!middleware) return handle();
+	const finalizedBefore = c.finalized;
+	const responseBefore = finalizedBefore ? c.res : undefined;
+	let continued = false;
+	const response = await middleware(c, async () => {
+		if (continued) throw new Error('next() called multiple times');
+		continued = true;
+		const handled = await handle();
+		if (handled) c.res = handled;
+	});
+	if (response) return response;
+	if (continued || (c.finalized && (!finalizedBefore || c.res !== responseBefore))) return c.res;
+	throw new Error('Context is not finalized. Did you forget to return a Response object or await next()?');
 }
 
 function isWebSocketUpgrade(request: Request): boolean {

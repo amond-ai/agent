@@ -29,7 +29,7 @@
  *     export default app;
  *
  */
-export { flue } from './runtime/flue-app.ts';
+export { dispatch, flue } from './runtime/flue-app.ts';
 export { admin } from './runtime/admin-app.ts';
 export {
 	registerProvider,

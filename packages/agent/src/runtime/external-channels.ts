@@ -1,4 +1,4 @@
-import type { Delivery, Dispatch, DispatchRequest } from '../types.ts';
+import type { Delivery, Dispatch, DispatchReceipt, DispatchRequest, NamedAgentDispatchRequest } from '../types.ts';
 import type { DispatchQueue } from './dispatch-queue.ts';
 
 export interface ExternalChannelRuntime {
@@ -66,21 +66,41 @@ function createDispatchFn(options: {
 	dispatchQueue: DispatchQueue;
 	rt: ExternalChannelRuntime;
 }): Dispatch {
-	return async (request) => {
-		const targetAgent = request.agent ?? options.sourceAgent;
-		const input = validateAndCloneDispatchRequest(request, targetAgent, options.rt);
-		await options.dispatchQueue.enqueue({
-			dispatchId: crypto.randomUUID(),
-			deliveryId: options.delivery.id,
-			sourceAgent: options.sourceAgent,
-			targetAgent,
-			agent: targetAgent,
+	return async (request) => enqueueDispatch({
+		request: {
+			agent: request.agent ?? options.sourceAgent,
 			id: request.id,
 			session: request.session,
-			input,
-			acceptedAt: new Date().toISOString(),
-		});
-	};
+			input: request.input,
+		},
+		deliveryId: options.delivery.id,
+		sourceAgent: options.sourceAgent,
+		dispatchQueue: options.dispatchQueue,
+		rt: options.rt,
+	});
+}
+
+export async function enqueueDispatch(options: {
+	request: NamedAgentDispatchRequest;
+	dispatchQueue: DispatchQueue;
+	rt: ExternalChannelRuntime;
+	deliveryId?: string;
+	sourceAgent?: string;
+}): Promise<DispatchReceipt> {
+	const targetAgent = options.request.agent;
+	const input = validateAndCloneDispatchRequest(options.request, targetAgent, options.rt);
+	const session = options.request.session ?? 'default';
+	return options.dispatchQueue.enqueue({
+		dispatchId: crypto.randomUUID(),
+		deliveryId: options.deliveryId,
+		sourceAgent: options.sourceAgent,
+		targetAgent,
+		agent: targetAgent,
+		id: options.request.id,
+		session,
+		input,
+		acceptedAt: new Date().toISOString(),
+	});
 }
 
 function validateAndCloneDispatchRequest(
@@ -94,8 +114,8 @@ function validateAndCloneDispatchRequest(
 	if (typeof request.id !== 'string' || request.id.trim() === '') {
 		throw new Error('[flue] dispatch() requires a non-empty "id" target agent instance id.');
 	}
-	if (typeof request.session !== 'string' || request.session.trim() === '') {
-		throw new Error('[flue] dispatch() requires a non-empty "session" target session id.');
+	if (request.session !== undefined && (typeof request.session !== 'string' || request.session.trim() === '')) {
+		throw new Error('[flue] dispatch() requires a non-empty "session" target session id when provided.');
 	}
 	if (request.input === undefined) {
 		throw new Error('[flue] dispatch() requires an "input" payload. Use null for an intentional empty payload.');

@@ -415,10 +415,9 @@ function renderDispatchInput(input: DispatchInput): string {
 		`agent: ${input.agent}`,
 		`id: ${input.id}`,
 		`session: ${input.session}`,
-		`sourceAgent: ${input.sourceAgent}`,
-		`targetAgent: ${input.targetAgent}`,
-		`dispatchId: ${input.dispatchId}`,
 	];
+	if (input.sourceAgent) lines.push(`sourceAgent: ${input.sourceAgent}`);
+	lines.push(`targetAgent: ${input.targetAgent}`, `dispatchId: ${input.dispatchId}`);
 	if (input.deliveryId) lines.push(`deliveryId: ${input.deliveryId}`);
 	lines.push(`acceptedAt: ${input.acceptedAt}`, '', 'input:', stableStringify(input.input));
 	return lines.join('\n');
@@ -427,7 +426,6 @@ function renderDispatchInput(input: DispatchInput): string {
 function dispatchMetadata(input: DispatchInput): DispatchMessageMetadata {
 	const metadata: DispatchMessageMetadata = {
 		dispatchId: input.dispatchId,
-		sourceAgent: input.sourceAgent,
 		targetAgent: input.targetAgent,
 		agent: input.agent,
 		id: input.id,
@@ -436,6 +434,7 @@ function dispatchMetadata(input: DispatchInput): DispatchMessageMetadata {
 		input: input.input,
 	};
 	if (input.deliveryId) metadata.deliveryId = input.deliveryId;
+	if (input.sourceAgent) metadata.sourceAgent = input.sourceAgent;
 	return metadata;
 }
 

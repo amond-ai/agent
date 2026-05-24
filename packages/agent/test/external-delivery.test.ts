@@ -10,6 +10,7 @@ import {
 	type DispatchInput,
 } from '../src/internal.ts';
 import { createAgent } from '../src/agent-definition.ts';
+import { dispatch } from '../src/index.ts';
 import { Harness } from '../src/harness.ts';
 import type { AgentConfig, FlueHarness, FlueSession, SessionEnv } from '../src/types.ts';
 
@@ -159,6 +160,89 @@ describe('external delivery fan-out', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(dispatches[0]?.input).toEqual({ nested: { count: 1 } });
+	});
+
+	it('globally dispatches by registered agent name and defaults the target session', async () => {
+		const dispatches: DispatchInput[] = [];
+		const queue = new InMemoryDispatchQueue({
+			process(input) {
+				dispatches.push(input);
+			},
+		});
+
+		configureFlueRuntime({
+			target: 'node',
+			handlers: {},
+			dispatchQueue: queue,
+			manifest: {
+				agents: [{ name: 'moderator', channels: {}, receive: false, created: true }],
+			},
+		});
+
+		const receipt = await dispatch({ agent: 'moderator', id: 'guild:1', input: { type: 'flagged' } });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(receipt).toMatchObject({ dispatchId: expect.any(String), acceptedAt: expect.any(String) });
+		expect(dispatches).toHaveLength(1);
+		expect(dispatches[0]).toMatchObject({
+			targetAgent: 'moderator',
+			agent: 'moderator',
+			id: 'guild:1',
+			session: 'default',
+			input: { type: 'flagged' },
+		});
+		expect(dispatches[0]?.sourceAgent).toBeUndefined();
+	});
+
+	it('globally dispatches by a discovered created-agent identity', async () => {
+		const agent = createAgent(() => ({ model: false }));
+		const dispatches: DispatchInput[] = [];
+		const queue = new InMemoryDispatchQueue({
+			process(input) {
+				dispatches.push(input);
+			},
+		});
+
+		configureFlueRuntime({
+			target: 'node',
+			handlers: {},
+			dispatchQueue: queue,
+			resolveDispatchAgentName: (candidate) => candidate === agent ? 'moderator' : undefined,
+			manifest: {
+				agents: [{ name: 'moderator', channels: {}, receive: false, created: true }],
+			},
+		});
+
+		const request = { agent: 'ignored', id: 'guild:1', session: 'case:1', input: { type: 'created' } };
+		await dispatch(agent, request);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(dispatches[0]).toMatchObject({ targetAgent: 'moderator', session: 'case:1', input: { type: 'created' } });
+	});
+
+	it('rejects unknown named and undiscovered created-agent global dispatch targets', async () => {
+		const localAgent = createAgent(() => ({ model: false }));
+		configureFlueRuntime({
+			target: 'node',
+			handlers: {},
+			dispatchQueue: new InMemoryDispatchQueue(),
+			manifest: {
+				agents: [{ name: 'moderator', channels: {}, receive: false, created: true }],
+			},
+		});
+
+		await expect(dispatch({ agent: 'missing', id: 'guild:1', input: null })).rejects.toThrow('target agent "missing" is not registered');
+		await expect(dispatch(localAgent, { id: 'guild:1', input: null })).rejects.toThrow('not a discovered default-exported agent');
+	});
+
+	it('rejects global dispatch when Cloudflare target forwarding is not implemented', async () => {
+		configureFlueRuntime({
+			target: 'cloudflare',
+			dispatchQueue: new InMemoryDispatchQueue(),
+			manifest: { agents: [{ name: 'moderator', channels: {}, receive: false, created: true }] },
+		});
+
+		await expect(dispatch({ agent: 'moderator', id: 'guild:1', input: null })).rejects.toThrow('not supported on Cloudflare');
 	});
 
 	it('isolates receive failures per subscribed agent', async () => {
@@ -398,6 +482,39 @@ describe('external delivery fan-out', () => {
 			id: 'guild:1',
 			session: 'case:1',
 			input: { type: 'flagged' },
+		});
+	});
+
+	it('connects global dispatch through the Node queue to target session processing', async () => {
+		const processed: DispatchInput[] = [];
+		const sessions: string[] = [];
+		const agent = createAgent(() => ({ model: false }));
+		const queue = new InMemoryDispatchQueue(createAgentDispatchProcessor({
+			agents: { moderator: agent },
+			createContext: (...args) => {
+				const ctx = createTestContext(...args);
+				ctx.initializeCreatedAgent = async () => fakeDispatchHarness(sessions, processed);
+				return ctx;
+			},
+		}));
+
+		configureFlueRuntime({
+			target: 'node',
+			handlers: {},
+			dispatchQueue: queue,
+			resolveDispatchAgentName: (candidate) => candidate === agent ? 'moderator' : undefined,
+			manifest: { agents: [{ name: 'moderator', channels: {}, receive: false, created: true }] },
+		});
+
+		await dispatch(agent, { id: 'guild:1', input: { type: 'global' } });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(sessions).toEqual(['default']);
+		expect(processed[0]).toMatchObject({
+			targetAgent: 'moderator',
+			id: 'guild:1',
+			session: 'default',
+			input: { type: 'global' },
 		});
 	});
 
