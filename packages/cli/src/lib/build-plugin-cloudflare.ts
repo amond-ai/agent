@@ -47,7 +47,7 @@ export class CloudflarePlugin implements BuildPlugin {
 	}
 
 	async generateEntryPoint(ctx: BuildContext): Promise<string> {
-		const { agents, appEntry, workflows } = ctx;
+		const { agents, appEntry, channels, workflows } = ctx;
 		const runtimeVersion = JSON.stringify(ctx.runtimeVersion);
 		validateCloudflareAgentNames(ctx);
 
@@ -70,6 +70,16 @@ export class CloudflarePlugin implements BuildPlugin {
 			.join('\n');
 		const workflowModuleEntries = workflows
 			.map((workflow, index) => `  ${JSON.stringify(workflow.name)}: ${workflowVarName(workflow.name, index)},`)
+			.join('\n');
+		const channelImports = channels
+			.map((channel, index) => {
+				const varName = channelVarName(channel.name, index);
+				const filePath = channel.filePath.replace(/\\/g, '/');
+				return `import * as ${varName} from '${filePath}';`;
+			})
+			.join('\n');
+		const channelModuleEntries = channels
+			.map((channel, index) => `  ${JSON.stringify(channel.name)}: ${channelVarName(channel.name, index)},`)
 			.join('\n');
 
 		const agentClasses = agents
@@ -218,7 +228,7 @@ import { registerApiProvider, registerProvider } from '@flue/runtime/app';
 
 ${agentImports}
 ${workflowImports}
-
+${channelImports}
 ${userAppImport}
 
 // ─── Internal provider registrations ────────────────────────────────────────
@@ -242,7 +252,7 @@ if (!hasRegisteredProvider('cloudflare')) {
 const skills = {};
 const systemPrompt = '';
 
-function normalizeBuiltModules(agentModules, workflowModules) {
+function normalizeBuiltModules(agentModules, workflowModules, channelModules) {
   const manifest = { agents: [], workflows: [] };
   const directHandlers = {};
   const createdAgents = {};
@@ -253,6 +263,7 @@ function normalizeBuiltModules(agentModules, workflowModules) {
   const agentWebSocketMiddleware = {};
   const workflowRouteMiddleware = {};
   const workflowWebSocketMiddleware = {};
+  const channelApps = {};
   for (const [name, mod] of Object.entries(agentModules)) {
     if (!mod.default || mod.default.__flueCreatedAgent !== true || typeof mod.default.initialize !== 'function') throw new Error('[flue] Agent "' + name + '" must default-export createAgent(...).');
     if (mod.route !== undefined && typeof mod.route !== 'function') throw new Error('[flue] Agent "' + name + '" route export must be a callable Hono middleware value.');
@@ -300,7 +311,17 @@ function normalizeBuiltModules(agentModules, workflowModules) {
     if (typeof mod.websocket === 'function') workflowWebSocketMiddleware[name] = mod.websocket;
   }
 
-  return { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, receiveHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware };
+  for (const [name, mod] of Object.entries(channelModules)) {
+    if (!mod.default || mod.default.__flueDefinedChannel !== true || typeof mod.default.on !== 'function' || typeof mod.default.emit !== 'function') {
+      throw new Error('[flue] Channel "' + name + '" must default-export defineChannel({ app }).');
+    }
+    if (mod.default.app !== undefined) {
+      if (!mod.default.app || typeof mod.default.app.fetch !== 'function') throw new Error('[flue] Channel "' + name + '" app must be a Hono application with a fetch method.');
+      channelApps[name] = mod.default.app;
+    }
+  }
+
+  return { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, receiveHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps };
 }
 
 function normalizeChannelList(value, label) {
@@ -328,8 +349,11 @@ ${agentModuleEntries}
 const workflowModules = {
 ${workflowModuleEntries}
 };
-const normalized = normalizeBuiltModules(agentModules, workflowModules);
-const { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, receiveHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware } = normalized;
+const channelModules = {
+${channelModuleEntries}
+};
+const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);
+const { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, receiveHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps } = normalized;
 const agentClassNames = {
 ${agentClassMapEntries}
 };
@@ -1000,6 +1024,7 @@ configureFlueRuntime({
   agentWebSocketMiddleware,
   workflowRouteMiddleware,
   workflowWebSocketMiddleware,
+  channelApps,
   routeAgentRequest: (request, env) => routeAgentRequest(request, env),
   routeWorkflowRequest: async (request, reqEnv, target) => {
     const bindingName = workflowBindingNameFromWorkflowName(target.workflowName);
@@ -1171,6 +1196,10 @@ function workflowVarName(name: string, index: number): string {
 	return `workflow_${readableName}_${index}`;
 }
 
+function channelVarName(name: string, index: number): string {
+	const readableName = name.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'channel';
+	return `channel_${readableName}_${index}`;
+}
 
 const CLOUDFLARE_AGENT_NAME_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 

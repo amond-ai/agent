@@ -8,7 +8,7 @@ export class NodePlugin implements BuildPlugin {
 	bundle = 'esbuild' as const;
 
 	generateEntryPoint(ctx: BuildContext): string {
-		const { agents, appEntry, workflows } = ctx;
+		const { agents, appEntry, channels, workflows } = ctx;
 		const runtimeVersion = JSON.stringify(ctx.runtimeVersion);
 
 		const agentImports = agents
@@ -32,6 +32,16 @@ export class NodePlugin implements BuildPlugin {
 			.join('\n');
 		const workflowModuleEntries = workflows
 			.map((workflow, index) => `  ${JSON.stringify(workflow.name)}: ${workflowVarName(workflow.name, index)},`)
+			.join('\n');
+		const channelImports = channels
+			.map((channel, index) => {
+				const varName = channelVarName(channel.name, index);
+				const filePath = channel.filePath.replace(/\\/g, '/');
+				return `import * as ${varName} from '${filePath}';`;
+			})
+			.join('\n');
+		const channelModuleEntries = channels
+			.map((channel, index) => `  ${JSON.stringify(channel.name)}: ${channelVarName(channel.name, index)},`)
 			.join('\n');
 
 		// User-supplied app.ts (if any). The generated entry imports the user's
@@ -66,6 +76,7 @@ import {
 } from '@flue/runtime/internal';
 ${agentImports}
 ${workflowImports}
+${channelImports}
 ${userAppImport}
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -73,7 +84,7 @@ ${userAppImport}
 const skills = {};
 const systemPrompt = '';
 
-function normalizeBuiltModules(agentModules, workflowModules) {
+function normalizeBuiltModules(agentModules, workflowModules, channelModules) {
   const manifest = { agents: [], workflows: [] };
   const directHandlers = {};
   const receiveHandlers = {};
@@ -86,6 +97,7 @@ function normalizeBuiltModules(agentModules, workflowModules) {
   const agentWebSocketMiddleware = {};
   const workflowRouteMiddleware = {};
   const workflowWebSocketMiddleware = {};
+  const channelApps = {};
   for (const [name, mod] of Object.entries(agentModules)) {
     if (!mod.default || mod.default.__flueCreatedAgent !== true || typeof mod.default.initialize !== 'function') throw new Error('[flue] Agent "' + name + '" must default-export createAgent(...).');
     if (mod.route !== undefined && typeof mod.route !== 'function') throw new Error('[flue] Agent "' + name + '" route export must be a callable Hono middleware value.');
@@ -131,7 +143,17 @@ function normalizeBuiltModules(agentModules, workflowModules) {
     if (typeof mod.websocket === 'function') workflowWebSocketMiddleware[name] = mod.websocket;
   }
 
-  return { manifest, directHandlers, receiveHandlers, createdAgents, dispatchAgentNames, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware };
+  for (const [name, mod] of Object.entries(channelModules)) {
+    if (!mod.default || mod.default.__flueDefinedChannel !== true || typeof mod.default.on !== 'function' || typeof mod.default.emit !== 'function') {
+      throw new Error('[flue] Channel "' + name + '" must default-export defineChannel({ app }).');
+    }
+    if (mod.default.app !== undefined) {
+      if (!mod.default.app || typeof mod.default.app.fetch !== 'function') throw new Error('[flue] Channel "' + name + '" app must be a Hono application with a fetch method.');
+      channelApps[name] = mod.default.app;
+    }
+  }
+
+  return { manifest, directHandlers, receiveHandlers, createdAgents, dispatchAgentNames, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps };
 }
 
 function normalizeChannelList(value, label) {
@@ -159,8 +181,11 @@ ${agentModuleEntries}
 const workflowModules = {
 ${workflowModuleEntries}
 };
-const normalized = normalizeBuiltModules(agentModules, workflowModules);
-const { manifest, directHandlers, receiveHandlers, createdAgents, dispatchAgentNames, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware } = normalized;
+const channelModules = {
+${channelModuleEntries}
+};
+const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);
+const { manifest, directHandlers, receiveHandlers, createdAgents, dispatchAgentNames, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps } = normalized;
 
 // When the CLI starts this server via \`flue run\`, it sets FLUE_MODE=local.
 const isLocalMode = process.env.FLUE_MODE === 'local';
@@ -239,6 +264,7 @@ configureFlueRuntime({
   agentWebSocketMiddleware,
   workflowRouteMiddleware,
   workflowWebSocketMiddleware,
+  channelApps,
   nodeWebSocketAgentRoute: websocketTransport.agentRoute,
   nodeWebSocketWorkflowRoute: websocketTransport.workflowRoute,
   createContext: createContextForRequest,
@@ -319,4 +345,9 @@ function agentVarName(name: string, index: number): string {
 function workflowVarName(name: string, index: number): string {
 	const readableName = name.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'workflow';
 	return `workflow_${readableName}_${index}`;
+}
+
+function channelVarName(name: string, index: number): string {
+	const readableName = name.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'channel';
+	return `channel_${readableName}_${index}`;
 }

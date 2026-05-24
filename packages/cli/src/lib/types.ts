@@ -17,9 +17,15 @@ export interface WorkflowInfo {
 	filePath: string;
 }
 
+export interface ChannelInfo {
+	name: string;
+	filePath: string;
+}
+
 export interface BuildContext {
 	agents: AgentInfo[];
 	workflows: WorkflowInfo[];
+	channels: ChannelInfo[];
 	/**
 		 * The project root — typically the user's cwd. Source files
 		 * (`agents/`) live here directly, or under `<root>/.flue/`

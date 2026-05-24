@@ -10,6 +10,7 @@ import type {
 	BuildContext,
 	BuildOptions,
 	BuildPlugin,
+	ChannelInfo,
 	WorkflowInfo,
 } from './types.ts';
 
@@ -54,6 +55,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 
 	const agents = discoverAgents(sourceRoot);
 	const workflows = discoverWorkflows(sourceRoot);
+	const channels = discoverChannels(sourceRoot);
 	const appEntry = discoverAppEntry(sourceRoot);
 
 	if (agents.length === 0 && workflows.length === 0) {
@@ -78,6 +80,11 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 			`[flue] Found ${workflows.length} workflow(s): ${workflows.map((workflow) => workflow.name).join(', ')}`,
 		);
 	}
+	if (channels.length > 0) {
+		console.log(
+			`[flue] Found ${channels.length} channel(s): ${channels.map((channel) => channel.name).join(', ')}`,
+		);
+	}
 	console.log(
 		`[flue] AGENTS.md and .agents/skills/ will be discovered at runtime from session cwd`,
 	);
@@ -95,6 +102,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 	const ctx: BuildContext = {
 		agents,
 		workflows,
+		channels,
 		root,
 		output,
 		appEntry,
@@ -302,6 +310,36 @@ function discoverWorkflows(sourceRoot: string): WorkflowInfo[] {
 	return files.map((file) => ({
 		name: file.replace(/\.(ts|js|mts|mjs)$/, ''),
 		filePath: path.join(workflowsDir, file),
+	}));
+}
+
+function discoverChannels(sourceRoot: string): ChannelInfo[] {
+	const channelsDir = path.join(sourceRoot, 'channels');
+	if (!fs.existsSync(channelsDir)) return [];
+
+	const files = fs
+		.readdirSync(channelsDir)
+		.filter((file) => !/\.d\.(ts|mts)$/.test(file) && /\.(ts|js|mts|mjs)$/.test(file));
+	const channelFiles = new Map<string, string>();
+	for (const file of files) {
+		const name = file.replace(/\.(ts|js|mts|mjs)$/, '');
+		if (!name || name.includes(':')) {
+			throw new Error(
+				`[flue] Channel basename "${name}" is invalid. Channel names must be non-empty and must not contain ":".`,
+			);
+		}
+		const previous = channelFiles.get(name);
+		if (previous) {
+			throw new Error(
+				`[flue] Duplicate channel basename "${name}" found: ${previous}, ${file}. Keep only one channel source file per basename.`,
+			);
+		}
+		channelFiles.set(name, file);
+	}
+
+	return files.map((file) => ({
+		name: file.replace(/\.(ts|js|mts|mjs)$/, ''),
+		filePath: path.join(channelsDir, file),
 	}));
 }
 
