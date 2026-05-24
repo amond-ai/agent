@@ -78,12 +78,21 @@ function normalizeBuiltModules(agentModules, workflowModules) {
   const directHandlers = {};
   const receiveHandlers = {};
   const createdAgents = {};
+  const dispatchAgentNames = new Map();
   const workflowHandlers = {};
   const websocketAgentHandlers = {};
   const websocketWorkflowHandlers = {};
+  const agentRouteMiddleware = {};
+  const agentWebSocketMiddleware = {};
+  const workflowRouteMiddleware = {};
+  const workflowWebSocketMiddleware = {};
   for (const [name, mod] of Object.entries(agentModules)) {
     if (!mod.default || mod.default.__flueCreatedAgent !== true || typeof mod.default.initialize !== 'function') throw new Error('[flue] Agent "' + name + '" must default-export createAgent(...).');
+    if (mod.route !== undefined && typeof mod.route !== 'function') throw new Error('[flue] Agent "' + name + '" route export must be a callable Hono middleware value.');
+    if (mod.websocket !== undefined && typeof mod.websocket !== 'function') throw new Error('[flue] Agent "' + name + '" websocket export must be a callable Hono middleware value.');
     const channels = normalizeChannelList(mod.channels, 'agent "' + name + '"');
+    if (typeof mod.route === 'function') channels.http = true;
+    if (typeof mod.websocket === 'function') channels.websocket = true;
     const hasExternalChannel = Object.keys(channels).some((channel) => channel !== 'http' && channel !== 'websocket');
     if (hasExternalChannel && typeof mod.receive !== 'function') {
       throw new Error('[flue] External-channel agent "' + name + '" must export a callable receive value.');
@@ -93,14 +102,23 @@ function normalizeBuiltModules(agentModules, workflowModules) {
     }
     manifest.agents.push({ name, channels, receive: typeof mod.receive === 'function', created: true });
     createdAgents[name] = mod.default;
+    const previousDispatchName = dispatchAgentNames.get(mod.default);
+    if (previousDispatchName !== undefined) throw new Error('[flue] Agents "' + previousDispatchName + '" and "' + name + '" default-export the same created agent value. Use distinct createAgent(...) values for dispatchable agent modules.');
+    dispatchAgentNames.set(mod.default, name);
     if (channels.http) directHandlers[name] = createDirectAgentHandler(mod.default);
     if (channels.websocket) websocketAgentHandlers[name] = createDirectAgentHandler(mod.default);
+    if (typeof mod.route === 'function') agentRouteMiddleware[name] = mod.route;
+    if (typeof mod.websocket === 'function') agentWebSocketMiddleware[name] = mod.websocket;
     if (typeof mod.receive === 'function') receiveHandlers[name] = mod.receive;
   }
 
   for (const [name, mod] of Object.entries(workflowModules)) {
     if (typeof mod.run !== 'function') throw new Error('[flue] Workflow "' + name + '" must export a callable run value.');
+    if (mod.route !== undefined && typeof mod.route !== 'function') throw new Error('[flue] Workflow "' + name + '" route export must be a callable Hono middleware value.');
+    if (mod.websocket !== undefined && typeof mod.websocket !== 'function') throw new Error('[flue] Workflow "' + name + '" websocket export must be a callable Hono middleware value.');
     const channels = normalizeChannelList(mod.channels, 'workflow "' + name + '"');
+    if (typeof mod.route === 'function') channels.http = true;
+    if (typeof mod.websocket === 'function') channels.websocket = true;
     for (const channel of Object.keys(channels)) {
       if (channel !== 'http' && channel !== 'websocket') {
         throw new Error('[flue] Workflow "' + name + '" cannot subscribe to external channel "' + channel + '".');
@@ -109,9 +127,11 @@ function normalizeBuiltModules(agentModules, workflowModules) {
     manifest.workflows.push({ name, channels });
     if (channels.http) workflowHandlers[name] = mod.run;
     if (channels.websocket) websocketWorkflowHandlers[name] = mod.run;
+    if (typeof mod.route === 'function') workflowRouteMiddleware[name] = mod.route;
+    if (typeof mod.websocket === 'function') workflowWebSocketMiddleware[name] = mod.websocket;
   }
 
-  return { manifest, directHandlers, receiveHandlers, createdAgents, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers };
+  return { manifest, directHandlers, receiveHandlers, createdAgents, dispatchAgentNames, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware };
 }
 
 function normalizeChannelList(value, label) {
@@ -140,7 +160,7 @@ const workflowModules = {
 ${workflowModuleEntries}
 };
 const normalized = normalizeBuiltModules(agentModules, workflowModules);
-const { manifest, directHandlers, receiveHandlers, createdAgents, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers } = normalized;
+const { manifest, directHandlers, receiveHandlers, createdAgents, dispatchAgentNames, workflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware } = normalized;
 
 // When the CLI starts this server via \`flue run\`, it sets FLUE_MODE=local.
 const isLocalMode = process.env.FLUE_MODE === 'local';
@@ -213,7 +233,12 @@ configureFlueRuntime({
   handlers: directHandlers,
   receiveHandlers,
   dispatchQueue,
+  resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),
   workflowHandlers,
+  agentRouteMiddleware,
+  agentWebSocketMiddleware,
+  workflowRouteMiddleware,
+  workflowWebSocketMiddleware,
   nodeWebSocketAgentRoute: websocketTransport.agentRoute,
   nodeWebSocketWorkflowRoute: websocketTransport.workflowRoute,
   createContext: createContextForRequest,
