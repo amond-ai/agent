@@ -20,5 +20,5 @@ export default defineConfig({
 	// keeps the import in the emitted bundle so workerd can resolve it
 	// at runtime (rather than having rolldown fail to find a package
 	// on disk at build time).
-	external: ['cloudflare:workers'],
+	deps: { neverBundle: ['cloudflare:workers'] },
 });
