@@ -50,7 +50,7 @@ export class NodePlugin implements BuildPlugin {
 		// Hono that mounts `flue()` and renders canonical error envelopes.
 		const userAppImport = appEntry ? `import userApp from '${appEntry.replace(/\\/g, '/')}';` : '';
 
-		// All HTTP routing, SSE/webhook/sync mode handling, agent dispatch,
+		// All HTTP routing, workflow admission/SSE/sync handling, agent dispatch,
 		// and error rendering live in @flue/runtime's runtime modules. The
 		// generated entry's job is now narrow: import handlers, build the
 		// runtime config, instantiate sandboxes, start the listener.

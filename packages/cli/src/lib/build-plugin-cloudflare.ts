@@ -201,7 +201,7 @@ import {
   handleAgentRequest,
   handleWorkflowRequest,
   handleRunRouteRequest,
-  persistAgentDispatchAdmission,
+  validateAgentDispatchAdmission,
   createDispatchAgentHandler,
   reserveDispatchAgentSession,
   failRecoveredRun,
@@ -622,10 +622,7 @@ async function waitForEarlierManagedDispatch(doInstance, input, fiberId) {
 async function processManagedAgentDispatch(input, doInstance, agentName, fiberId) {
   const agent = createdAgents[agentName];
   if (!agent) throw new Error('[flue] Dispatch target unavailable during durable processing.');
-  await persistAgentDispatchAdmission({
-    input,
-    createContext: (id_, runId, payload, req, initialEventIndex, dispatchId) => createContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex, dispatchId),
-  });
+  await validateAgentDispatchAdmission({ input });
   const target = { agentName, instanceId: doInstance.name };
   await waitForEarlierManagedDispatch(doInstance, input, fiberId);
   const releaseSessionLock = await reserveDispatchAgentSession(target, input);
@@ -678,7 +675,7 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
       runRegistry: createRunRegistryForRequest(doInstance.env),
       restartedFromRunId: new URL(request.url).hostname === 'flue.invalid' ? request.headers.get('x-flue-restarted-from-run-id') || undefined : undefined,
       createContext: (id_, runId, payload, req, initialEventIndex, dispatchId) => createContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex, dispatchId),
-      startWebhook: (runId, run) => {
+      startWorkflowAdmission: (runId, run) => {
         assertAgentsDurabilityApi(doInstance, 'runFiber');
         return doInstance.runFiber('flue:workflow:' + runId, () => runWithInstanceContext(doInstance, identity, run));
       },
