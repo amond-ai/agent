@@ -257,24 +257,26 @@ In workflows, `init(createdAgent)` creates a harness: a configured handle for mo
 
 By default, `harness.session()` opens the default session inside the default harness for that agent instance. Reuse the same URL `<id>` to continue the same agent instance. Use a new URL `<id>` to start fresh.
 
+Runs belong to workflows only. Direct HTTP and WebSocket prompts are attached interactions with an agent session. Asynchronous agent delivery uses `dispatch(...)`, whose `dispatchId` identifies delivery rather than a run. Agent interactions do not appear in `/runs` and are not inspected with `flue logs`.
+
 ```bash
 # Start a conversation (port 3583 is `flue dev`'s default)
 curl http://localhost:3583/agents/hello/session-abc \
   -H "Content-Type: application/json" \
-  -d '{"name": "Alice"}'
+  -d '{"message": "Hello, Alice"}'
 
 # Continue that conversation
 curl http://localhost:3583/agents/hello/session-abc \
   -H "Content-Type: application/json" \
-  -d '{"name": "Alice"}'
+  -d '{"message": "What did I just say?"}'
 
 # Start a separate conversation
 curl http://localhost:3583/agents/hello/session-xyz \
   -H "Content-Type: application/json" \
-  -d '{"name": "Alice"}'
+  -d '{"message": "Hello from another conversation"}'
 ```
 
-Agent instances own sandbox state such as files written during a run. Harnesses group related session state within an instance. Sessions persist message history and conversation metadata inside a harness. On Cloudflare, session data is backed by Durable Objects and survives across requests. On Node.js, sessions are stored in memory by default unless you provide a custom store.
+Agent instances own sandbox state such as files written across prompt and dispatched-input interactions. Harnesses group related session state within an instance. Sessions persist message history and conversation metadata inside a harness. On Cloudflare, session data is backed by Durable Objects and survives across requests. On Node.js, sessions are stored in memory by default unless you provide a custom store.
 
 In production, generate a stable URL `<id>` for the agent instance you want to preserve. Use `harness.session(threadName)` when you need multiple conversations inside the same harness.
 
