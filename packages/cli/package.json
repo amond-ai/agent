@@ -33,9 +33,9 @@
 		"valibot": "^1.0.0"
 	},
 	"devDependencies": {
-		"tsdown": "^0.20.3",
+		"tsdown": "^0.22.0",
 		"tsx": "^4.19.2",
-		"typescript": "^5.9.2",
+		"typescript": "^6.0.3",
 		"wrangler": "^4.83.0"
 	},
 	"peerDependencies": {
