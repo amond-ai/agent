@@ -17,6 +17,12 @@ export interface WebSocketLike {
 
 export type WebSocketFactory = (url: string) => WebSocketLike;
 
+export type WebSocketTarget =
+	| { target: 'agent'; name: string; instanceId: string }
+	| { target: 'workflow'; name: string };
+
+export type WebSocketUrlTransform = (url: URL, target: WebSocketTarget) => URL | string;
+
 export interface AgentSocketInvokeResult {
 	result: unknown;
 }

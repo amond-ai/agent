@@ -37,10 +37,10 @@ class FakeSocket implements WebSocketLike {
 	}
 }
 
-function socketClient() {
+function socketClient(options: Parameters<typeof createFlueClient>[0] = { baseUrl: 'https://flue.test/api/' }) {
 	const sockets: Array<{ url: string; socket: FakeSocket }> = [];
 	const client = createFlueClient({
-		baseUrl: 'https://flue.test/api/',
+		...options,
 		websocket: (url) => {
 			const socket = new FakeSocket();
 			sockets.push({ url, socket });
@@ -51,6 +51,33 @@ function socketClient() {
 }
 
 describe('WebSocket clients', () => {
+	it('builds custom-mounted socket URLs and transforms authenticated handshakes for both targets', () => {
+		const targets: unknown[] = [];
+		const { client, sockets } = socketClient({
+			baseUrl: 'https://flue.test/http-prefix/',
+			token: 'http-only-token',
+			headers: { authorization: 'Bearer http-only-header' },
+			websocketBasePath: 'api/',
+			websocketUrl: (url, target) => {
+				targets.push(target);
+				url.searchParams.set('token', 'socket-token');
+				return url;
+			},
+		});
+
+		client.agents.connect('assistant bot', 'customer/123');
+		client.workflows.connect('triage');
+
+		expect(sockets.map(({ url }) => url)).toEqual([
+			'wss://flue.test/api/agents/assistant%20bot/customer%2F123?token=socket-token',
+			'wss://flue.test/api/workflows/triage?token=socket-token',
+		]);
+		expect(targets).toEqual([
+			{ target: 'agent', name: 'assistant bot', instanceId: 'customer/123' },
+			{ target: 'workflow', name: 'triage' },
+		]);
+	});
+
 	it('connects to an agent with a secure WebSocket URL and streams correlated events', async () => {
 		const { client, sockets } = socketClient();
 		const agent = client.agents.connect('assistant bot', 'customer/123');

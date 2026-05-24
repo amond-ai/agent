@@ -7,6 +7,8 @@ import {
 	defaultWebSocketFactory,
 	type AgentSocket,
 	type WebSocketFactory,
+	type WebSocketTarget,
+	type WebSocketUrlTransform,
 	webSocketUrl,
 	type WorkflowSocket,
 } from './public/websocket.ts';
@@ -18,6 +20,8 @@ export interface CreateFlueClientOptions extends HttpClientOptions {
 	/** Mount path for `admin()`. Defaults to `/admin`. */
 	adminBasePath?: string;
 	websocket?: WebSocketFactory;
+	websocketBasePath?: string;
+	websocketUrl?: WebSocketUrlTransform;
 }
 
 export interface FlueClient {
@@ -56,6 +60,8 @@ interface ListRunsOptions extends ListOptions {
 export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 	const http = new HttpClient(options);
 	const websocket = options.websocket ?? defaultWebSocketFactory;
+	const websocketBasePath = normalizeBasePath(options.websocketBasePath ?? '');
+	const websocketEndpoint = createWebSocketEndpoint(http, websocketBasePath, options.websocketUrl);
 	const adminBasePath = normalizeBasePath(options.adminBasePath ?? '/admin');
 	return {
 		runs: {
@@ -73,14 +79,14 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 			connect: (name, id) =>
 				connectAgentSocket(
 					websocket,
-					webSocketUrl(http.url(`/agents/${encodeURIComponent(name)}/${encodeURIComponent(id)}`)),
+					websocketEndpoint(`/agents/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, { target: 'agent', name, instanceId: id }),
 					name,
 					id,
 				),
 		},
 		workflows: {
 			connect: (name) =>
-				connectWorkflowSocket(websocket, webSocketUrl(http.url(`/workflows/${encodeURIComponent(name)}`)), name),
+				connectWorkflowSocket(websocket, websocketEndpoint(`/workflows/${encodeURIComponent(name)}`, { target: 'workflow', name }), name),
 		},
 		admin: {
 			agents: {
@@ -98,6 +104,13 @@ function normalizeBasePath(path: string): string {
 	const trimmed = path.trim();
 	if (!trimmed || trimmed === '/') return '';
 	return `/${trimmed.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function createWebSocketEndpoint(http: HttpClient, basePath: string, transform: WebSocketUrlTransform | undefined) {
+	return (path: string, target: WebSocketTarget): string => {
+		const url = new URL(webSocketUrl(http.url(`${basePath}${path}`)));
+		return String(transform?.(url, target) ?? url);
+	};
 }
 
 function listQuery(opts: ListOptions): Record<string, string | number | undefined> {

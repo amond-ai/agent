@@ -10,6 +10,8 @@ export type {
 	SocketInvokeResult,
 	WebSocketFactory,
 	WebSocketLike,
+	WebSocketTarget,
+	WebSocketUrlTransform,
 	WorkflowSocket,
 	WorkflowSocketEventContext,
 	WorkflowSocketEventListener,
