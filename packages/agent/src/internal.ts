@@ -39,18 +39,18 @@ export { InMemoryDispatchQueue } from './runtime/dispatch-queue.ts';
 export type {
 	AgentHandler,
 	AgentSessionTarget,
-	AttachedInvocationResult,
+	WorkflowAttachedInvocationResult,
 	DirectAttachedOptions,
 	CreatedAgentHandler,
 	CreateContextFn,
 	HandleAgentOptions,
 	HandleWorkflowOptions,
 	FailRecoveredRunOptions,
-	InvokeAttachedOptions,
+	InvokeWorkflowAttachedOptions,
 	RecoveredRunResult,
 	RecoverRunOptions,
 	RunHandlerFn,
-	StartWebhookFn,
+	StartWorkflowAdmissionFn,
 	WorkflowHandler,
 } from './runtime/handle-agent.ts';
 // Runtime modules consumed by the generated server entries.
@@ -72,14 +72,14 @@ export type {
 //
 // The user-facing `flue()` itself is re-exported from `@flue/runtime/app`, not here.
 export {
-	persistAgentDispatchAdmission,
+	validateAgentDispatchAdmission,
 	createAgentDispatchProcessor,
 	createDispatchAgentHandler,
 	createDirectAgentHandler,
 	failRecoveredRun,
 	handleAgentRequest,
 	handleWorkflowRequest,
-	invokeAttached,
+	invokeWorkflowAttached,
 	invokeDirectAttached,
 	recoverWorkflowRun,
 	reserveDispatchAgentSession,

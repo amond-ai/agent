@@ -11,7 +11,7 @@ import type {
 import type { FlueManifest, FlueRuntime } from '../runtime/flue-app.ts';
 import { registeredAgentsForChannel, registeredWorkflowsForChannel } from '../runtime/flue-app.ts';
 import type { AgentHandler, CreateContextFn, RunHandlerFn, WorkflowHandler } from '../runtime/handle-agent.ts';
-import { invokeAttached, invokeDirectAttached } from '../runtime/handle-agent.ts';
+import { invokeDirectAttached, invokeWorkflowAttached } from '../runtime/handle-agent.ts';
 import { generateWorkflowRunId } from '../runtime/ids.ts';
 import type { RunRegistry } from '../runtime/run-registry.ts';
 import {
@@ -186,7 +186,7 @@ async function invokeWorkflow(
 	const runId = generateWorkflowRunId(target.name);
 	send(socket, { version: 1, type: 'started', requestId: message.requestId, runId });
 	try {
-		const invocation = await invokeAttached({
+		const invocation = await invokeWorkflowAttached({
 			owner: { kind: 'workflow', workflowName: target.name, instanceId: runId },
 			id: runId,
 			runId,

@@ -8,7 +8,7 @@ import {
 	InMemoryRunStore,
 	failRecoveredRun,
 	InMemorySessionStore,
-	invokeAttached,
+	invokeWorkflowAttached,
 	invokeDirectAttached,
 	registeredAgentsForChannel,
 	registeredWorkflowsForChannel,
@@ -378,7 +378,7 @@ describe('WebSocket transport foundation', () => {
 			headers: { upgrade: 'websocket' },
 		});
 
-		const invocation = await invokeAttached({
+		const invocation = await invokeWorkflowAttached({
 			owner: { kind: 'workflow', workflowName: 'daily-report', instanceId: runId },
 			id: runId,
 			runId,

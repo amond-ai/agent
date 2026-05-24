@@ -41,12 +41,11 @@ export function createAgentDispatchProcessor(options: {
 	};
 }
 
-export interface PersistAgentDispatchAdmissionOptions {
+export interface ValidateAgentDispatchAdmissionOptions {
 	input: DispatchInput;
-	createContext: CreateContextFn;
 }
 
-export async function persistAgentDispatchAdmission(options: PersistAgentDispatchAdmissionOptions): Promise<DispatchReceipt> {
+export async function validateAgentDispatchAdmission(options: ValidateAgentDispatchAdmissionOptions): Promise<DispatchReceipt> {
 	const { input } = options;
 	if (!isDispatchInput(input)) throw new Error('[flue] Internal dispatch admission received an invalid payload.');
 	return { dispatchId: input.dispatchId, acceptedAt: input.acceptedAt };
@@ -138,16 +137,16 @@ export type CreateContextFn = (
 ) => FlueContextInternal;
 
 /**
- * Webhook execution wrapper. Receives the prepared run callback and returns
- * a promise that resolves with the handler's return value. Implementations:
+ * Background workflow admission wrapper. Receives the prepared workflow-run
+ * callback and returns a promise that resolves with its result. Implementations:
  *
  *   - Node: just `run()` — no fiber, no DO.
- *   - Cloudflare: `doInstance.runFiber('flue:webhook:<runId>', run)`.
+ *   - Cloudflare: `doInstance.runFiber('flue:workflow:<runId>', run)`.
  *
- * The caller is responsible for any logging on completion/error; this routine
- * just kicks it off and returns the 202.
+ * The caller is responsible for any logging on completion/error; this wrapper
+ * starts accepted workflow execution after returning the 202 response.
  */
-export type StartWebhookFn = (runId: string, run: () => Promise<unknown>) => Promise<unknown>;
+export type StartWorkflowAdmissionFn = (runId: string, run: () => Promise<unknown>) => Promise<unknown>;
 
 /**
  * Foreground handler execution wrapper. Wraps the call to `handler(ctx)` so
@@ -173,7 +172,7 @@ export interface HandleWorkflowOptions {
 	workflowName: string;
 	handler: WorkflowHandler;
 	createContext: CreateContextFn;
-	startWebhook?: StartWebhookFn;
+	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 	runHandler?: RunHandlerFn;
 	runStore?: RunStore;
 	runSubscribers?: RunSubscriberRegistry;
@@ -222,7 +221,7 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 
 export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promise<Response> {
 	const { request, workflowName, handler, createContext, runStore, runSubscribers, runRegistry, restartedFromRunId } = opts;
-	const startWebhook = opts.startWebhook ?? defaultStartWebhook;
+	const startWorkflowAdmission = opts.startWorkflowAdmission ?? defaultStartWorkflowAdmission;
 	const runHandler = opts.runHandler ?? defaultRunHandler;
 	const runId = opts.runId ?? generateWorkflowRunId(workflowName);
 	// Workflows have one instance per run, so the workflow instance id and
@@ -273,7 +272,7 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 			});
 		}
 
-		return runWebhookMode({
+		return runWorkflowAdmissionMode({
 			label: workflowName,
 			owner,
 			id: runId,
@@ -282,7 +281,7 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 			payload,
 			request,
 			createContext,
-			startWebhook,
+			startWorkflowAdmission,
 			runStore,
 			runSubscribers,
 			runRegistry,
@@ -297,7 +296,7 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 
 // ─── Mode implementations ───────────────────────────────────────────────────
 
-interface ModeOptions {
+interface WorkflowModeOptions {
 	label: string;
 	owner: RunOwner;
 	id: string;
@@ -313,7 +312,7 @@ interface ModeOptions {
 	restartedFromRunId?: string;
 }
 
-export interface InvokeAttachedOptions {
+export interface InvokeWorkflowAttachedOptions {
 	owner: RunOwner;
 	id: string;
 	runId: string;
@@ -342,7 +341,7 @@ export interface DirectAttachedOptions {
 	emitIdleOnComplete?: boolean;
 }
 
-export interface AttachedInvocationResult {
+export interface WorkflowAttachedInvocationResult {
 	runId: string;
 	result: unknown;
 }
@@ -385,7 +384,7 @@ async function waitForAgentSessionLock(target: AgentSessionTarget, payload: unkn
 	}
 }
 
-interface WebhookOptions {
+interface WorkflowAdmissionOptions {
 	label: string;
 	owner: RunOwner;
 	id: string;
@@ -394,14 +393,14 @@ interface WebhookOptions {
 	payload: unknown;
 	request: Request;
 	createContext: CreateContextFn;
-	startWebhook: StartWebhookFn;
+	startWorkflowAdmission: StartWorkflowAdmissionFn;
 	runStore?: RunStore;
 	runSubscribers?: RunSubscriberRegistry;
 	runRegistry?: RunRegistry;
 	restartedFromRunId?: string;
 }
 
-async function runWebhookMode(opts: WebhookOptions): Promise<Response> {
+async function runWorkflowAdmissionMode(opts: WorkflowAdmissionOptions): Promise<Response> {
 	const {
 		label,
 		owner,
@@ -411,16 +410,16 @@ async function runWebhookMode(opts: WebhookOptions): Promise<Response> {
 		payload,
 		request,
 		createContext,
-		startWebhook,
+		startWorkflowAdmission,
 		runStore,
 		runSubscribers,
 		runRegistry,
 		restartedFromRunId,
 	} = opts;
 
-	// Webhook mode relies on `startWebhook` for target-specific execution
-	// context (`runFiber` on Cloudflare), so it does not also use `runHandler`.
-	const lifecycle = await createRunLifecycle({
+	// Accepted workflow execution relies on `startWorkflowAdmission` for target-specific
+	// execution context (`runFiber` on Cloudflare), so it does not also use `runHandler`.
+	const lifecycle = await createWorkflowRunLifecycle({
 		owner,
 		id,
 		runId,
@@ -436,21 +435,21 @@ async function runWebhookMode(opts: WebhookOptions): Promise<Response> {
 	let didRun = false;
 	const run = async (): Promise<unknown> => {
 		didRun = true;
-		return withRunLifecycle(lifecycle, () => handler(ctx));
+		return withWorkflowRunLifecycle(lifecycle, () => handler(ctx));
 	};
 
 	try {
-		const scheduled = startWebhook(runId, run);
+		const scheduled = startWorkflowAdmission(runId, run);
 		scheduled.then(
 			(result) => {
 				console.log(
-					'[flue] Webhook handler complete:',
+					'[flue] Workflow completed:',
 					label,
 					result !== undefined ? JSON.stringify(result) : '(no return)',
 				);
 			},
 			async (err) => {
-				console.error('[flue] Webhook handler error:', label, err);
+				console.error('[flue] Workflow error:', label, err);
 				if (!didRun) await emitRunEnd(lifecycle, { isError: true, error: err });
 			},
 		);
@@ -481,7 +480,7 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 	const initialEventIndex = nextEventIndex(events);
 	const startedAt = run?.startedAt ?? new Date().toISOString();
 	const startedAtMs = Date.parse(startedAt);
-	const lifecycle: RunLifecycle = {
+	const lifecycle: WorkflowRunLifecycle = {
 		...opts,
 		ctx: opts.createContext(opts.id, opts.runId, opts.payload, opts.request, initialEventIndex),
 		startedAt,
@@ -506,13 +505,13 @@ export async function recoverWorkflowRun(opts: RecoverRunOptions): Promise<Recov
 		const initialEventIndex = nextEventIndex(events);
 		const startedAt = run?.startedAt ?? new Date().toISOString();
 		const startedAtMs = Date.parse(startedAt);
-		const lifecycle: RunLifecycle = {
+		const lifecycle: WorkflowRunLifecycle = {
 			...opts,
 			ctx: opts.createContext(opts.id, opts.runId, opts.payload, opts.request, initialEventIndex),
 			startedAt,
 			startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
 		};
-		const result = await invokeRunLifecycle(lifecycle, () => opts.handler(lifecycle.ctx), !events.some((event) => event.type === 'run_start'));
+		const result = await invokeWorkflowRunLifecycle(lifecycle, () => opts.handler(lifecycle.ctx), !events.some((event) => event.type === 'run_start'));
 		return { result, isError: false };
 	} catch (error) {
 		try {
@@ -683,7 +682,7 @@ export async function invokeDirectAttached(opts: DirectAttachedOptions): Promise
 	}
 }
 
-function runSseMode(opts: ModeOptions): Response {
+function runSseMode(opts: WorkflowModeOptions): Response {
 	const { runId } = opts;
 
 	const { readable, writable } = new TransformStream();
@@ -721,7 +720,7 @@ function runSseMode(opts: ModeOptions): Response {
 
 	(async () => {
 		try {
-			await invokeAttached({
+			await invokeWorkflowAttached({
 				...opts,
 				onEvent: (event) => writeSSE(event, event.type),
 				emitIdleOnComplete: true,
@@ -748,20 +747,20 @@ function runSseMode(opts: ModeOptions): Response {
 	});
 }
 
-async function runSyncMode(opts: ModeOptions): Promise<Response> {
-	const invocation = await invokeAttached(opts);
+async function runSyncMode(opts: WorkflowModeOptions): Promise<Response> {
+	const invocation = await invokeWorkflowAttached(opts);
 	return new Response(
 		JSON.stringify({ result: invocation.result === undefined ? null : invocation.result, _meta: { runId: invocation.runId } }),
 		{ headers: { 'content-type': 'application/json', 'X-Flue-Run-Id': invocation.runId } },
 	);
 }
 
-export async function invokeAttached(opts: InvokeAttachedOptions): Promise<AttachedInvocationResult> {
-	return invokeAttachedUnlocked(opts);
+export async function invokeWorkflowAttached(opts: InvokeWorkflowAttachedOptions): Promise<WorkflowAttachedInvocationResult> {
+	return invokeWorkflowAttachedUnlocked(opts);
 }
 
-async function invokeAttachedUnlocked(opts: InvokeAttachedOptions): Promise<AttachedInvocationResult> {
-	const lifecycle = await createRunLifecycle({
+async function invokeWorkflowAttachedUnlocked(opts: InvokeWorkflowAttachedOptions): Promise<WorkflowAttachedInvocationResult> {
+	const lifecycle = await createWorkflowRunLifecycle({
 		owner: opts.owner,
 		id: opts.id,
 		runId: opts.runId,
@@ -783,7 +782,7 @@ async function invokeAttachedUnlocked(opts: InvokeAttachedOptions): Promise<Atta
 		});
 	}
 	try {
-		const result = await withRunLifecycle(lifecycle, async () => {
+		const result = await withWorkflowRunLifecycle(lifecycle, async () => {
 			try {
 				return await runHandler(ctx, opts.handler);
 			} finally {
@@ -810,9 +809,9 @@ function acquireDirectAgentSessionLock(agentName: string, instanceId: string, in
 	};
 }
 
-// ─── Run lifecycle ──────────────────────────────────────────────────────────
+// ─── Workflow run lifecycle ─────────────────────────────────────────────────
 
-interface RunLifecycleOptions {
+interface WorkflowRunLifecycleOptions {
 	owner: RunOwner;
 	id: string;
 	runId: string;
@@ -824,26 +823,22 @@ interface RunLifecycleOptions {
 	runRegistry?: RunRegistry;
 	restartedFromRunId?: string;
 	restartedAsRunId?: string;
-	requireDurableAdmission?: boolean;
 }
 
-interface RunLifecycle extends RunLifecycleOptions {
+interface WorkflowRunLifecycle extends WorkflowRunLifecycleOptions {
 	ctx: FlueContextInternal;
 	startedAt: string;
 	startedAtMs: number;
 }
 
-async function createRunLifecycle(options: RunLifecycleOptions): Promise<RunLifecycle> {
+async function createWorkflowRunLifecycle(options: WorkflowRunLifecycleOptions): Promise<WorkflowRunLifecycle> {
 	const startedAtMs = Date.now();
 	const startedAt = new Date(startedAtMs).toISOString();
 	const ctx = options.createContext(options.id, options.runId, options.payload, options.request);
 	const runStore = options.runStore;
 	const owner = options.owner;
-	if (options.requireDurableAdmission && !runStore) {
-		throw new Error('[flue] Durable dispatch admission requires a target Durable Object run store.');
-	}
 	const didCreateRun = runStore
-		? await persistRunAdmission('createRun', options.requireDurableAdmission === true, () =>
+		? await persistRunAdmission('createRun', false, () =>
 			runStore.createRun({
 				runId: options.runId,
 				owner,
@@ -864,17 +859,17 @@ async function createRunLifecycle(options: RunLifecycleOptions): Promise<RunLife
 }
 
 /**
- * Wrap all invocation modes with the same run-start/run-end envelope.
+ * Wrap all workflow invocation modes with the same run-start/run-end envelope.
  */
-async function withRunLifecycle<T>(
-	lifecycle: RunLifecycle,
+async function withWorkflowRunLifecycle<T>(
+	lifecycle: WorkflowRunLifecycle,
 	body: () => T | Promise<T>,
 ): Promise<T> {
-	return invokeRunLifecycle(lifecycle, body, true);
+	return invokeWorkflowRunLifecycle(lifecycle, body, true);
 }
 
-async function invokeRunLifecycle<T>(
-	lifecycle: RunLifecycle,
+async function invokeWorkflowRunLifecycle<T>(
+	lifecycle: WorkflowRunLifecycle,
 	body: () => T | Promise<T>,
 	emitStart: boolean,
 ): Promise<T> {
@@ -899,7 +894,7 @@ async function invokeRunLifecycle<T>(
 	return result;
 }
 
-function emitRunStart(lifecycle: RunLifecycle): void {
+function emitRunStart(lifecycle: WorkflowRunLifecycle): void {
 	lifecycle.ctx.emitEvent({
 		type: 'run_start',
 		runId: lifecycle.runId,
@@ -918,7 +913,7 @@ function emitRunStart(lifecycle: RunLifecycle): void {
  * before marking the run terminal, then publish and close subscribers.
  */
 async function emitRunEnd(
-	lifecycle: RunLifecycle,
+	lifecycle: WorkflowRunLifecycle,
 	input: { result?: unknown; isError: false } | { isError: true; error: unknown },
 ): Promise<void> {
 	const endedAtMs = Date.now();
@@ -980,7 +975,7 @@ async function emitRunEnd(
  * Persist non-terminal events before publishing them to live subscribers.
  * `run_end` is handled separately by {@link emitRunEnd}.
  */
-function subscribeRunFanout(lifecycle: RunLifecycle): () => Promise<void> {
+function subscribeRunFanout(lifecycle: WorkflowRunLifecycle): () => Promise<void> {
 	const { ctx, runStore, runSubscribers, runId } = lifecycle;
 	if (!runStore && !runSubscribers) return async () => {};
 	let chain: Promise<void> = Promise.resolve();
@@ -1056,12 +1051,12 @@ function getEventIndex(data: unknown): number | undefined {
 // ─── Defaults ───────────────────────────────────────────────────────────────
 
 /**
- * Default webhook runner: invoke `run()` directly so the handler executes
- * in the current process. Used by the Node target. The Cloudflare target
- * overrides this with a `runFiber` wrapper for crash-recoverable execution
- * across DO hibernation.
+ * Default background workflow runner: invoke `run()` directly so the workflow
+ * executes in the current process. Used by the Node target. The Cloudflare
+ * target overrides this with a `runFiber` wrapper for crash-recoverable
+ * execution across DO hibernation.
  */
-const defaultStartWebhook: StartWebhookFn = (_runId, run) => Promise.resolve().then(run);
+const defaultStartWorkflowAdmission: StartWorkflowAdmissionFn = (_runId, run) => Promise.resolve().then(run);
 
 /**
  * Default foreground handler runner: invoke directly. Used by the Node

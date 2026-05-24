@@ -13,7 +13,7 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).toContain('async enqueue(input) {');
 		expect(entry).toContain('getAgentByName(binding, input.id)');
 		expect(entry).toContain('if (isInternalDispatchRequest(request)) {');
-		expect(entry).toContain('persistAgentDispatchAdmission({');
+		expect(entry).toContain('validateAgentDispatchAdmission({');
 		expect(entry).toContain("doInstance.startFiber('flue:dispatch'");
 		expect(entry).toContain("const idempotencyKey = 'flue:dispatch:' + input.dispatchId;");
 		expect(entry).toContain('const prior = await doInstance.inspectFiberByKey(idempotencyKey);');

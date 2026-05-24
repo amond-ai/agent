@@ -24,7 +24,7 @@ import {
 	handleAgentRequest,
 	handleWorkflowRequest,
 	type RunHandlerFn,
-	type StartWebhookFn,
+	type StartWorkflowAdmissionFn,
 	type WorkflowHandler,
 } from './handle-agent.ts';
 import type { DispatchQueue } from './dispatch-queue.ts';
@@ -72,12 +72,12 @@ export interface FlueRuntime {
 	createContext?: CreateContextFn;
 
 	/** Optional Node workflow admission execution wrapper. Defaults to direct invocation. */
-	startWebhook?: StartWebhookFn;
+	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 
 	/** Optional Node foreground handler wrapper. Defaults to direct invocation. */
 	runHandler?: RunHandlerFn;
 
-	/** Node run history store. */
+	/** Node workflow-run history store. */
 	runStore?: RunStore;
 
 	/** Node in-process registry used for live run-stream tailing. */
@@ -539,7 +539,7 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 				workflowName: name,
 				handler,
 				createContext,
-				startWebhook: rt.startWebhook,
+				startWorkflowAdmission: rt.startWorkflowAdmission,
 				runHandler: rt.runHandler,
 				runStore: rt.runStore,
 				runSubscribers: rt.runSubscribers,

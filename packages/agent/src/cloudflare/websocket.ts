@@ -1,7 +1,7 @@
 import { InvalidRequestError } from '../errors.ts';
 import type { AgentWebSocketClientMessage, WebSocketServerMessage, WorkflowWebSocketClientMessage } from '../types.ts';
 import type { AgentHandler, CreateContextFn, RunHandlerFn, WorkflowHandler } from '../runtime/handle-agent.ts';
-import { invokeAttached, invokeDirectAttached } from '../runtime/handle-agent.ts';
+import { invokeDirectAttached, invokeWorkflowAttached } from '../runtime/handle-agent.ts';
 import type { RunRegistry } from '../runtime/run-registry.ts';
 import type { RunStore } from '../runtime/run-store.ts';
 import type { RunSubscriberRegistry } from '../runtime/run-subscribers.ts';
@@ -162,7 +162,7 @@ async function invokeWorkflow(
 ): Promise<void> {
 	send(connection, { version: 1, type: 'started', requestId: message.requestId, runId: options.runId });
 	try {
-		const invocation = await invokeAttached({
+		const invocation = await invokeWorkflowAttached({
 			owner: { kind: 'workflow', workflowName: options.name, instanceId: options.runId },
 			id: options.runId,
 			runId: options.runId,

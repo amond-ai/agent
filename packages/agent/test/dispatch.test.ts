@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import {
-	persistAgentDispatchAdmission,
+	validateAgentDispatchAdmission,
 	createAgentDispatchProcessor,
 	createFlueContext,
 	configureFlueRuntime,
@@ -141,7 +141,7 @@ describe('global dispatch', () => {
 			acceptedAt: '2026-05-21T00:00:00.000Z',
 		};
 
-		const receipt = await persistAgentDispatchAdmission({ input, createContext: createTestContext });
+		const receipt = await validateAgentDispatchAdmission({ input });
 		expect(receipt).toEqual({ dispatchId: 'dispatch-durable', acceptedAt: '2026-05-21T00:00:00.000Z' });
 		expect(await runStore.getRun('dispatch-durable')).toBeNull();
 	});

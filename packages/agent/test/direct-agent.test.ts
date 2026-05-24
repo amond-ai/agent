@@ -12,8 +12,7 @@ import {
 	InMemorySessionStore,
 } from '../src/internal.ts';
 import { createAgent } from '../src/agent-definition.ts';
-import { Harness } from '../src/harness.ts';
-import type { AgentConfig, FlueHarness, FlueSession, SessionData, SessionEnv, SessionStore } from '../src/types.ts';
+import type { FlueHarness, FlueSession, SessionData, SessionEnv, SessionStore } from '../src/types.ts';
 
 describe('direct attached agent delivery', () => {
 	it('routes direct HTTP through init and the default session without dispatch', async () => {
@@ -309,16 +308,6 @@ function createTestContext(id: string, runId: string | undefined, payload: unkno
 		createDefaultEnv: async () => ({}) as never,
 		defaultStore: new InMemorySessionStore(),
 	});
-}
-
-function testAgentConfig(): AgentConfig {
-	return {
-		systemPrompt: '',
-		skills: {},
-		subagents: {},
-		model: { id: 'test-model', provider: 'test', api: 'test' } as never,
-		resolveModel: () => ({ id: 'test-model', provider: 'test', api: 'test' }) as never,
-	};
 }
 
 function fakeEnv(): SessionEnv {
