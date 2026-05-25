@@ -252,6 +252,37 @@ describe('Node build plugin', () => {
 		}
 	});
 
+	it('dispatches from custom app routing through the canonical runtime export', async () => {
+		const root = createFixtureRoot('flue-global-dispatch-app-');
+		fs.mkdirSync(path.join(root, 'agents'));
+		fs.writeFileSync(
+			path.join(root, 'agents', 'assistant.ts'),
+			`import { createAgent } from '@flue/runtime';\n` +
+				`export default createAgent(() => ({ model: false }));\n`,
+		);
+		fs.writeFileSync(
+			path.join(root, 'app.ts'),
+			`import { Hono } from 'hono';\n` +
+				`import { dispatch } from '@flue/runtime';\n` +
+				`import { flue } from '@flue/runtime/app';\n` +
+				`import assistant from './agents/assistant.ts';\n` +
+				`const app = new Hono();\n` +
+				`app.post('/enqueue', async (c) => c.json(await dispatch(assistant, { id: 'thread-1', input: { text: 'hello' } })));\n` +
+				`app.route('/', flue());\n` +
+				`export default app;\n`,
+		);
+		await build({ root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const response = await fetch(`http://localhost:${port}/enqueue`, { method: 'POST' });
+			expect(response.status).toBe(200);
+			expect(await response.json()).toMatchObject({ dispatchId: expect.any(String), acceptedAt: expect.any(String) });
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
 	it('invokes a WebSocket-exported workflow without exposing HTTP POST', async () => {
 		const root = createFixtureRoot('flue-exported-websocket-workflow-');
 		fs.mkdirSync(path.join(root, 'workflows'));
