@@ -153,7 +153,6 @@ export async function dev(options: DevOptions): Promise<void> {
 	const watcher = createWatcher({
 		root,
 		output,
-		target: options.target,
 		envFiles,
 		onChange: (relPath) => {
 			if (!reloader.shouldRebuildOn(relPath)) return;
@@ -211,9 +210,9 @@ interface Rebuilder {
 	 *
 	 * `forceReload`: if any scheduled call within a debounce window passes
 	 * `true`, the resulting reload is treated as forced — the reloader is
-	 * told `buildChanged: true` even if the build wrote nothing new. This is
-	 * how env-file edits trigger a worker restart on the Cloudflare path:
-	 * the build is unchanged but the runtime needs the new env values.
+	 * told `buildChanged: true` even if the build wrote nothing new. This keeps
+	 * explicit Node env-file changes able to refresh runtime behavior even if
+	 * generated output is otherwise unchanged.
 	 */
 	schedule(forceReload?: boolean): void;
 }
@@ -279,7 +278,6 @@ interface WatcherOptions {
 	 * trigger spurious rebuilds (and an infinite loop).
 	 */
 	output: string;
-	target: 'node' | 'cloudflare';
 	/** Absolute paths of env files to watch. Empty means none. */
 	envFiles: string[];
 	onChange: (relPath: string) => void;
@@ -293,11 +291,9 @@ interface WatcherHandle {
  * Watch the root for changes. Uses `fs.watch` recursive (Node 20+).
  *
  * Watched roots:
- *   - `<root>` — agents/, AGENTS.md, .agents/skills/, plus
- *     `.flue/agents/` if the root uses the .flue/
- *     source layout.
- *   - For Cloudflare: also `<root>/wrangler.jsonc` (and `.json`),
- *     since changes there require a worker restart.
+ *   - `<root>` — source modules, AGENTS.md, workspace skills, and
+ *     root configuration files, including Wrangler configuration.
+ *     `.flue/` is included when the root uses the `.flue/` source layout.
  *
  * Ignored:
  *   - The build output directory (`output`, defaults to `<root>/dist`).
@@ -309,7 +305,7 @@ interface WatcherHandle {
  *   - Editor backup/swap suffixes
  */
 function createWatcher(options: WatcherOptions): WatcherHandle {
-	const { root, output, target, envFiles, onChange } = options;
+	const { root, output, envFiles, onChange } = options;
 	const watchers: fs.FSWatcher[] = [];
 
 	// Pre-compute the root-relative path of output for fast prefix
@@ -365,28 +361,9 @@ function createWatcher(options: WatcherOptions): WatcherHandle {
 		);
 	}
 
-	if (target === 'cloudflare') {
-		// Watch all three formats wrangler accepts. We only set up watchers
-		// for files that exist today — if a user adds a wrangler.* file later
-		// they'll need to restart the dev server. That trade-off keeps the
-		// watcher logic simple and avoids polling for non-existent files.
-		for (const cfgName of ['wrangler.jsonc', 'wrangler.json', 'wrangler.toml']) {
-			const cfgPath = path.join(root, cfgName);
-			if (!fs.existsSync(cfgPath)) continue;
-			try {
-				const w = fs.watch(cfgPath, () => onChange(cfgName));
-				watchers.push(w);
-			} catch {
-				// Best-effort; continue without this watch.
-			}
-		}
-	}
-
-	// Watch user-supplied env files. Edits trigger a full reload (respawn
-	// child for Node; dispose+restart worker for Cloudflare) since env
-	// values affect runtime behavior the bundler can't see. Path passed to
-	// onChange is the absolute path so the reload-decision code can match
-	// against the resolved set deterministically.
+	// Watch user-supplied Node env files. Edits trigger a full reload since env
+	// values affect runtime behavior the bundler cannot see. Path passed to
+	// onChange is absolute so reload selection is deterministic.
 	for (const envPath of envFiles) {
 		try {
 			const w = fs.watch(envPath, () => onChange(envPath));

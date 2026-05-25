@@ -65,8 +65,7 @@ export interface BuildContext {
  * Controls the build output format for a target platform.
  *
  * A plugin can ship a JavaScript artifact bundled through the shared Vite
- * graph, use the official Cloudflare Vite integration, or write a source
- * entry for an internal/test consumer.
+ * graph or use the official Cloudflare Vite integration.
  */
 export interface BuildPlugin {
 	name: string;
@@ -82,14 +81,12 @@ export interface BuildPlugin {
 	 *     Vite authored-module graph.
 	 *   - `'vite-cloudflare'`: write the Cloudflare source entry used by the
 	 *     official Cloudflare Vite integration.
-	 *   - `'none'`: write a source entry without processing authored imports;
-	 *     intended for internal/test discovery consumers.
 	 */
-	bundle: 'vite' | 'vite-cloudflare' | 'none';
+	bundle: 'vite' | 'vite-cloudflare';
 	/**
-	 * The filename to use for an emitted source entry under `dist/`. Required
-	 * when `bundle === 'none'` or `bundle === 'vite-cloudflare'`. Node bundled
-	 * output is always `server.mjs` and ignores this field.
+	 * The filename to use for the generated Cloudflare source entry. Required
+	 * when `bundle === 'vite-cloudflare'`. Node bundled output is always
+	 * `server.mjs` and ignores this field.
 	 */
 	entryFilename?: string;
 	/** Package names that Vite should preserve as external runtime dependencies. */

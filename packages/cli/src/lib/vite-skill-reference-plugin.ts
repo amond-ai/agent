@@ -13,7 +13,9 @@ const SKILL_METADATA_QUERY = '?flue-skill-metadata';
 const SKILL_FILE_QUERY = '?flue-skill-file';
 const PACKAGED_FILE_WARNING_BYTES = 1024 * 1024;
 const EXCLUDED_DIRECTORIES = new Set(['.git', '.cache', '.turbo', '.wrangler', 'dist', 'node_modules']);
-const EXCLUDED_FILES = new Set(['.DS_Store', '.npmrc']);
+const SENSITIVE_DIRECTORIES = new Set(['.aws', '.gnupg', '.ssh']);
+const EXCLUDED_FILES = new Set(['.netrc', '.npmrc', '.pypirc', '_netrc', 'credentials.json']);
+const SENSITIVE_FILE_PATTERNS = [/\.key$/i, /\.pem$/i, /\.p12$/i, /\.pfx$/i, /^secrets?(?:\.|$)/i];
 
 export interface SkillReferencePluginOptions {
 	root: string;
@@ -125,7 +127,11 @@ export function skillReferencePlugin(options: SkillReferencePluginOptions): Skil
 				if (content.byteLength > PACKAGED_FILE_WARNING_BYTES) {
 					console.warn(`[flue] Skill file "${filePath}" exceeds 1MB and will be packaged into the deployed application for lazy access.`);
 				}
-				const file: PackagedSkillFile = { encoding: 'base64', content: content.toString('base64') };
+				const file: PackagedSkillFile = {
+					encoding: 'base64',
+					kind: isTextContent(content) ? 'text' : 'binary',
+					content: content.toString('base64'),
+				};
 				return `export default ${JSON.stringify(file)};`;
 			}
 			if (!id.startsWith(internalSkillModulePrefix)) return null;
@@ -238,10 +244,16 @@ async function collectFiles(directory: string, skillRoot = directory): Promise<s
 				console.warn(`[flue] Excluding skill directory "${relativePath}" from the deployed application package because it is generated or repository metadata.`);
 				continue;
 			}
+			if (SENSITIVE_DIRECTORIES.has(entry.name.toLowerCase())) {
+				throw new Error(`[flue] Imported skill directory "${skillRoot}" contains sensitive directory "${relativePath}", which cannot be packaged. Remove credentials and private keys from the skill directory.`);
+			}
 			files.push(...(await collectFiles(absolutePath, skillRoot)));
 		} else if (entry.isFile()) {
+			if (isSensitiveFile(entry.name)) {
+				throw new Error(`[flue] Imported skill directory "${skillRoot}" contains sensitive file "${relativePath}", which cannot be packaged. Remove credentials and private keys from the skill directory.`);
+			}
 			if (isExcludedFile(entry.name)) {
-				console.warn(`[flue] Excluding skill file "${relativePath}" from the deployed application package because it is sensitive or generated content.`);
+				console.warn(`[flue] Excluding skill file "${relativePath}" from the deployed application package because it is generated content.`);
 				continue;
 			}
 			files.push(absolutePath);
@@ -250,8 +262,28 @@ async function collectFiles(directory: string, skillRoot = directory): Promise<s
 	return files.sort();
 }
 
+function isSensitiveFile(filename: string): boolean {
+	const lowerFilename = filename.toLowerCase();
+	return EXCLUDED_FILES.has(lowerFilename)
+		|| lowerFilename === '.dev.vars'
+		|| lowerFilename.startsWith('.dev.vars.')
+		|| lowerFilename === '.env'
+		|| lowerFilename.startsWith('.env.')
+		|| SENSITIVE_FILE_PATTERNS.some((pattern) => pattern.test(filename));
+}
+
 function isExcludedFile(filename: string): boolean {
-	return EXCLUDED_FILES.has(filename) || filename === '.dev.vars' || filename.startsWith('.dev.vars.') || filename === '.env' || filename.startsWith('.env.') || filename.endsWith('.swp') || filename.endsWith('.swo') || filename.endsWith('~');
+	const lowerFilename = filename.toLowerCase();
+	return lowerFilename === '.ds_store'
+		|| lowerFilename.endsWith('.swp')
+		|| lowerFilename.endsWith('.swo')
+		|| lowerFilename.endsWith('~');
+}
+
+function isTextContent(content: Buffer): boolean {
+	if (content.includes(0)) return false;
+	const text = content.toString('utf8');
+	return Buffer.from(text, 'utf8').equals(content) && !text.includes('\uFFFD');
 }
 
 function decodeSkillModuleId(source: string, internalPrefix: string, encodedInternalPrefix: string): string | undefined {

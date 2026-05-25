@@ -335,9 +335,25 @@ export default {
 };
 ```
 
+### Imported Agent Skills
+
+Workspace skills at `<cwd>/.agents/skills/<name>/SKILL.md` are discovered at runtime and activated by name with `session.skill('name')`. Static imports package source-owned skills for deployment:
+
+```ts
+import review from '../skills/review/SKILL.md' with { type: 'skill' };
+
+const agent = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6', skills: [review] }));
+const harness = await init(agent);
+const session = await harness.session();
+await session.skill('review');
+// Or activate directly: await session.skill(review);
+```
+
+The imported value is a lightweight `SkillReference`. Vite validates `SKILL.md` and packages the complete permitted directory for lazy supporting-file reads; an unregistered import alone does not expose those files to ordinary prompts. Imported skill directories containing likely credentials or private keys, including `.env*`, `.dev.vars*`, credential/key files, `.aws/`, `.ssh/`, or `.gnupg/`, reject the build.
+
 ### Custom Virtual Sandboxes
 
-For most agents, use the built-in virtual sandbox or `sandbox: local()` (Node target only). If you need to customize just-bash directly, pass a Bash factory. The factory must return a fresh Bash-like runtime each time; share the filesystem object in the closure to persist files across sessions and prompts.
+For most agents, use the built-in virtual sandbox or `sandbox: local()` (Node target only). Generated default sandboxes resolve `just-bash` through `@flue/runtime`; add `just-bash` to your application only if authored source imports it directly. If you need to customize just-bash directly, pass a Bash factory. The factory must return a fresh Bash-like runtime each time; share the filesystem object in the closure to persist files across sessions and prompts.
 
 ```ts
 import { Bash, InMemoryFs } from 'just-bash';

@@ -41,15 +41,17 @@ export interface BuildResult {
  * Statically imported SKILL.md directories are packaged through the shared Vite graph.
  */
 export async function build(options: BuildOptions): Promise<BuildResult> {
+	if (options.target !== 'cloudflare') return buildApplication(options);
+	const root = path.resolve(options.root);
+	const { loadEnv } = await import('vite');
+	const mode = options.mode === 'development' ? 'development' : 'production';
+	const env = loadEnv(mode, root, ['CLOUDFLARE_', 'WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_']);
+	return withTemporaryProcessEnv(env, () => buildApplication(options));
+}
+
+async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 	const root = path.resolve(options.root);
 	const output = path.resolve(options.output ?? path.join(root, 'dist'));
-
-	if (options.target === 'cloudflare') {
-		const { loadEnv } = await import('vite');
-		const mode = options.mode === 'development' ? 'development' : 'production';
-		Object.assign(process.env, loadEnv(mode, root, ['CLOUDFLARE_', 'WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_']));
-	}
-
 	const plugin = resolvePlugin(options);
 
 	const sourceRoot = resolveSourceRoot(root);
@@ -100,12 +102,6 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 	fs.mkdirSync(output, { recursive: true });
 
 	let anyChanged = false;
-	const obsoleteManifestPath = path.join(output, 'manifest.json');
-	if (fs.existsSync(obsoleteManifestPath)) {
-		fs.unlinkSync(obsoleteManifestPath);
-		console.log(`[flue] Removed obsolete output: ${obsoleteManifestPath}`);
-		anyChanged = true;
-	}
 
 	const ctx: BuildContext = {
 		agents,
@@ -187,29 +183,6 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 		await builder.buildApp();
 		console.log(`[flue] Built Cloudflare application: ${output}`);
 		anyChanged = true;
-	} else if (bundleStrategy === 'none') {
-		// Pass-through mode: write the entry as-is for an internal/test consumer.
-		if (!plugin.entryFilename) {
-			throw new Error(
-				`[flue] Plugin "${plugin.name}" set bundle: 'none' but did not provide entryFilename.`,
-			);
-		}
-		const outPath = path.join(output, plugin.entryFilename);
-		// Skip the write if content is byte-identical to what's already on
-		// disk. This matters for `flue dev`, where downstream watchers (like
-		// wrangler's bundler) may key on file mtime and would otherwise reload
-		// the worker for a no-op rebuild on agent body edits.
-		const writeIfChanged =
-			!fs.existsSync(outPath) || fs.readFileSync(outPath, 'utf-8') !== serverCode;
-		if (writeIfChanged) {
-			fs.writeFileSync(outPath, serverCode, 'utf-8');
-			console.log(`[flue] Wrote entry: ${outPath} (no bundle — downstream tool handles it)`);
-			anyChanged = true;
-		} else {
-			console.log(`[flue] Entry unchanged: ${outPath}`);
-		}
-	} else {
-		throw new Error(`[flue] Unknown bundle strategy: ${bundleStrategy}`);
 	}
 
 	if (plugin.additionalOutputs && bundleStrategy !== 'vite-cloudflare') {
@@ -217,9 +190,8 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 		for (const [filename, content] of Object.entries(outputs)) {
 			const filePath = path.join(output, filename);
 			fs.mkdirSync(path.dirname(filePath), { recursive: true });
-			// As with the entry above: avoid touching the file if content is
-			// unchanged so downstream watchers (e.g. wrangler) don't see
-			// spurious mtime updates and reload for no reason.
+			// Avoid touching generated files if content is unchanged so development
+			// watchers do not see spurious mtime updates and reload for no reason.
 			const changed =
 				!fs.existsSync(filePath) || fs.readFileSync(filePath, 'utf-8') !== content;
 			if (changed) {
@@ -232,6 +204,22 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 
 	console.log(`[flue] Build complete. Output: ${output}`);
 	return { changed: anyChanged };
+}
+
+async function withTemporaryProcessEnv<T>(env: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+	const previous = new Map<string, string | undefined>();
+	for (const [key, value] of Object.entries(env)) {
+		previous.set(key, process.env[key]);
+		process.env[key] = value;
+	}
+	try {
+		return await fn();
+	} finally {
+		for (const [key, value] of previous) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
 }
 
 function resolvePlugin(options: BuildOptions): BuildPlugin {
