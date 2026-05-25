@@ -382,7 +382,7 @@ function getUserExternals(root: string): string[] {
 			...pkg.dependencies,
 			...pkg.devDependencies,
 			...pkg.peerDependencies,
-		});
+		}).filter((name) => name !== '@flue/runtime');
 		return deps.flatMap((name) => [name, `${name}/*`]);
 	} catch {
 		return [];
