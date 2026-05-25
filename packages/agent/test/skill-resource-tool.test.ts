@@ -18,11 +18,12 @@ const packagedDirectory: PackagedSkillDirectory = {
 	name: packagedReference.name,
 	description: packagedReference.description,
 	files: {
-		'SKILL.md': { encoding: 'base64', content: Buffer.from('---\nname: review\ndescription: Review work.\n---\nReview.').toString('base64') },
-		'LICENSE.txt': { encoding: 'base64', content: Buffer.from('License terms.').toString('base64') },
-		'references/checklist.md': { encoding: 'base64', content: Buffer.from('Check everything.').toString('base64') },
-		'assets/icon.bin': { encoding: 'base64', content: Buffer.from([0xff, 0x00, 0x80]).toString('base64') },
-		'assets/large.bin': { encoding: 'base64', content: Buffer.alloc(60 * 1024, 0xa5).toString('base64') },
+		'SKILL.md': { encoding: 'base64', kind: 'text', content: Buffer.from('---\nname: review\ndescription: Review work.\n---\nReview.').toString('base64') },
+		'LICENSE.txt': { encoding: 'base64', kind: 'text', content: Buffer.from('License terms.').toString('base64') },
+		'references/checklist.md': { encoding: 'base64', kind: 'text', content: Buffer.from('Check everything.').toString('base64') },
+		'assets/icon.bin': { encoding: 'base64', kind: 'binary', content: Buffer.from([0xff, 0x00, 0x80]).toString('base64') },
+		'payload.bin': { encoding: 'base64', kind: 'binary', content: Buffer.from([0x00, 0xfe, 0x41]).toString('base64') },
+		'assets/large.bin': { encoding: 'base64', kind: 'binary', content: Buffer.alloc(60 * 1024, 0xa5).toString('base64') },
 	},
 };
 
@@ -71,12 +72,13 @@ describe('packaged skill activation prompt', () => {
 		expect(prompt).not.toContain('License terms.');
 	});
 
-	it('lets the standard read tool read arbitrary packaged skill files and preserve binary assets', async () => {
+	it('lets the standard read tool read arbitrary packaged skill files and preserve binary content regardless of directory', async () => {
 		const tools = createTools(createEnv(), { packagedSkills: { [packagedReference.id]: packagedDirectory } });
 		const read = tools.find((tool) => tool.name === 'read');
 		if (!read) throw new Error('read tool missing');
 		const result = await read.execute('tool', { path: '/.flue/packaged-skills/skill%3Areview%3Afixture/LICENSE.txt' });
 		const binary = await read.execute('tool', { path: '/.flue/packaged-skills/skill%3Areview%3Afixture/assets/icon.bin' });
+		const rootBinary = await read.execute('tool', { path: '/.flue/packaged-skills/skill%3Areview%3Afixture/payload.bin' });
 		const largeFirst = await read.execute('tool', { path: '/.flue/packaged-skills/skill%3Areview%3Afixture/assets/large.bin' });
 		const largeFirstText = largeFirst.content[0]?.type === 'text' ? largeFirst.content[0].text : '';
 		const nextOffset = Number(/Use offset=(\d+) to continue/.exec(largeFirstText)?.[1]);
@@ -85,6 +87,7 @@ describe('packaged skill activation prompt', () => {
 		const decodedLarge = Buffer.from(`${largeFirstText}\n${largeSecondText}`.replace(/\n\n\[Showing[\s\S]*?continue\.\]/g, '').replace(/\n/g, ''), 'base64');
 		expect(result.content[0]).toMatchObject({ text: 'License terms.' });
 		expect(binary.content[0]).toMatchObject({ text: '/wCA' });
+		expect(rootBinary.content[0]).toMatchObject({ text: 'AP5B' });
 		expect(nextOffset).toBeGreaterThan(1);
 		expect(decodedLarge).toEqual(Buffer.alloc(60 * 1024, 0xa5));
 	});
@@ -230,7 +233,7 @@ describe('packaged skill activation prompt', () => {
 			id: registeredReference.id,
 			files: {
 				...packagedDirectory.files,
-				'LICENSE.txt': { encoding: 'base64', content: Buffer.from('Registered terms.').toString('base64') },
+				'LICENSE.txt': { encoding: 'base64', kind: 'text', content: Buffer.from('Registered terms.').toString('base64') },
 			},
 		};
 		const config = createAgentConfig({ review: registeredReference });

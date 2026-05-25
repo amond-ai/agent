@@ -448,7 +448,7 @@ function readPackagedSkillFile(skills: Record<string, PackagedSkillDirectory>, p
 	for (const skill of Object.values(skills)) {
 		for (const [filePath, file] of Object.entries(skill.files)) {
 			if (path !== packagedSkillReadPath(skill.id, filePath)) continue;
-			return filePath.startsWith('assets/')
+			return file.kind === 'binary'
 				? wrapBase64ForReading(file.content)
 				: new TextDecoder().decode(Uint8Array.from(atob(file.content), (character) => character.charCodeAt(0)));
 		}

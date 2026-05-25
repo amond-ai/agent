@@ -189,13 +189,10 @@ describe('Vite skill-reference plugin', () => {
 		await expect(buildFixture(root, createFixturePlugin(root))).rejects.toThrow('Dynamic SKILL.md import');
 	});
 
-	it('excludes sensitive and generated files while packaging permitted hidden files', async () => {
+	it('excludes generated files while packaging permitted hidden files', async () => {
 		const root = createFixtureRoot();
 		writeSkill(root, 'review');
 		writeModule(root, 'skills/review/.notes', 'Included hidden note\n');
-		writeModule(root, 'skills/review/.env', 'SECRET=not-packaged\n');
-		writeModule(root, 'skills/review/.dev.vars.local', 'SECRET=not-packaged\n');
-		writeModule(root, 'skills/review/.npmrc', 'token=not-packaged\n');
 		writeModule(root, 'skills/review/node_modules/ignored/index.js', 'ignored\n');
 		writeModule(root, 'skills/review/dist/ignored.txt', 'ignored\n');
 		writeModule(root, 'src/entry.ts', `import review from '../skills/review/SKILL.md' with { type: 'skill' };\nimport { getPackagedSkills } from 'virtual:flue/packaged-skills';\nexport { review };\nexport function packaged() { return getPackagedSkills(); }\n`);
@@ -204,15 +201,30 @@ describe('Vite skill-reference plugin', () => {
 			const module = await importBuiltFixture(await buildFixture(root, createFixturePlugin(root)));
 			const files = Object.keys(module.packaged()[module.review.id]?.files ?? {});
 			expect(files).toContain('.notes');
-			expect(files).not.toContain('.env');
-			expect(files).not.toContain('.dev.vars.local');
-			expect(files).not.toContain('.npmrc');
 			expect(files).not.toContain('node_modules/ignored/index.js');
 			expect(files).not.toContain('dist/ignored.txt');
 			expect(warning).toHaveBeenCalledWith(expect.stringContaining('deployed application package'));
 		} finally {
 			warning.mockRestore();
 		}
+	});
+
+	it.each(['.env', '.dev.vars.local', '.npmrc', '.netrc', 'credentials.json', 'private.pem', 'api.key', 'secrets.local'])('rejects sensitive packaged file %s', async (filename) => {
+		const root = createFixtureRoot();
+		writeSkill(root, 'review');
+		writeModule(root, `skills/review/${filename}`, 'do-not-package\n');
+		writeModule(root, 'src/entry.ts', `import review from '../skills/review/SKILL.md' with { type: 'skill' };\nexport { review };\n`);
+
+		await expect(buildFixture(root, createFixturePlugin(root))).rejects.toThrow('contains sensitive file');
+	});
+
+	it.each(['.aws/credentials', '.ssh/id_ed25519'])('rejects sensitive packaged directory content %s', async (filename) => {
+		const root = createFixtureRoot();
+		writeSkill(root, 'review');
+		writeModule(root, `skills/review/${filename}`, 'do-not-package\n');
+		writeModule(root, 'src/entry.ts', `import review from '../skills/review/SKILL.md' with { type: 'skill' };\nexport { review };\n`);
+
+		await expect(buildFixture(root, createFixturePlugin(root))).rejects.toThrow('contains sensitive directory');
 	});
 
 	it('rejects symlinks inside imported skill directories', async () => {
@@ -258,16 +270,18 @@ describe('Vite skill-reference plugin', () => {
 		}
 	});
 
-	it('preserves binary packaged files through Vite encoding', async () => {
+	it('records binary packaged files independently of directory location', async () => {
 		const root = createFixtureRoot();
 		writeSkill(root, 'review');
 		const binary = Buffer.from([0x00, 0xff, 0x10, 0x80, 0x41]);
-		fs.writeFileSync(path.join(root, 'skills/review/assets/raw.bin'), binary);
+		fs.writeFileSync(path.join(root, 'skills/review/payload.bin'), binary);
 		writeModule(root, 'src/entry.ts', `import review from '../skills/review/SKILL.md' with { type: 'skill' };\nimport { getPackagedSkills } from 'virtual:flue/packaged-skills';\nexport { review };\nexport function packaged() { return getPackagedSkills(); }\n`);
 
 		const module = await importBuiltFixture(await buildFixture(root, createFixturePlugin(root)));
-		const packaged = module.packaged()[module.review.id]?.files['assets/raw.bin'];
+		const packaged = module.packaged()[module.review.id]?.files['payload.bin'];
 		if (!packaged) throw new Error('Packaged binary missing');
+		expect(packaged.kind).toBe('binary');
+		expect(module.packaged()[module.review.id]?.files['LICENSE.txt']?.kind).toBe('text');
 		expect(Buffer.from(packaged.content, 'base64')).toEqual(binary);
 	});
 

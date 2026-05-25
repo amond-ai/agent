@@ -199,6 +199,7 @@ export interface SkillReference {
 
 export interface PackagedSkillFile {
 	readonly encoding: 'base64';
+	readonly kind: 'text' | 'binary';
 	readonly content: string;
 }
 
