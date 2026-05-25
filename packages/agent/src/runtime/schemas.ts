@@ -72,6 +72,59 @@ const PromptUsageSchema = v.object({
 	}),
 });
 
+const LlmTextContentSchema = v.object({
+	type: v.literal('text'),
+	text: v.string(),
+	textSignature: v.optional(v.string()),
+});
+
+const LlmThinkingContentSchema = v.object({
+	type: v.literal('thinking'),
+	thinking: v.string(),
+	thinkingSignature: v.optional(v.string()),
+	redacted: v.optional(v.boolean()),
+});
+
+const LlmImageContentSchema = v.object({
+	type: v.literal('image'),
+	data: v.string(),
+	mimeType: v.string(),
+});
+
+const LlmToolCallSchema = v.object({
+	type: v.literal('toolCall'),
+	id: v.string(),
+	name: v.string(),
+	arguments: v.record(v.string(), v.unknown()),
+	thoughtSignature: v.optional(v.string()),
+});
+
+const LlmUserMessageSchema = v.object({
+	role: v.literal('user'),
+	content: v.union([v.string(), v.array(v.union([LlmTextContentSchema, LlmImageContentSchema]))]),
+});
+
+const LlmAssistantMessageSchema = v.object({
+	role: v.literal('assistant'),
+	content: v.array(v.union([LlmTextContentSchema, LlmThinkingContentSchema, LlmToolCallSchema])),
+});
+
+const LlmToolResultMessageSchema = v.object({
+	role: v.literal('toolResult'),
+	toolCallId: v.string(),
+	toolName: v.string(),
+	content: v.array(v.union([LlmTextContentSchema, LlmImageContentSchema])),
+	isError: v.boolean(),
+});
+
+const LlmMessageSchema = v.union([LlmUserMessageSchema, LlmAssistantMessageSchema, LlmToolResultMessageSchema]);
+
+const LlmToolSchema = v.object({
+	name: v.string(),
+	description: v.string(),
+	parameters: v.unknown(),
+});
+
 const FLUE_EVENT_TYPES = [
 	'run_start',
 	'agent_start',
@@ -125,8 +178,8 @@ const FlueEventSchema = v.union([
 		api: v.string(),
 		input: v.object({
 			systemPrompt: v.optional(v.string()),
-			messages: v.array(v.any()),
-			tools: v.optional(v.array(v.object({ name: v.string(), description: v.string(), parameters: v.unknown() }))),
+			messages: v.array(LlmMessageSchema),
+			tools: v.optional(v.array(LlmToolSchema)),
 		}),
 		reasoning: v.optional(v.string()),
 	}),
@@ -163,7 +216,7 @@ const FlueEventSchema = v.union([
 		model: v.optional(v.string()),
 		provider: v.optional(v.string()),
 		api: v.optional(v.string()),
-		output: v.optional(v.any()),
+		output: v.optional(LlmAssistantMessageSchema),
 		usage: v.optional(PromptUsageSchema),
 		stopReason: v.optional(v.string()),
 		isError: v.boolean(),
