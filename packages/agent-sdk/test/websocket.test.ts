@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFlueClient, FlueSocketError, type WebSocketLike } from '../src/index.ts';
+import { createFlueClient, FlueSocketError, type LlmAssistantMessage, type LlmMessage, type WebSocketLike } from '../src/index.ts';
 
 class FakeSocket implements WebSocketLike {
 	readonly sent: string[] = [];
@@ -92,15 +92,19 @@ describe('WebSocket clients', () => {
 		await Promise.resolve();
 		const request = JSON.parse(connection?.socket.sent[0] ?? '{}') as { requestId: string };
 		expect(request).toMatchObject({ version: 1, type: 'prompt', message: 'Hello', session: 'chat' });
+		const message: LlmMessage = { role: 'user', content: [{ type: 'text', text: 'Hello' }] };
+		const output: LlmAssistantMessage = { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] };
 		connection?.socket.message({ version: 1, type: 'started', requestId: request.requestId });
 		connection?.socket.message({ version: 1, type: 'event', requestId: request.requestId, event: { type: 'agent_start', instanceId: 'customer/123', session: 'chat' } });
-		connection?.socket.message({ version: 1, type: 'event', requestId: request.requestId, event: { type: 'turn_request', instanceId: 'customer/123', session: 'chat', turnId: 'turn_1', purpose: 'agent', model: 'model', provider: 'provider', api: 'api', input: { messages: [] } } });
+		connection?.socket.message({ version: 1, type: 'event', requestId: request.requestId, event: { type: 'turn_request', instanceId: 'customer/123', session: 'chat', turnId: 'turn_1', purpose: 'agent', model: 'model', provider: 'provider', api: 'api', input: { messages: [message] } } });
+		connection?.socket.message({ version: 1, type: 'event', requestId: request.requestId, event: { type: 'turn', instanceId: 'customer/123', session: 'chat', turnId: 'turn_1', purpose: 'agent', durationMs: 1, output, isError: false } });
 		connection?.socket.message({ version: 1, type: 'result', requestId: request.requestId, result: 'done' });
 
 		await expect(pending).resolves.toEqual({ result: 'done' });
 		expect(events).toEqual([
 			{ event: { type: 'agent_start', instanceId: 'customer/123', session: 'chat' }, context: { requestId: request.requestId } },
-			{ event: { type: 'turn_request', instanceId: 'customer/123', session: 'chat', turnId: 'turn_1', purpose: 'agent', model: 'model', provider: 'provider', api: 'api', input: { messages: [] } }, context: { requestId: request.requestId } },
+			{ event: { type: 'turn_request', instanceId: 'customer/123', session: 'chat', turnId: 'turn_1', purpose: 'agent', model: 'model', provider: 'provider', api: 'api', input: { messages: [message] } }, context: { requestId: request.requestId } },
+			{ event: { type: 'turn', instanceId: 'customer/123', session: 'chat', turnId: 'turn_1', purpose: 'agent', durationMs: 1, output, isError: false }, context: { requestId: request.requestId } },
 		]);
 	});
 

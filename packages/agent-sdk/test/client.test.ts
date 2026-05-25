@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFlueClient } from '../src/index.ts';
+import { createFlueClient, type AttachedAgentEvent, type LlmAssistantMessage, type LlmMessage } from '../src/index.ts';
 import { readSse } from '../src/public/stream.ts';
 
 describe('createFlueClient', () => {
@@ -37,21 +37,32 @@ describe('createFlueClient', () => {
 			expect(events).toEqual([{ type: 'agent_start', instanceId: 'inst-1', session: 'chat' }, { type: 'idle', instanceId: 'inst-1', session: 'chat' }]);
 	});
 
-	it('streams enriched turn request events for attached agents', async () => {
+	it('streams normalized model-turn content for attached agents', async () => {
+		const userMessage: LlmMessage = { role: 'user', content: [{ type: 'text', text: 'Hello' }] };
+		const output: LlmAssistantMessage = {
+			role: 'assistant',
+			content: [
+				{ type: 'thinking', thinking: 'checking' },
+				{ type: 'toolCall', id: 'call_1', name: 'lookup', arguments: { query: 'hello' } },
+			],
+		};
+		const request: AttachedAgentEvent = { type: 'turn_request', instanceId: 'inst-1', session: 'chat', turnId: 'turn_1', purpose: 'agent', model: 'model', provider: 'provider', api: 'api', input: { messages: [userMessage], tools: [{ name: 'lookup', description: 'Lookup', parameters: { type: 'object' } }] } };
+		const turn: AttachedAgentEvent = { type: 'turn', instanceId: 'inst-1', session: 'chat', turnId: 'turn_1', purpose: 'agent', durationMs: 1, output, isError: false };
 		const client = createFlueClient({
 			baseUrl: 'https://flue.test',
-			fetch: async () => new Response(sse('event: turn_request\ndata: {"type":"turn_request","instanceId":"inst-1","session":"chat","turnId":"turn_1","purpose":"agent","model":"model","provider":"provider","api":"api","input":{"messages":[]}}\n\n'), {
+			fetch: async () => new Response(sse(`event: turn_request\ndata: ${JSON.stringify(request)}\n\nevent: turn\ndata: ${JSON.stringify(turn)}\n\n`), {
 				headers: { 'content-type': 'text/event-stream' },
 			}),
 		});
 
-		const events = [];
+		const events: AttachedAgentEvent[] = [];
 		for await (const event of client.agents.invoke('hello', 'inst-1', { mode: 'stream', payload: { message: 'Hello', session: 'chat' } })) {
 			events.push(event);
 		}
-		expect(events).toEqual([{ type: 'turn_request', instanceId: 'inst-1', session: 'chat', turnId: 'turn_1', purpose: 'agent', model: 'model', provider: 'provider', api: 'api', input: { messages: [] } }]);
+		expect(events).toEqual([request, turn]);
+		expect(events[0]?.type === 'turn_request' && events[0].input.messages[0]).toEqual(userMessage);
+		expect(events[1]?.type === 'turn' && events[1].output).toEqual(output);
 	});
-
 
 	it('rejects invalid attached agent stream events and stream errors', async () => {
 		const invalid = createFlueClient({

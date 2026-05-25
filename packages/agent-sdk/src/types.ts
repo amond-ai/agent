@@ -57,6 +57,61 @@ interface PromptUsage {
 
 type OperationKind = 'prompt' | 'skill' | 'task' | 'shell' | 'compact';
 
+export type LlmTextContent = {
+	type: 'text';
+	text: string;
+	textSignature?: string;
+};
+
+export type LlmThinkingContent = {
+	type: 'thinking';
+	thinking: string;
+	thinkingSignature?: string;
+	redacted?: boolean;
+};
+
+export type LlmImageContent = {
+	type: 'image';
+	data: string;
+	mimeType: string;
+};
+
+export type LlmToolCall = {
+	type: 'toolCall';
+	id: string;
+	name: string;
+	arguments: Record<string, unknown>;
+	thoughtSignature?: string;
+};
+
+export type LlmUserMessage = {
+	role: 'user';
+	content: string | (LlmTextContent | LlmImageContent)[];
+};
+
+export type LlmAssistantMessage = {
+	role: 'assistant';
+	content: (LlmTextContent | LlmThinkingContent | LlmToolCall)[];
+};
+
+export type LlmToolResultMessage = {
+	role: 'toolResult';
+	toolCallId: string;
+	toolName: string;
+	content: (LlmTextContent | LlmImageContent)[];
+	isError: boolean;
+};
+
+export type LlmMessage = LlmUserMessage | LlmAssistantMessage | LlmToolResultMessage;
+
+export type LlmTool = {
+	name: string;
+	description: string;
+	parameters: unknown;
+};
+
+export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
+
 export interface FluePublicError {
 	type: string;
 	message: string;
@@ -175,9 +230,9 @@ export type FlueEvent = (
 		}
 	| { type: 'agent_start' }
 	| { type: 'agent_end'; messages: unknown[] }
-	| { type: 'turn_start'; turnId: string; purpose: 'agent' | 'compaction' | 'compaction_prefix' }
-	| { type: 'turn_request'; turnId: string; purpose: 'agent' | 'compaction' | 'compaction_prefix'; model: string; provider: string; api: string; input: { systemPrompt?: string; messages: unknown[]; tools?: Array<{ name: string; description: string; parameters: unknown }> }; reasoning?: string }
-	| { type: 'turn_end'; turnId: string; purpose: 'agent' | 'compaction' | 'compaction_prefix'; message: unknown; toolResults: unknown[] }
+	| { type: 'turn_start'; turnId: string; purpose: LlmTurnPurpose }
+	| { type: 'turn_request'; turnId: string; purpose: LlmTurnPurpose; model: string; provider: string; api: string; input: { systemPrompt?: string; messages: LlmMessage[]; tools?: LlmTool[] }; reasoning?: string }
+	| { type: 'turn_end'; turnId: string; purpose: LlmTurnPurpose; message: unknown; toolResults: unknown[] }
 	| { type: 'message_start'; message: unknown }
 	| { type: 'message_update'; message: unknown; assistantMessageEvent: unknown }
 	| { type: 'message_end'; message: unknown }
@@ -190,7 +245,7 @@ export type FlueEvent = (
 	| { type: 'thinking_end'; content: string }
 	| { type: 'tool_start'; toolName: string; toolCallId: string; args?: unknown }
 	| { type: 'tool_call'; toolName: string; toolCallId: string; isError: boolean; result?: unknown; durationMs: number }
-	| { type: 'turn'; turnId: string; purpose: 'agent' | 'compaction' | 'compaction_prefix'; durationMs: number; model?: string; provider?: string; api?: string; output?: unknown; usage?: PromptUsage; stopReason?: string; isError: boolean; error?: unknown }
+	| { type: 'turn'; turnId: string; purpose: LlmTurnPurpose; durationMs: number; model?: string; provider?: string; api?: string; output?: LlmAssistantMessage; usage?: PromptUsage; stopReason?: string; isError: boolean; error?: unknown }
 	| { type: 'task_start'; taskId: string; prompt: string; agent?: string; cwd?: string }
 	| { type: 'task'; taskId: string; agent?: string; isError: boolean; result?: unknown; durationMs: number }
 	| { type: 'compaction_start'; reason: 'threshold' | 'overflow' | 'manual'; estimatedTokens: number }
