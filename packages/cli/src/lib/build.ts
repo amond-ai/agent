@@ -45,6 +45,12 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 	const root = path.resolve(options.root);
 	const output = path.resolve(options.output ?? path.join(root, 'dist'));
 
+	if (options.target === 'cloudflare') {
+		const { loadEnv } = await import('vite');
+		const mode = options.mode === 'development' ? 'development' : 'production';
+		Object.assign(process.env, loadEnv(mode, root, ['CLOUDFLARE_', 'WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_']));
+	}
+
 	const plugin = resolvePlugin(options);
 
 	const sourceRoot = resolveSourceRoot(root);
@@ -201,11 +207,36 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 			}
 		}
 	} else if (bundleStrategy === 'vite-cloudflare') {
-		if (!plugin.entryFilename) {
-			throw new Error(`[flue] Plugin "${plugin.name}" set bundle: 'vite-cloudflare' but did not provide entryFilename.`);
+		if (!plugin.entryFilename || !plugin.additionalOutputs) {
+			throw new Error(`[flue] Plugin "${plugin.name}" set bundle: 'vite-cloudflare' but did not provide its generated entry and configuration outputs.`);
 		}
-		const outPath = path.join(output, plugin.entryFilename);
-		fs.writeFileSync(outPath, serverCode, 'utf-8');
+		const inputDir = cloudflareViteInputDir(root);
+		const entryPath = path.join(inputDir, plugin.entryFilename);
+		let generatedChanged = !fs.existsSync(entryPath) || fs.readFileSync(entryPath, 'utf-8') !== serverCode;
+		fs.mkdirSync(inputDir, { recursive: true });
+		if (generatedChanged) fs.writeFileSync(entryPath, serverCode, 'utf-8');
+		const inputs = await plugin.additionalOutputs(ctx);
+		for (const [filename, content] of Object.entries(inputs)) {
+			const filePath = filename === 'wrangler.jsonc' ? cloudflareViteConfigPath(root) : path.join(inputDir, filename);
+			const changed = !fs.existsSync(filePath) || fs.readFileSync(filePath, 'utf-8') !== content;
+			fs.mkdirSync(path.dirname(filePath), { recursive: true });
+			if (changed) fs.writeFileSync(filePath, content, 'utf-8');
+			generatedChanged ||= changed;
+		}
+		if (options.mode === 'development') {
+			console.log(`[flue] Prepared Cloudflare Vite entry: ${entryPath}`);
+			return { changed: generatedChanged };
+		}
+		const generatedConfigPath = cloudflareViteConfigPath(root);
+		const { createBuilder } = await import('vite');
+		const viteConfig = createCloudflareViteConfig(root, generatedConfigPath, [entryPath]);
+		const builder = await createBuilder({
+			...viteConfig,
+			logLevel: 'warn',
+			build: { outDir: output, emptyOutDir: true },
+		});
+		await builder.buildApp();
+		console.log(`[flue] Built Cloudflare application: ${output}`);
 		anyChanged = true;
 	} else if (bundleStrategy === 'none') {
 		// Pass-through mode: write the entry as-is. A downstream tool (e.g.
@@ -235,7 +266,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 		throw new Error(`[flue] Unknown bundle strategy: ${bundleStrategy}`);
 	}
 
-	if (plugin.additionalOutputs) {
+	if (plugin.additionalOutputs && bundleStrategy !== 'vite-cloudflare') {
 		const outputs = await plugin.additionalOutputs(ctx);
 		for (const [filename, content] of Object.entries(outputs)) {
 			const filePath = path.join(output, filename);
@@ -424,6 +455,14 @@ function getUserExternals(root: string): string[] {
 	}
 }
 
+export function cloudflareViteInputDir(root: string): string {
+	return path.join(root, '.flue-vite');
+}
+
+export function cloudflareViteConfigPath(root: string): string {
+	return path.join(root, '.flue-vite.wrangler.jsonc');
+}
+
 function createSharedViteConfig(root: string, bootstrapEntries: readonly string[] = []) {
 	return {
 		configFile: false as const,
@@ -432,11 +471,16 @@ function createSharedViteConfig(root: string, bootstrapEntries: readonly string[
 	};
 }
 
-export function createCloudflareViteConfig(root: string, configPath: string, bootstrapEntries: readonly string[] = []) {
+export function createCloudflareViteConfig(
+	root: string,
+	configPath: string,
+	bootstrapEntries: readonly string[] = [],
+	options: { persistState?: boolean } = {},
+) {
 	const sharedConfig = createSharedViteConfig(root, bootstrapEntries);
 	return {
 		...sharedConfig,
-		plugins: [...sharedConfig.plugins, ...cloudflare({ configPath, persistState: false, inspectorPort: false })],
+		plugins: [...sharedConfig.plugins, ...cloudflare({ configPath, persistState: options.persistState ?? true, inspectorPort: false })],
 	};
 }
 

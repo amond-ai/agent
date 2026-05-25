@@ -71,8 +71,8 @@ function printUsage() {
 			'                       Default: search the root dir (or cwd) for `flue.config.*`.\n' +
 			'                       CLI flags always override values set in the config file.\n' +
 			`  --port <number>      Port for the dev server. Default: ${DEFAULT_DEV_PORT}\n` +
-			'  --env <path>         Load env vars from a .env-format file. Repeatable; later files override earlier on key collision.\n' +
-			'                       Works for both Node and Cloudflare targets. Shell-set env vars win over file values.\n' +
+			'  --env <path>         Load Node env vars from a .env-format file. Repeatable; later files override earlier on key collision.\n' +
+			'                       Cloudflare dev uses the official .dev.vars/.env and CLOUDFLARE_ENV conventions instead.\n' +
 			'  --category <name>    (flue add) Fetch the generic instructions for a connector category. Pair with a positional URL/path that\n' +
 			'                       points the agent at the provider\'s docs (e.g. `flue add https://e2b.dev --category sandbox`).\n' +
 			'  --print              (flue add) Print the raw connector markdown to stdout regardless of whether the caller is an agent.\n' +

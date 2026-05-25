@@ -372,7 +372,7 @@ Long-running watch-mode dev server. Rebuilds and reloads on file changes — edi
 
 ```bash
 flue dev --target node          # Node.js dev server
-flue dev --target cloudflare    # Cloudflare Workers (via wrangler) dev server
+flue dev --target cloudflare    # Cloudflare Vite/workerd dev server
 ```
 
 Defaults to port `3583` ("FLUE" on a phone keypad). Override with `--port`.
@@ -381,14 +381,13 @@ Defaults to port `3583` ("FLUE" on a phone keypad). Override with `--port`.
 
 #### Loading environment variables
 
-Pass `--env <path>` to load a `.env`-format file. Works for both targets:
+For Node, pass `--env <path>` to load a `.env`-format file:
 
 ```bash
 flue dev --target node --env .env
-flue dev --target cloudflare --env .env
 ```
 
-Repeatable; later files override earlier ones on key collision. Shell-set env vars win over file values. Edits to the file trigger a reload. Same flag works for `flue run`.
+Repeatable; later files override earlier ones on key collision. Shell-set env vars win over file values. The same flag works for Node `flue run`. For Cloudflare development, use the official `.dev.vars` or `.env` files and `CLOUDFLARE_ENV` convention; `flue dev --target cloudflare --env ...` is not supported.
 
 ### Trigger From the CLI (`flue run`)
 
@@ -410,4 +409,4 @@ flue build --target node          # Node.js server (single bundled .mjs)
 flue build --target cloudflare    # Cloudflare Workers + Durable Objects
 ```
 
-For Cloudflare, `flue build` produces an unbundled TypeScript entry that `wrangler deploy` bundles itself — the same path `flue dev --target cloudflare` uses. Dev and deploy go through the same bundler, so what works in dev will work in production.
+For Cloudflare, `flue build` and `flue dev` run through the official Cloudflare Vite/workerd integration. A production build emits deployable output consumed by `wrangler deploy`.

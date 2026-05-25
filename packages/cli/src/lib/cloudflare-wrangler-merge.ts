@@ -4,8 +4,8 @@
  * Philosophy: the user's wrangler config is the source of truth. Flue contributes
  * the pieces it owns (the Worker entrypoint, its per-agent Durable Object
  * bindings, the Sandbox DO, the migration tag) and leaves everything else
- * untouched. The merged result is written to `dist/wrangler.jsonc` so the
- * deployed Worker sees both.
+ * untouched. The merged result is written as the official Vite plugin's
+ * input configuration so its output Worker sees both.
  *
  * We delegate parsing and normalization to wrangler's own `unstable_readConfig`
  * (lazy-imported so Node-only Flue users don't pay for it). This gets us:
@@ -13,11 +13,7 @@
  *   - Wrangler's own validation diagnostics (clearer errors than ours).
  *   - Path normalization: relative paths in fields like `containers[].image`
  *     are resolved to absolute paths against the user's config dir before
- *     we merge. This is critical because we write the merged config to
- *     `dist/wrangler.jsonc` — wrangler resolves relative paths against the
- *     config file's own directory, so without normalization a user's
- *     `containers[].image: "./Dockerfile"` would resolve to `dist/Dockerfile`
- *     after the move and fail to deploy.
+ *     we merge, so generated input configuration cannot alter their meaning.
  *
  * Flue still owns merge semantics (DO binding de-dup by `name`, migration
  * append-if-tag-absent) and Flue-specific validation (compat date floor,
@@ -74,7 +70,7 @@ export interface Migration {
 export interface FlueAdditions {
 	/** Fallback name if the user didn't set one in their wrangler config. */
 	defaultName: string;
-	/** Always written; Flue owns the bundle entrypoint. */
+	/** Always written; Flue owns the generated Worker source entry. */
 	main: string;
 	/** Flue's per-agent DO bindings. Merged into durable_objects.bindings by `name`. */
 	doBindings: DoBinding[];
@@ -124,8 +120,8 @@ interface UserConfigRead {
  *   - Throws on validation errors via wrangler's own `UserError`.
  *
  * The verbose / defaulted output is intentional — the cost is a slightly bigger
- * `dist/wrangler.jsonc` and the benefit is correctness without us reimplementing
- * wrangler's path-resolution logic.
+ * generated Vite input config and the benefit is correctness without us reimplementing
+ * Wrangler's path-resolution logic.
  */
 export async function readUserWranglerConfig(root: string): Promise<UserConfigRead> {
 	const candidates = ['wrangler.jsonc', 'wrangler.json', 'wrangler.toml'];
@@ -258,7 +254,7 @@ export function validateUserWranglerConfig(config: Record<string, unknown>): voi
  * would destroy stored DO data on every accidental file removal, which is
  * never the right default.
  *
- * Returned in alphabetical order so a regenerated `dist/wrangler.jsonc` is
+ * Returned in alphabetical order so a regenerated Vite input config is
  * byte-identical across machines and CI runs.
  *
  * Pure function: takes the current class list + the user's existing
@@ -329,10 +325,9 @@ export function mergeFlueAdditions(
 	// Shallow clone so we don't mutate the user's parsed config in place.
 	const merged: Record<string, unknown> = { ...userConfig };
 
-	// main: Flue always wins. Flue owns the bundle at dist/server.mjs, and
-	// pointing main elsewhere would mean wrangler deploys something Flue didn't
-	// build. If the user had a conflicting main, they're now using Flue and
-	// should accept this.
+	// main: Flue always wins. Flue owns the generated Worker source entry that
+	// the official Vite plugin builds for deployment. A conflicting user main
+	// would bypass that runtime bootstrap.
 	merged.main = additions.main;
 
 	// name: user wins if set; fall back to the default we derive from root.
@@ -431,8 +426,8 @@ export function mergeFlueAdditions(
 }
 
 /**
- * Strip wrangler-normalizer defaults that cause spurious warnings when wrangler
- * re-parses our generated dist/wrangler.jsonc.
+ * Strip Wrangler-normalizer defaults that cause spurious warnings when Wrangler
+ * re-parses our generated Vite input config.
  *
  * Background: `unstable_readConfig` returns a fully-normalized `Unstable_Config`
  * with every section populated to a default — including `unsafe: {}`. Wrangler's
@@ -448,8 +443,8 @@ export function mergeFlueAdditions(
  *
  * Other normalizer-defaulted-empty fields (`vars: {}`, `kv_namespaces: []`,
  * `python_modules: { exclude: ['**\/*.pyc'] }`, etc.) are left in place. They're
- * harmless: wrangler doesn't warn about them, dist/wrangler.jsonc is an
- * internal build artifact, and stripping them only saves bytes. Only `unsafe`
+ * harmless: Wrangler doesn't warn about them, the generated Vite input config
+ * is an internal build artifact, and stripping them only saves bytes. Only `unsafe`
  * has a user-visible side effect we need to fix.
  *
  * If wrangler adds another field to its `experimental()` warning list in a
@@ -560,42 +555,5 @@ export function assertSandboxPackageInstalled(
 		`[flue] Your wrangler config declares DO binding(s) whose class_name ends with "Sandbox" ` +
 			`(${sandboxClassNames.join(', ')}), but @cloudflare/sandbox is not in your package.json. ` +
 			`Install it: \`npm install @cloudflare/sandbox\`.`,
-	);
-}
-
-// ─── Deploy redirect file ───────────────────────────────────────────────────
-
-/**
- * Write the wrangler deploy-redirect file at
- * `<root>/.wrangler/deploy/config.json` so that `wrangler deploy` run from
- * the project root automatically picks up the generated wrangler config at
- * `<output>/wrangler.jsonc`.
- *
- * This is wrangler's own native redirection mechanism (the same one Astro's
- * Cloudflare adapter uses). We only write the file if one doesn't already
- * exist — if the user has set one up, respect their intent.
- *
- * `output` may be anywhere (typically `<root>/dist`, but the user
- * can redirect it via `--output`). We compute a relative path so the
- * redirect file is portable across machines / repos.
- */
-export function writeDeployRedirectIfMissing(root: string, output: string): void {
-	const redirectDir = path.join(root, '.wrangler', 'deploy');
-	const redirectPath = path.join(redirectDir, 'config.json');
-
-	if (fs.existsSync(redirectPath)) {
-		return;
-	}
-
-	fs.mkdirSync(redirectDir, { recursive: true });
-	// `configPath` is resolved relative to the redirect file's own directory.
-	// Compute a relative path from there to the actual generated config so
-	// the redirect tracks `--output` overrides correctly.
-	const targetPath = path.join(output, 'wrangler.jsonc');
-	const relConfigPath = path.relative(redirectDir, targetPath).split(path.sep).join('/');
-	fs.writeFileSync(
-		redirectPath,
-		`${JSON.stringify({ configPath: relConfigPath }, null, 2)}\n`,
-		'utf-8',
 	);
 }

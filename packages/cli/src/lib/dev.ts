@@ -13,11 +13,10 @@
  * Cloudflare path filters to "structural" changes only.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseEnv } from 'node:util';
-import { build, resolveSourceRoot } from './build.ts';
+import { build, cloudflareViteConfigPath, cloudflareViteInputDir, createCloudflareViteConfig, resolveSourceRoot } from './build.ts';
 import type { BuildOptions } from './types.ts';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -40,12 +39,11 @@ export interface DevOptions {
 	 *
 	 * - Node: parsed with `node:util.parseEnv` and merged into the child
 	 *   server process's env. Shell-set env vars win over file values.
-	 * - Cloudflare: passed through to wrangler's `unstable_startWorker` as
-	 *   `envFiles`, which loads them as `secret_text` bindings.
+	 * - Cloudflare: unsupported; the official Vite integration loads local
+	 *   variables from `.dev.vars` or `.env` beside the project config.
 	 *
-	 * If empty/undefined, no env loading happens. Cloudflare's auto-discovery
-	 * of `.dev.vars` is disabled in either case (we always pass an explicit
-	 * `envFiles` array to wrangler so its default search is suppressed).
+	 * If empty/undefined, Node performs no explicit env loading and Cloudflare
+	 * uses the official Vite/Workers local variable behavior.
 	 *
 	 * Each path must exist; otherwise dev fails fast with a clear error.
 	 */
@@ -102,7 +100,10 @@ export async function dev(options: DevOptions): Promise<void> {
 	// Resolve env files up front so a typo errors before we kick off a build.
 	// Resolved against root (the project root) so relative paths feel
 	// natural — "the path they look like from where I ran flue".
-	const envFiles = resolveEnvFiles(options.envFiles, root);
+	if (options.target === 'cloudflare' && options.envFiles?.length) {
+		throw new Error('[flue] Cloudflare dev uses the official Vite integration and does not support --env <path>. Put local variables in .dev.vars or .env beside your wrangler config; use CLOUDFLARE_ENV for environment-specific files.');
+	}
+	const envFiles = options.target === 'node' ? resolveEnvFiles(options.envFiles, root) : [];
 	for (const f of envFiles) {
 		console.error(`[flue] Loading env from: ${f}`);
 	}
@@ -111,6 +112,7 @@ export async function dev(options: DevOptions): Promise<void> {
 		root,
 		output,
 		target: options.target,
+		mode: options.target === 'cloudflare' ? 'development' : 'build',
 	};
 
 	console.error(`[flue] Starting dev server (target: ${options.target})`);
@@ -130,7 +132,7 @@ export async function dev(options: DevOptions): Promise<void> {
 	const reloader: DevReloader =
 		options.target === 'node'
 			? new NodeReloader({ root, output, port, envFiles })
-			: await createCloudflareReloader({ output, port, envFiles });
+			: await createCloudflareReloader({ root, port });
 
 	await reloader.start();
 
@@ -554,253 +556,61 @@ class NodeReloader implements DevReloader {
 
 // ─── Cloudflare reloader ────────────────────────────────────────────────────
 
-/**
- * Shape of the error events emitted by wrangler's `DevEnv` (returned as
- * `worker.raw`). We only consume the user-visible fields. Mirrors wrangler's
- * `BaseErrorEvent`/`ErrorEvent` types without taking a hard dependency on
- * those internal type names.
- */
-interface WranglerErrorEvent {
-	type: 'error';
-	reason: string;
-	cause: Error | { message?: string; stack?: string; name?: string };
-	source: string;
-	data?: unknown;
-}
-
-/**
- * Lazy-import wrangler so users targeting only Node don't need it installed.
- * If the import fails, surface a friendly message pointing at the peer-dep.
- */
 async function createCloudflareReloader(opts: {
-	output: string;
+	root: string;
 	port: number;
-	envFiles: string[];
 }): Promise<DevReloader> {
-	let wrangler: typeof import('wrangler');
-	try {
-		wrangler = (await import('wrangler')) as typeof import('wrangler');
-	} catch (err) {
-		throw new Error(
-			`[flue] Cloudflare dev requires the "wrangler" package as a peer dependency.\n` +
-				`Install it in your project:\n\n` +
-				`  npm install --save-dev wrangler\n\n` +
-				`Underlying error: ${err instanceof Error ? err.message : String(err)}`,
-		);
-	}
-
-	return new CloudflareReloader(wrangler, opts);
+	return new CloudflareReloader(opts);
 }
 
 class CloudflareReloader implements DevReloader {
-	private worker: Awaited<ReturnType<typeof import('wrangler').unstable_startWorker>> | null =
-		null;
-	private readonly wrangler: typeof import('wrangler');
+	private server: Awaited<ReturnType<typeof import('vite').createServer>> | null = null;
+	private readonly root: string;
 	private readonly port: number;
 	private readonly configPath: string;
-	private readonly envFiles: string[];
-	/**
-	 * Stable container build ID for the lifetime of this reloader instance.
-	 *
-	 * `unstable_startWorker` does NOT default this field — only wrangler's CLI
-	 * path does, via `generateContainerBuildId()`. When the user's wrangler
-	 * config declares `containers[]` (e.g. via `@cloudflare/sandbox`), the
-	 * first `onBundleComplete` calls `getImageNameFromDOClassName(...)` which
-	 * asserts that `options.containerBuildId` is set; without this, the
-	 * assertion throws, the `ProxyController` never gets `reloadComplete`,
-	 * and every request hangs (including `/health`). See issue #22.
-	 *
-	 * We generate it once per reloader and reuse it across reloads so that
-	 * wrangler's container-prep cache hits when nothing about the image
-	 * changed. Format matches wrangler's own helper: an 8-char UUID slice.
-	 */
-	private readonly containerBuildId: string;
-	/**
-	 * Bound listener for `DevEnv` `'error'` events. Stored so we can detach
-	 * it on `disposeWorker()` — the underlying `EventEmitter` outlives the
-	 * worker handle, so if the listener stayed attached we'd leak (and
-	 * double-fire) across reloads.
-	 */
-	private errorListener: ((event: WranglerErrorEvent) => void) | null = null;
+	private readonly entryPath: string;
 	url?: string;
 
-	constructor(
-		wrangler: typeof import('wrangler'),
-		opts: { output: string; port: number; envFiles: string[] },
-	) {
-		this.wrangler = wrangler;
+	constructor(opts: { root: string; port: number }) {
+		this.root = opts.root;
 		this.port = opts.port;
-		this.envFiles = opts.envFiles;
-		this.configPath = path.join(opts.output, 'wrangler.jsonc');
-		this.containerBuildId = randomUUID().slice(0, 8);
+		const inputDir = cloudflareViteInputDir(opts.root);
+		this.configPath = cloudflareViteConfigPath(opts.root);
+		this.entryPath = path.join(inputDir, '_entry.ts');
 	}
 
 	async start(): Promise<void> {
-		await this.startWorker();
+		const { createServer } = await import('vite');
+		this.server = await createServer({
+			...createCloudflareViteConfig(this.root, this.configPath, [this.entryPath]),
+			logLevel: 'info',
+			server: { host: '127.0.0.1', port: this.port, strictPort: true },
+		});
+		await this.server.listen();
+		this.url = this.server.resolvedUrls?.local[0]?.replace(/\/$/, '') ?? `http://127.0.0.1:${this.port}`;
 	}
 
 	shouldRebuildOn(relPath: string): boolean {
-		// Env-file changes come through the watcher as absolute paths — match
-		// directly against our resolved set rather than the root-relative
-		// suffix logic used for source files.
-		if (this.envFiles.includes(relPath)) return true;
-
 		const normalized = relPath.replace(/\\/g, '/');
-		if (
-			normalized === 'wrangler.jsonc' ||
-			normalized === 'wrangler.json' ||
-			normalized === 'wrangler.toml'
-		) {
-			return true;
-		}
+		if (normalized === 'wrangler.jsonc' || normalized === 'wrangler.json' || normalized === 'wrangler.toml') return true;
 		if (normalized.startsWith('agents/') || normalized.startsWith('.flue/agents/')) return true;
 		if (normalized.startsWith('workflows/') || normalized.startsWith('.flue/workflows/')) return true;
-		if (/^(?:\.flue\/)?app\.(?:ts|mts|js|mjs)$/.test(normalized)) return true;
-		return false;
+		if (normalized.startsWith('channels/') || normalized.startsWith('.flue/channels/')) return true;
+		return /^(?:\.flue\/)?app\.(?:ts|mts|js|mjs)$/.test(normalized);
 	}
 
 	async reload(buildChanged: boolean): Promise<void> {
-		if (!buildChanged) {
-			console.error(`[flue] No structural change — wrangler will hot-reload\n`);
-			return;
-		}
-		await this.disposeWorker();
-		await this.startWorker();
+		if (buildChanged) await this.server?.restart();
 	}
 
 	async stop(): Promise<void> {
-		await this.disposeWorker();
-	}
-
-	killSync(): void {
-		// `unstable_startWorker` runs `workerd` as a child process, but we
-		// have no synchronous handle to it from this layer. The parent's
-		// exit cascades to workerd via shared process group on macOS/Linux.
-		this.worker = null;
-	}
-
-	// ── Internals ──
-
-	private async startWorker(): Promise<void> {
-		if (!fs.existsSync(this.configPath)) {
-			throw new Error(
-				`[flue] Expected ${this.configPath} after build, but it doesn't exist. ` +
-					`Did the Cloudflare build succeed?`,
-			);
-		}
-
-		// `unstable_startWorker` requires `build.nodejsCompatMode` to be set
-		// explicitly — it doesn't derive it from `compatibility_flags` in the
-		// config (that's the caller's job; wrangler's own CLI passes a hook).
-		//
-		// We hardcode `'v2'` because Flue's invariants make it the only
-		// correct value for any Flue worker:
-		//   - `validateUserWranglerConfig` rejects configs whose
-		//     `compatibility_flags` is set without `nodejs_compat`.
-		//   - `mergeFlueAdditions` adds `nodejs_compat` when missing.
-		//   - `compatibility_date` is floored at `MIN_COMPATIBILITY_DATE`
-		//     (2026-04-01), well past the v1→v2 cutover (2024-09-23).
-		//
-		// So at the point this runs, the merged dist/wrangler.jsonc is
-		// guaranteed to have `nodejs_compat` set with a compat date that
-		// resolves to v2 mode. Reading the config to compute it would just
-		// re-derive the constant on every reload.
-		// Always pass an explicit `envFiles` array (even if empty). Per
-		// wrangler's docs: "If `envFiles` is defined, only the files in the
-		// array will be considered for loading local dev variables." So an
-		// explicit `[]` fully disables wrangler's auto-discovery (which by
-		// default would hunt in the dist/ dir for `.dev.vars` and `.env*` —
-		// the wrong place since our config lives there but the user's env
-		// files don't).
-		//
-		// Users opt into env loading via `--env <path>` on the CLI.
-		// Paths come in as absolute (resolved + existence-checked at the
-		// `dev()` entry point), so wrangler's "relative to config dir"
-		// resolution doesn't apply.
-		this.worker = await this.wrangler.unstable_startWorker({
-			config: this.configPath,
-			envFiles: this.envFiles,
-			build: {
-				nodejsCompatMode: 'v2',
-			},
-			dev: {
-				server: {
-					hostname: 'localhost',
-					port: this.port,
-				},
-				// We drive structural reloads via our own watcher. wrangler's
-				// own source-graph watcher remains active inside the worker
-				// (it's what gives us hot-reload on agent body edits).
-				watch: false,
-				logLevel: 'info',
-				// REQUIRED whenever the merged config has `containers[]`.
-				// `unstable_startWorker` does not default this; the wrangler
-				// CLI path does (via `generateContainerBuildId`). Without it,
-				// `onBundleComplete` → `getImageNameFromDOClassName` asserts,
-				// the proxy controller never gets `reloadComplete`, and every
-				// request hangs forever (issue #22). Stable across reloads so
-				// container-prep cache hits when the image hasn't changed.
-				containerBuildId: this.containerBuildId,
-			},
-		});
-
-		// Surface controller errors that wrangler's own central handler
-		// silently routes to `logger.debug(...)` (suppressed at our `info`
-		// level). Without this, problems like "Docker daemon not running" or
-		// any future runtime-controller assertion produce zero output and a
-		// hung server. We re-emit at `console.error` with a `[flue]` prefix.
-		//
-		// The handler is bound here (not in the constructor) because
-		// `worker.raw` doesn't exist until `unstable_startWorker` resolves.
-		// We keep a reference so `disposeWorker()` can detach it — the
-		// `DevEnv` instance can outlive the worker handle across reloads.
-		this.errorListener = (event: WranglerErrorEvent) => {
-			const reason = event?.reason ?? 'unknown error';
-			const cause = event?.cause;
-			const causeMsg =
-				cause && typeof cause === 'object' && 'message' in cause
-					? (cause as { message?: string }).message
-					: undefined;
-			console.error(`[flue] Wrangler error (${event?.source ?? 'unknown'}): ${reason}`);
-			if (causeMsg) console.error(`[flue]   ${causeMsg}`);
-		};
-		this.worker.raw.on('error', this.errorListener);
-
-		try {
-			const url = await this.worker.url;
-			this.url = url.toString().replace(/\/$/, '');
-		} catch {
-			this.url = `http://127.0.0.1:${this.port}`;
-		}
-	}
-
-	private async disposeWorker(): Promise<void> {
-		const worker = this.worker;
-		const listener = this.errorListener;
-		this.worker = null;
-		this.errorListener = null;
-		if (!worker) return;
-		// Detach the error listener before disposing. The `DevEnv`
-		// EventEmitter can outlive a single worker handle across reloads;
-		// leaving the old listener attached would compound on each reload.
-		if (listener) {
-			try {
-				worker.raw.off('error', listener);
-			} catch {
-				// Best-effort; never let cleanup throw.
-			}
-		}
-		try {
-			await worker.dispose();
-		} catch (err) {
-			console.error(
-				`[flue] Error disposing Cloudflare worker: ${err instanceof Error ? err.message : String(err)}`,
-			);
-		}
+		await this.server?.close();
+		this.server = null;
 	}
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
 
 /**
  * Resolve and validate a list of env-file paths. Returns absolute paths.

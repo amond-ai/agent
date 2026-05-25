@@ -39,8 +39,9 @@ export interface BuildContext {
 	 *
 	 * Note that this is the literal output directory — `server.mjs`,
 	 * `wrangler.jsonc`, etc. are written directly inside it. The user's
-	 * `wrangler.jsonc` and the wrangler deploy-redirect file still anchor
-	 * on `root`, regardless of this value.
+		 * Cloudflare's generated Vite input configuration and official-plugin
+		 * deployment redirect still anchor on `root`, regardless of this value.
+
 	 */
 	output: string;
 	/**
@@ -121,6 +122,7 @@ export interface BuildOptions {
 	 */
 	output?: string;
 	target?: 'node' | 'cloudflare';
+	mode?: 'build' | 'development';
 	/** Overrides `target` when provided. */
 	plugin?: BuildPlugin;
 }
