@@ -1,5 +1,5 @@
 declare module '*/SKILL.md' {
-	import type { SkillDefinition, SkillReference } from '@flue/runtime';
-	const skill: SkillDefinition | SkillReference;
+	import type { SkillReference } from '@flue/runtime';
+	const skill: SkillReference;
 	export default skill;
 }
