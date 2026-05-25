@@ -622,6 +622,8 @@ export interface FlueSession {
 	): CallHandle<PromptResultResponse<v.InferOutput<S>>>;
 	task(text: string, options?: TaskOptions): CallHandle<PromptResponse>;
 
+	delegate(text: string, options: DelegateOptions): CallHandle<PromptResponse>;
+
 	/**
 	 * Trigger compaction immediately. Equivalent to what automatic
 	 * compaction would run when crossing the configured threshold, but
@@ -824,6 +826,13 @@ export interface TaskOptions<S extends v.GenericSchema | undefined = undefined> 
 	images?: PromptImage[];
 }
 
+export interface DelegateOptions {
+	agent: CreatedAgent;
+	id: string;
+	/** Cancel this delegated prompt. See `CallHandle`. */
+	signal?: AbortSignal;
+}
+
 export interface ShellOptions {
 	env?: Record<string, string>;
 	cwd?: string;
@@ -1000,6 +1009,8 @@ export type FlueEvent = (
 		}
 	| { type: 'task_start'; taskId: string; prompt: string; agent?: string; cwd?: string }
 	| { type: 'task'; taskId: string; agent?: string; isError: boolean; result?: any; durationMs: number }
+	| { type: 'delegation_start'; delegationId: string; targetInstanceId: string; prompt: string }
+	| { type: 'delegation'; delegationId: string; targetInstanceId: string; isError: boolean; result?: any; durationMs: number }
 	| {
 			type: 'compaction_start';
 			reason: 'threshold' | 'overflow' | 'manual';
@@ -1009,12 +1020,12 @@ export type FlueEvent = (
 	| {
 			type: 'operation_start';
 			operationId: string;
-			operationKind: 'prompt' | 'skill' | 'task' | 'shell' | 'compact';
+			operationKind: 'prompt' | 'skill' | 'task' | 'delegate' | 'shell' | 'compact';
 		}
 	| {
 			type: 'operation';
 			operationId: string;
-			operationKind: 'prompt' | 'skill' | 'task' | 'shell' | 'compact';
+			operationKind: 'prompt' | 'skill' | 'task' | 'delegate' | 'shell' | 'compact';
 			durationMs: number;
 			isError: boolean;
 			error?: unknown;
@@ -1033,6 +1044,7 @@ export type FlueEvent = (
 	runId?: string;
 	instanceId?: string;
 	dispatchId?: string;
+	delegationId?: string;
 	eventIndex?: number;
 	timestamp?: string;
 	session?: string;

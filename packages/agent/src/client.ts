@@ -1,6 +1,7 @@
 import { assertResolvedAgentProfile, resolveAgentProfile } from './agent-definition.ts';
 import { discoverSessionContext } from './context.ts';
 import { Harness } from './harness.ts';
+import type { InvokeAgentDelegation } from './session.ts';
 import { dispatchGlobalEvent } from './runtime/events.ts';
 import { bashFactoryToSessionEnv, createCwdSessionEnv, isBashLike } from './sandbox.ts';
 import type {
@@ -24,6 +25,7 @@ export interface FlueContextConfig {
 	id: string;
 	runId?: string;
 	dispatchId?: string;
+	delegationId?: string;
 	payload: any;
 	env: Record<string, any>;
 	agentConfig: AgentConfig;
@@ -41,6 +43,7 @@ export interface FlueContextConfig {
 	 */
 	req?: Request;
 	initialEventIndex?: number;
+	invokeAgentDelegation?: InvokeAgentDelegation;
 }
 
 /** Extends FlueContext with server-only methods. Agent handlers only see FlueContext. */
@@ -63,6 +66,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 			...event,
 			...(config.runId === undefined ? { instanceId: config.id } : { runId: config.runId }),
 			...(config.dispatchId === undefined ? {} : { dispatchId: config.dispatchId }),
+			...(config.delegationId === undefined ? {} : { delegationId: config.delegationId }),
 			eventIndex: eventIndex++,
 			timestamp: new Date().toISOString(),
 		};
@@ -191,6 +195,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 					},
 					definition.tools,
 					toolFactory,
+					config.invokeAgentDelegation,
 				);
 			} catch (error) {
 				initializedHarnessNames.delete(name);
