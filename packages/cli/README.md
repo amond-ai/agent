@@ -33,11 +33,11 @@ Unless you opt-in to initializing a full container sandbox, Flue will default to
 
 ```ts
 // .flue/workflows/hello-world.ts
-import { createAgent, http, type FlueContext } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import * as v from 'valibot';
 
-// Every HTTP-exposed workflow needs an HTTP channel.
-export const channels = [http()];
+// Public HTTP exposure is enabled by exported Hono middleware.
+export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 const translator = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6' }));
 
@@ -71,11 +71,11 @@ Because this agent is deployed to Cloudflare, message history and session state 
 
 ```ts
 // .flue/workflows/support.ts
-import { createAgent, http, type FlueContext } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import { getDefaultWorkspace, getShellSandbox, hydrateFromBucket } from '@flue/runtime/cloudflare';
 import * as v from 'valibot';
 
-export const channels = [http()];
+export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 export async function run({ init, payload, env }: FlueContext) {
   const workspace = getDefaultWorkspace();
@@ -166,11 +166,11 @@ Install the Daytona connector with `flue add daytona | <your-agent>` (e.g. `clau
 
 ```ts
 // .flue/workflows/code.ts
-import { Type, createAgent, defineTool, http, type FlueContext } from '@flue/runtime';
+import { Type, createAgent, defineTool, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import { Daytona } from '@daytona/sdk';
 import { daytona } from '../connectors/daytona';
 
-export const channels = [http()];
+export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 export async function run({ init, payload, env }: FlueContext) {
   // Each agent gets a real container via Daytona. The container has
@@ -217,9 +217,9 @@ MCP is available as a runtime tool adapter. Connect to a remote MCP server in tr
 
 ```ts
 // .flue/workflows/assistant.ts
-import { connectMcpServer, createAgent, http, type FlueContext } from '@flue/runtime';
+import { connectMcpServer, createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 
-export const channels = [http()];
+export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 export async function run({ init, payload, env }: FlueContext) {
   const github = await connectMcpServer('github', {
@@ -254,7 +254,7 @@ POST /agents/<agent-name>/<id>
 GET  /agents/<agent-name>/<id>  (Upgrade: websocket)
 ```
 
-Declare `websocket()` to open a long-lived SDK connection to that stable instance. One agent socket can issue sequential prompts and select a session per prompt; workflow sockets are one invocation per connection.
+In an agent module, import `type AgentWebSocketHandler` and export `const websocket: AgentWebSocketHandler = async (_c, next) => next();` to open a long-lived SDK connection to that stable instance; it may add authentication before calling `next()`. One agent socket can issue sequential prompts and select a session per prompt; workflow sockets are one invocation per connection.
 
 In workflows, `init(createdAgent)` creates a harness: a configured handle for model defaults, tools, sandbox, filesystem, and sessions. Pass `init(createdAgent, { name })` when one workflow needs multiple isolated harness scopes. In agent modules, the runtime initializes the module's default `createAgent(...)` export when a message arrives.
 
@@ -412,7 +412,7 @@ await job.ready;
 await job.invoke({ text: 'Summarize me' });
 ```
 
-With a custom `app.ts`, authenticate both agent and workflow WebSocket paths through ordinary Hono middleware before `app.route('/api', flue())`; the same routing model works on Node and Cloudflare. Configure `websocketBasePath: '/api'` for the custom mount and `websocketUrl: (url) => { url.searchParams.set('token', socketToken); return url; }` for URL-carried or signed handshake authentication. HTTP `token` and `headers` options do not automatically apply to WebSocket upgrades; browsers should use cookies or application-designed URL authentication, while Node clients needing implementation-specific headers can provide a custom `websocket` factory. Without a custom app, protect production socket endpoints through an authenticated upstream gateway or proxy. Avoid header-mutating middleware around WebSocket upgrade routes. `flue dev --target cloudflare` requires `wrangler` as a peer dependency in your project (`npm install --save-dev wrangler`).
+An exported `websocket` middleware can authenticate its own agent or workflow socket endpoint. Use a custom `app.ts` for centralized authentication or mounted prefixes, applying ordinary Hono middleware before `app.route('/api', flue())`; the same routing model works on Node and Cloudflare. Configure `websocketBasePath: '/api'` for the custom mount and `websocketUrl: (url) => { url.searchParams.set('token', socketToken); return url; }` for URL-carried or signed handshake authentication. HTTP `token` and `headers` options do not automatically apply to WebSocket upgrades; browsers should use cookies or application-designed URL authentication, while Node clients needing implementation-specific headers can provide a custom `websocket` factory. Avoid header-mutating middleware around WebSocket upgrade routes. `flue dev --target cloudflare` requires `wrangler` as a peer dependency in your project (`npm install --save-dev wrangler`).
 
 #### Loading environment variables
 
