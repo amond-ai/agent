@@ -309,7 +309,7 @@ class WorkflowNotHttpError extends FlueHttpError {
 			type: 'workflow_not_http',
 			message: `Workflow "${name}" is not web-accessible.`,
 			details: `This endpoint is not exposed over HTTP.`,
-			dev: `To expose it, export channels = [http()] or include http() alongside other workflow channels.`,
+			dev: `To expose it, export route middleware and call await next() to enter the workflow handler.`,
 			status: 404,
 		});
 	}

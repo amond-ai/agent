@@ -36,7 +36,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, created: true }],
+				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(agent) },
 			dispatchQueue: new InMemoryDispatchQueue({
@@ -67,6 +67,35 @@ describe('direct attached agent delivery', () => {
 		expect(initCalls).toEqual(['inst-1:undefined']);
 		expect(prompts).toEqual([{ session: 'default', message: 'hello' }]);
 		expect(dispatches).toEqual([]);
+	});
+
+	it('preserves agent JSON bodies after exported route middleware reads them', async () => {
+		const prompts: Array<{ session: string; message: string }> = [];
+		let verifiedBody = '';
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
+			agentRouteMiddleware: {
+				assistant: async (c, next) => {
+					verifiedBody = await c.req.text();
+					await next();
+				},
+			},
+			createContext: createFakeContext(prompts),
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const rawBody = JSON.stringify({ message: 'signed' });
+		const response = await app.fetch(new Request('http://localhost/agents/assistant/inst-1', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: rawBody,
+		}));
+
+		expect(response.status).toBe(200);
+		expect(verifiedBody).toBe(rawBody);
+		expect(prompts).toEqual([{ session: 'default', message: 'signed' }]);
 	});
 
 	it('documents the attached message/session body and attached SSE response', async () => {
@@ -104,7 +133,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, created: true }],
+				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createFakeContext(prompts),
@@ -132,7 +161,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, created: true }],
+				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createFakeContext([]),
@@ -189,7 +218,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, created: true }],
+				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createTestContext,
@@ -218,7 +247,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, created: true }],
+				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
 			},
 			handlers: {
 				assistant: createDirectAgentHandler(createAgent(() => ({

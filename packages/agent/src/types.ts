@@ -11,11 +11,6 @@ export type AgentWebSocketHandler = MiddlewareHandler;
 export type WorkflowRouteHandler = MiddlewareHandler;
 export type WorkflowWebSocketHandler = MiddlewareHandler;
 
-export interface WorkflowChannel<TName extends 'http' | 'websocket' = 'http' | 'websocket'> {
-	readonly __flueChannel: true;
-	readonly name: TName;
-}
-
 export type ChannelEventMap = object;
 
 export interface ChannelEventContext<TEvent, TThread> {

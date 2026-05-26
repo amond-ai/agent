@@ -40,17 +40,17 @@ describe('WebSocket transport foundation', () => {
 		expect(registeredWorkflowsForChannel(runtime, 'websocket')).toEqual(['socket-job', 'dual-job']);
 	});
 
-	it('preserves Node direct HTTP handler visibility without declaring WebSocket exposure', () => {
+	it('does not admit Node direct HTTP handlers without route exposure', () => {
 		const runtime: FlueRuntime = {
 			target: 'node',
-			handlers: { legacy: async () => null },
+			handlers: { internal: async () => null },
 			manifest: {
-				agents: [{ name: 'legacy', channels: {}, created: true }],
+				agents: [{ name: 'internal', channels: {}, created: true }],
 			},
 		};
 
-		expect(registeredAgentsForChannel(runtime, 'http')).toContain('legacy');
-		expect(registeredAgentsForChannel(runtime, 'websocket')).not.toContain('legacy');
+		expect(registeredAgentsForChannel(runtime, 'http')).not.toContain('internal');
+		expect(registeredAgentsForChannel(runtime, 'websocket')).not.toContain('internal');
 	});
 
 	it('does not admit WebSocket-only workflows through HTTP POST', async () => {
@@ -153,6 +153,68 @@ describe('WebSocket transport foundation', () => {
 		expect((await app.fetch(new Request('http://localhost/agents/assistant/one', upgrade))).status).toBe(401);
 		expect((await app.fetch(new Request('http://localhost/agents/assistant/one?token=ok', upgrade))).status).toBe(200);
 		expect(forwarded).toEqual(['POST:/agents/assistant/one', 'GET:/agents/assistant/one']);
+	});
+
+	it('preserves Cloudflare agent JSON bodies after exported route middleware reads them', async () => {
+		let verifiedBody = '';
+		let forwardedBody = '';
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			agentRouteMiddleware: {
+				assistant: async (c, next) => {
+					verifiedBody = await c.req.text();
+					await next();
+				},
+			},
+			routeAgentRequest: async (request) => {
+				forwardedBody = await request.text();
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const rawBody = JSON.stringify({ message: 'signed' });
+		const response = await app.fetch(new Request('http://localhost/agents/assistant/one', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: rawBody,
+		}));
+
+		expect(response.status).toBe(200);
+		expect(verifiedBody).toBe(rawBody);
+		expect(forwardedBody).toBe(rawBody);
+	});
+
+	it('preserves Cloudflare workflow JSON bodies after exported route middleware reads them', async () => {
+		let verifiedBody = '';
+		let forwardedBody = '';
+		configureFlueRuntime({
+			target: 'cloudflare',
+			manifest: { agents: [], workflows: [{ name: 'signed', channels: { http: true } }] },
+			workflowRouteMiddleware: {
+				signed: async (c, next) => {
+					verifiedBody = await c.req.text();
+					await next();
+				},
+			},
+			routeWorkflowRequest: async (request) => {
+				forwardedBody = await request.text();
+				return Response.json({ ok: true });
+			},
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const rawBody = JSON.stringify({ event: 'created' });
+		const response = await app.fetch(new Request('http://localhost/workflows/signed', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: rawBody,
+		}));
+
+		expect(response.status).toBe(200);
+		expect(verifiedBody).toBe(rawBody);
+		expect(forwardedBody).toBe(rawBody);
 	});
 
 	it('does not execute an attached handler twice when exported middleware calls next twice', async () => {

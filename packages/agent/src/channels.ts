@@ -4,16 +4,7 @@ import type {
 	ChannelListener,
 	ChannelOptions,
 	DefinedChannel,
-	WorkflowChannel,
 } from './types.ts';
-
-export function http(): WorkflowChannel<'http'> {
-	return { __flueChannel: true, name: 'http' };
-}
-
-export function websocket(): WorkflowChannel<'websocket'> {
-	return { __flueChannel: true, name: 'websocket' };
-}
 
 export function defineChannel<TEvents extends ChannelEventMap, TThread>(
 	options: ChannelOptions<TEvents, TThread>,

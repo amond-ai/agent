@@ -335,6 +335,47 @@ describe('POST /workflows/:name routes via flue()', () => {
 		expect(body._meta.runId.startsWith('workflow:daily-report:')).toBe(true);
 	});
 
+	it('preserves workflow JSON bodies after exported route middleware reads them', async () => {
+		let verifiedBody = '';
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'signed', channels: { http: true } }] },
+			workflowHandlers: { signed: async (ctx) => ({ echoed: ctx.payload }) },
+			workflowRouteMiddleware: {
+				signed: async (c, next) => {
+					verifiedBody = await c.req.text();
+					await next();
+				},
+			},
+			createContext: (id, runId, payload, req) =>
+				createFlueContext({
+					id,
+					runId,
+					payload,
+					env: {},
+					req,
+					agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+					createDefaultEnv: async () => ({}) as never,
+					defaultStore: new InMemorySessionStore(),
+				}),
+			runStore: new InMemoryRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+			runSubscribers: createRunSubscriberRegistry(),
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const rawBody = JSON.stringify({ event: 'created' });
+		const response = await app.fetch(new Request('http://localhost/workflows/signed?wait=result', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: rawBody,
+		}));
+
+		expect(response.status).toBe(200);
+		expect(verifiedBody).toBe(rawBody);
+		expect(await response.json()).toMatchObject({ result: { echoed: { event: 'created' } } });
+	});
+
 	it('returns workflow errors through wait=result while keeping the run id header', async () => {
 		configureFlueRuntime({
 			target: 'node',

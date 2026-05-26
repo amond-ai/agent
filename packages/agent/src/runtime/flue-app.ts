@@ -526,6 +526,7 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 		registeredWorkflows: workflows.map((workflow) => workflow.name),
 		httpWorkflows: registeredWorkflowsForChannel(rt, 'http'),
 	});
+	const request = c.req.raw.clone();
 
 	return runAttachedMiddleware(c, rt.workflowRouteMiddleware?.[name], async () => {
 		if (rt.target === 'node') {
@@ -535,7 +536,7 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 				throw new Error('[flue] Node runtime is missing workflow handler configuration.');
 			}
 			return handleWorkflowRequest({
-				request: c.req.raw,
+				request,
 				workflowName: name,
 				handler,
 				createContext,
@@ -553,7 +554,7 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 		// One workflow run = one workflow DO instance. The instanceId IS the
 		// runId; the DO it lands on then re-uses that value to seed its run
 		// record via handleWorkflowRequest({ runId: instanceId, ... }).
-		const response = await rt.routeWorkflowRequest(c.req.raw.clone(), c.env, {
+		const response = await rt.routeWorkflowRequest(request, c.env, {
 			workflowName: name,
 			instanceId: generateWorkflowRunId(name),
 		});
@@ -580,6 +581,7 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 		id,
 		registeredAgents: registeredAgentsForChannel(rt, 'http'),
 	});
+	const request = c.req.raw.clone();
 
 	return runAttachedMiddleware(c, rt.agentRouteMiddleware?.[name], async () => {
 		if (rt.target === 'node') {
@@ -589,7 +591,7 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 				throw new Error('[flue] Node runtime is missing agent handler configuration.');
 			}
 			return handleAgentRequest({
-				request: c.req.raw,
+				request,
 				agentName: name,
 				id,
 				handler,
@@ -601,7 +603,7 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 		if (!rt.routeAgentRequest) {
 			throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
 		}
-		const response = await rt.routeAgentRequest(c.req.raw.clone(), c.env);
+		const response = await rt.routeAgentRequest(request, c.env);
 		if (response) return response;
 
 		throw new RouteNotFoundError({
@@ -746,11 +748,9 @@ function normalizeAttachedRequest(request: Request, pathname: string): Request {
 }
 
 export function registeredAgentsForChannel(rt: FlueRuntime, channel: AttachedChannel): readonly string[] {
-	const declared = (rt.manifest?.agents ?? [])
+	return (rt.manifest?.agents ?? [])
 		.filter((agent) => agent.channels[channel] === true)
 		.map((agent) => agent.name);
-	if (channel !== 'http' || rt.target !== 'node') return declared;
-	return [...new Set([...declared, ...Object.keys(rt.handlers ?? {})])];
 }
 
 export function registeredWorkflowsForChannel(rt: FlueRuntime, channel: AttachedChannel): readonly string[] {

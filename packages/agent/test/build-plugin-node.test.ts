@@ -44,7 +44,7 @@ describe('Node build plugin', () => {
 		fs.mkdirSync(path.join(root, 'workflows'));
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'smoke.ts'),
-			`import { http } from '@flue/runtime';\nexport const channels = [http()];\nexport async function run() { return { ok: true }; }\n`,
+			`export const route = async (_c, next) => next();\nexport async function run() { return { ok: true }; }\n`,
 		);
 		await build({ root, target: 'node' });
 
@@ -70,7 +70,7 @@ describe('Node build plugin', () => {
 		fs.writeFileSync(path.join(root, 'skills', 'review', 'references', 'checklist.md'), 'Check the result.\n');
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'inspect.ts'),
-			`import { http } from '@flue/runtime';\nimport review from '../skills/review/SKILL.md' with { type: 'skill' };\nexport const channels = [http()];\nexport async function run() { return { reference: review, hasBody: 'body' in review, hasFiles: 'files' in review }; }\n`,
+			`import review from '../skills/review/SKILL.md' with { type: 'skill' };\nexport const route = async (_c, next) => next();\nexport async function run() { return { reference: review, hasBody: 'body' in review, hasFiles: 'files' in review }; }\n`,
 		);
 		await build({ root, target: 'node' });
 
@@ -97,8 +97,7 @@ describe('Node build plugin', () => {
 		fs.symlinkSync(process.cwd(), path.join(root, 'node_modules', '@flue', 'runtime'), 'dir');
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'smoke.ts'),
-			`import { http } from '@flue/runtime';\n` +
-				`export const channels = [http()];\n` +
+			`export const route = async (_c, next) => next();\n` +
 				`export async function run() { return { ok: true }; }\n`,
 		);
 		await build({ root, target: 'node' });
@@ -311,13 +310,12 @@ describe('Node build plugin', () => {
 		}
 	});
 
-	it('invokes a WebSocket-only workflow without exposing HTTP POST', async () => {
+	it('invokes a pass-through WebSocket-exported workflow without exposing HTTP POST', async () => {
 		const root = createFixtureRoot('flue-websocket-workflow-');
 		fs.mkdirSync(path.join(root, 'workflows'));
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'socket-job.ts'),
-			`import { websocket } from '@flue/runtime';\n` +
-				`export const channels = [websocket()];\n` +
+			`export const websocket = async (_c, next) => next();\n` +
 				`export async function run(ctx) { ctx.log.info('socket run'); return { echoed: ctx.payload }; }\n`,
 		);
 		await build({ root, target: 'node' });
@@ -346,8 +344,7 @@ describe('Node build plugin', () => {
 		fs.mkdirSync(path.join(root, 'workflows'));
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'http-job.ts'),
-			`import { http } from '@flue/runtime';\n` +
-				`export const channels = [http()];\n` +
+			`export const route = async (_c, next) => next();\n` +
 				`export async function run() { return { ok: true }; }\n`,
 		);
 		await build({ root, target: 'node' });
@@ -367,8 +364,8 @@ describe('Node build plugin', () => {
 		fs.mkdirSync(path.join(root, 'agents'));
 		fs.writeFileSync(
 			path.join(root, 'agents', 'assistant.ts'),
-			`import { createAgent, websocket } from '@flue/runtime';\n` +
-				`export const channels = [websocket()];\n` +
+			`import { createAgent } from '@flue/runtime';\n` +
+				`export const websocket = async (_c, next) => next();\n` +
 				`export default createAgent(() => ({ model: false }));\n`,
 		);
 		await build({ root, target: 'node' });
@@ -396,8 +393,8 @@ describe('Node build plugin', () => {
 		fs.mkdirSync(path.join(root, 'agents'));
 		fs.writeFileSync(
 			path.join(root, 'agents', 'assistant.ts'),
-			`import { createAgent, websocket } from '@flue/runtime';\n` +
-				`export const channels = [websocket()];\n` +
+			`import { createAgent } from '@flue/runtime';\n` +
+				`export const websocket = async (_c, next) => next();\n` +
 				`export default createAgent(() => ({ model: false }));\n`,
 		);
 		fs.writeFileSync(
@@ -535,10 +532,9 @@ describe('Node build plugin', () => {
 		fs.mkdirSync(path.join(root, 'workflows'));
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'draft.ts'),
-			`import { http } from '@flue/runtime';\n` +
-				`const channels = [http()];\n` +
+			`const route = async (_c, next) => next();\n` +
 				`const run = async () => ({ ok: true });\n` +
-				`export { channels, run };\n`,
+				`export { route, run };\n`,
 		);
 		await build({ root, target: 'node' });
 
@@ -577,7 +573,7 @@ describe('Node build plugin', () => {
 		}
 	});
 
-	it('rejects unsupported attached-channel markers on agents', async () => {
+	it('rejects deprecated channels exports on agents', async () => {
 		const root = createFixtureRoot('flue-agent-invalid-channel-');
 		fs.mkdirSync(path.join(root, 'agents'));
 		fs.writeFileSync(
@@ -596,7 +592,31 @@ describe('Node build plugin', () => {
 		});
 		try {
 			const output = await waitForProcessExit(child);
-			expect(output).toContain('Only http() and websocket() are supported.');
+			expect(output).toContain('exports channels, which is no longer supported. Export route middleware for HTTP access or websocket middleware for WebSocket access.');
+		} finally {
+			if (child.exitCode === null) child.kill('SIGTERM');
+		}
+	});
+
+	it('rejects deprecated channels exports on workflows', async () => {
+		const root = createFixtureRoot('flue-workflow-invalid-channel-');
+		fs.mkdirSync(path.join(root, 'workflows'));
+		fs.writeFileSync(
+			path.join(root, 'workflows', 'job.ts'),
+			`export const channels = [];\n` +
+				`export async function run() { return true; }\n`,
+		);
+		await build({ root, target: 'node' });
+
+		const port = await findAvailablePort();
+		const child = spawn('node', [path.join(root, 'dist', 'server.mjs')], {
+			cwd: root,
+			stdio: ['ignore', 'pipe', 'pipe'],
+			env: { ...process.env, PORT: String(port), FLUE_MODE: 'local' },
+		});
+		try {
+			const output = await waitForProcessExit(child);
+			expect(output).toContain('Workflow "job" exports channels, which is no longer supported. Export route middleware for HTTP access or websocket middleware for WebSocket access.');
 		} finally {
 			if (child.exitCode === null) child.kill('SIGTERM');
 		}
