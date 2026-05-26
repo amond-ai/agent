@@ -469,6 +469,24 @@ async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
   const startEvent = events.find((event) => event.type === 'run_start');
   const payload = run?.payload !== undefined ? run.payload : startEvent?.payload;
   const request = new Request('https://flue.invalid/workflows/' + encodeURIComponent(workflowName), { method: 'POST' });
+  if (payload === undefined) {
+    const error = new Error('Flue workflow recovery input is unavailable; replacement admission was not attempted.');
+    console.error('[flue:workflow-recovery]', { workflowName, interruptedRunId, operation: 'replacement_admission', outcome: 'restart_failed' }, error);
+    await failRecoveredRun({
+      label: workflowName,
+      owner: { kind: 'workflow', workflowName, instanceId: interruptedRunId },
+      id: interruptedRunId,
+      runId: interruptedRunId,
+      payload,
+      request,
+      error,
+      runStore,
+      runSubscribers,
+      runRegistry: createRunRegistryForRequest(doInstance.env),
+      createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+    });
+    return;
+  }
   const restartRunId = generateWorkflowRunId(workflowName);
   try {
     const binding = doInstance.env?.[workflowBindingNameFromWorkflowName(workflowName)];
@@ -480,9 +498,10 @@ async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
         'content-type': 'application/json',
         'x-flue-restarted-from-run-id': interruptedRunId,
       },
-      body: JSON.stringify(payload ?? {}),
+      body: JSON.stringify(payload),
     }));
     if (!response.ok) throw new Error('Flue workflow restart admission failed after deployment: ' + response.status);
+    console.info('[flue:workflow-recovery]', { workflowName, interruptedRunId, replacementRunId: restartRunId, operation: 'replacement_admission', outcome: 'restart_admitted' });
     await failRecoveredRun({
       label: workflowName,
       owner: { kind: 'workflow', workflowName, instanceId: interruptedRunId },
@@ -498,6 +517,7 @@ async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
       createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
     });
   } catch (error) {
+    console.error('[flue:workflow-recovery]', { workflowName, interruptedRunId, replacementRunId: restartRunId, operation: 'replacement_admission', outcome: 'restart_failed', retryable: error?.retryable, overloaded: error?.overloaded, remote: error?.remote }, error);
     await failRecoveredRun({
       label: workflowName,
       owner: { kind: 'workflow', workflowName, instanceId: interruptedRunId },
@@ -592,10 +612,6 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
       startWorkflowAdmission: (runId, run) => {
         assertAgentsDurabilityApi(doInstance, 'runFiber');
         return doInstance.runFiber('flue:workflow:' + runId, () => runWithInstanceContext(doInstance, identity, run));
-      },
-      runHandler: (ctx, h) => {
-        assertAgentsDurabilityApi(doInstance, 'keepAliveWhile');
-        return doInstance.keepAliveWhile(() => h(ctx));
       },
     }));
 }
