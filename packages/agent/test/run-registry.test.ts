@@ -253,6 +253,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		const runStore = new InMemoryRunStore();
 		const runRegistry = new InMemoryRunRegistry();
 		const runSubscribers = createRunSubscriberRegistry();
+		let admissions = 0;
 		configureFlueRuntime({
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
@@ -269,6 +270,10 @@ describe('POST /workflows/:name routes via flue()', () => {
 					createDefaultEnv: async () => ({}) as never,
 					defaultStore: new InMemorySessionStore(),
 				}),
+			startWorkflowAdmission: async (_runId, run) => {
+				admissions++;
+				return run();
+			},
 			runStore,
 			runRegistry,
 			runSubscribers,
@@ -287,6 +292,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		const body = (await admitted.json()) as { runId: string; status: string };
 		expect(body.status).toBe('accepted');
 		expect(body.runId.startsWith('workflow:daily-report:')).toBe(true);
+		expect(admissions).toBe(1);
 
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		const runRes = await app.fetch(new Request(`http://localhost/runs/${body.runId}`));
@@ -299,7 +305,9 @@ describe('POST /workflows/:name routes via flue()', () => {
 		});
 	});
 
-	it('waits for workflow results when wait=result is requested', async () => {
+	it('waits for workflow results through admitted execution when wait=result is requested', async () => {
+		let admissions = 0;
+		let foregroundRuns = 0;
 		configureFlueRuntime({
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
@@ -316,6 +324,14 @@ describe('POST /workflows/:name routes via flue()', () => {
 					createDefaultEnv: async () => ({}) as never,
 					defaultStore: new InMemorySessionStore(),
 				}),
+			startWorkflowAdmission: async (_runId, run) => {
+				admissions++;
+				return run();
+			},
+			runHandler: async (ctx, handler) => {
+				foregroundRuns++;
+				return handler(ctx);
+			},
 			runStore: new InMemoryRunStore(),
 			runRegistry: new InMemoryRunRegistry(),
 			runSubscribers: createRunSubscriberRegistry(),
@@ -333,6 +349,8 @@ describe('POST /workflows/:name routes via flue()', () => {
 		const body = (await res.json()) as { result: unknown; _meta: { runId: string } };
 		expect(body.result).toEqual({ echoed: { date: '2026-05-21' } });
 		expect(body._meta.runId.startsWith('workflow:daily-report:')).toBe(true);
+		expect(admissions).toBe(1);
+		expect(foregroundRuns).toBe(0);
 	});
 
 	it('preserves workflow JSON bodies after exported route middleware reads them', async () => {
@@ -404,11 +422,130 @@ describe('POST /workflows/:name routes via flue()', () => {
 		expect(res.headers.get('x-flue-run-id')?.startsWith('workflow:explode:')).toBe(true);
 	});
 
-	it('streams workflow execution when SSE is explicitly requested', async () => {
+	it('terminalizes wait=result before responding when admission setup throws', async () => {
+		const runStore = new DelayedEndRunStore();
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'explode', channels: { http: true } }] },
+			workflowHandlers: { explode: async () => ({ ok: true }) },
+			createContext: (id, runId, payload, req) =>
+				createFlueContext({
+					id,
+					runId,
+					payload,
+					env: {},
+					req,
+					agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+					createDefaultEnv: async () => ({}) as never,
+					defaultStore: new InMemorySessionStore(),
+				}),
+			startWorkflowAdmission: () => { throw new Error('admission failed'); },
+			runStore,
+			runRegistry: new InMemoryRunRegistry(),
+			runSubscribers: createRunSubscriberRegistry(),
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		let settled = false;
+		const responsePromise = Promise.resolve(app.fetch(new Request('http://localhost/workflows/explode?wait=result', { method: 'POST' }))).then((response) => {
+			settled = true;
+			return response;
+		});
+		await runStore.endStarted;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(settled).toBe(false);
+		runStore.releaseEnd();
+		const response = await responsePromise;
+		expect(response.status).toBe(500);
+		const runId = response.headers.get('x-flue-run-id');
+		expect(runId).toBeTruthy();
+		expect((await runStore.getRun(runId as string))?.status).toBe('errored');
+	});
+
+	it('streams admitted workflow execution when SSE is explicitly requested', async () => {
+		let admissions = 0;
+		let foregroundRuns = 0;
 		configureFlueRuntime({
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
 			handlers: {},
+			workflowHandlers: { 'daily-report': async () => ({ ok: true }) },
+			createContext: (id, runId, payload, req) =>
+				createFlueContext({
+					id,
+					runId,
+					payload,
+					env: {},
+					req,
+					agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+					createDefaultEnv: async () => ({}) as never,
+					defaultStore: new InMemorySessionStore(),
+				}),
+			startWorkflowAdmission: async (_runId, run) => {
+				admissions++;
+				return run();
+			},
+			runHandler: async (ctx, handler) => {
+				foregroundRuns++;
+				return handler(ctx);
+			},
+			runStore: new InMemoryRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+			runSubscribers: createRunSubscriberRegistry(),
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const res = await app.fetch(
+			new Request('http://localhost/workflows/daily-report', {
+				method: 'POST',
+				headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
+				body: JSON.stringify({}),
+			}),
+		);
+		expect(res.status).toBe(200);
+		expect(res.headers.get('content-type')).toMatch(/text\/event-stream/);
+		expect(admissions).toBe(1);
+		expect(foregroundRuns).toBe(0);
+		const text = await res.text();
+		expect(text).toMatch(/event: run_start/);
+		expect(text).toMatch(/event: run_end/);
+	});
+
+	it('delivers live SSE events after non-terminal persistence fails', async () => {
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
+			workflowHandlers: { 'daily-report': async (ctx) => { ctx.log.info('live'); return { ok: true }; } },
+			createContext: (id, runId, payload, req) =>
+				createFlueContext({
+					id,
+					runId,
+					payload,
+					env: {},
+					req,
+					agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+					createDefaultEnv: async () => ({}) as never,
+					defaultStore: new InMemorySessionStore(),
+				}),
+			runStore: new FailingLogEventRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+			runSubscribers: createRunSubscriberRegistry(),
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const response = await app.fetch(new Request('http://localhost/workflows/daily-report', {
+			method: 'POST',
+			headers: { accept: 'text/event-stream' },
+		}));
+		const body = await response.text();
+		expect(body).toMatch(/event: log/);
+		expect(body).toMatch(/event: run_end/);
+	});
+
+	it('ignores Last-Event-ID when initiating a new workflow SSE run', async () => {
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
 			workflowHandlers: { 'daily-report': async () => ({ ok: true }) },
 			createContext: (id, runId, payload, req) =>
 				createFlueContext({
@@ -427,18 +564,75 @@ describe('POST /workflows/:name routes via flue()', () => {
 		});
 		const app = new Hono();
 		app.route('/', flue());
-		const res = await app.fetch(
-			new Request('http://localhost/workflows/daily-report', {
-				method: 'POST',
-				headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
-				body: JSON.stringify({}),
-			}),
-		);
-		expect(res.status).toBe(200);
-		expect(res.headers.get('content-type')).toMatch(/text\/event-stream/);
-		const text = await res.text();
-		expect(text).toMatch(/event: run_start/);
-		expect(text).toMatch(/event: run_end/);
+		const response = await app.fetch(new Request('http://localhost/workflows/daily-report', {
+			method: 'POST',
+			headers: { accept: 'text/event-stream', 'last-event-id': '999' },
+		}));
+		const body = await response.text();
+		expect(body).toMatch(/event: run_start/);
+		expect(body).toMatch(/event: run_end/);
+	});
+
+	it('does not execute any HTTP workflow mode when durable admission persistence fails', async () => {
+		for (const suffix of ['', '?wait=result']) {
+			let admissions = 0;
+			let executions = 0;
+			configureFlueRuntime({
+				target: 'node',
+				manifest: { agents: [], workflows: [{ name: 'durable', channels: { http: true } }] },
+				workflowHandlers: { durable: async () => { executions++; return { ok: true }; } },
+				createContext: (id, runId, payload, req) =>
+					createFlueContext({
+						id,
+						runId,
+						payload,
+						env: {},
+						req,
+						agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+						createDefaultEnv: async () => ({}) as never,
+						defaultStore: new InMemorySessionStore(),
+					}),
+				startWorkflowAdmission: async (_runId, run) => { admissions++; return run(); },
+				runStore: new FailingCreateRunStore(),
+				runRegistry: new InMemoryRunRegistry(),
+				runSubscribers: createRunSubscriberRegistry(),
+			});
+			const app = new Hono();
+			app.route('/', flue());
+			const response = await app.fetch(new Request(`http://localhost/workflows/durable${suffix}`, { method: 'POST' }));
+			expect(response.status).toBe(500);
+			expect(admissions).toBe(0);
+			expect(executions).toBe(0);
+		}
+
+		let admissions = 0;
+		let executions = 0;
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'durable', channels: { http: true } }] },
+			workflowHandlers: { durable: async () => { executions++; return { ok: true }; } },
+			createContext: (id, runId, payload, req) =>
+				createFlueContext({
+					id,
+					runId,
+					payload,
+					env: {},
+					req,
+					agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+					createDefaultEnv: async () => ({}) as never,
+					defaultStore: new InMemorySessionStore(),
+				}),
+			startWorkflowAdmission: async (_runId, run) => { admissions++; return run(); },
+			runStore: new FailingCreateRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+			runSubscribers: createRunSubscriberRegistry(),
+		});
+		const app = new Hono();
+		app.route('/', flue());
+		const sse = await app.fetch(new Request('http://localhost/workflows/durable', { method: 'POST', headers: { accept: 'text/event-stream' } }));
+		expect(sse.status).toBe(500);
+		expect(admissions).toBe(0);
+		expect(executions).toBe(0);
 	});
 
 	it('initializes a workflow-created agent only when run requests it and passes workflow payload', async () => {
@@ -481,6 +675,9 @@ describe('POST /workflows/:name routes via flue()', () => {
 					}),
 					defaultStore: new InMemorySessionStore(),
 				}),
+			runStore: new InMemoryRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+			runSubscribers: createRunSubscriberRegistry(),
 		});
 		const app = new Hono();
 		app.route('/', flue());
@@ -780,6 +977,83 @@ describe('Bare /runs/:runId routes via flue()', () => {
 		expect(endIndex).toBeGreaterThan(logIndex);
 	});
 });
+
+class DelayedEndRunStore implements RunStore {
+	private inner = new InMemoryRunStore();
+	private resolveEndStarted!: () => void;
+	private resolveEnd!: () => void;
+	readonly endStarted = new Promise<void>((resolve) => { this.resolveEndStarted = resolve; });
+	private readonly endReleased = new Promise<void>((resolve) => { this.resolveEnd = resolve; });
+
+	createRun(input: Parameters<RunStore['createRun']>[0]): Promise<void> {
+		return this.inner.createRun(input);
+	}
+
+	async endRun(input: Parameters<RunStore['endRun']>[0]): Promise<void> {
+		this.resolveEndStarted();
+		await this.endReleased;
+		return this.inner.endRun(input);
+	}
+
+	releaseEnd(): void {
+		this.resolveEnd();
+	}
+
+	appendEvent(runId: string, event: FlueEvent): Promise<void> {
+		return this.inner.appendEvent(runId, event);
+	}
+
+	getEvents(runId: string, fromIndex?: number): Promise<FlueEvent[]> {
+		return this.inner.getEvents(runId, fromIndex);
+	}
+
+	getRun(runId: string): Promise<RunRecord | null> {
+		return this.inner.getRun(runId);
+	}
+}
+
+class FailingLogEventRunStore implements RunStore {
+	private inner = new InMemoryRunStore();
+
+	createRun(input: Parameters<RunStore['createRun']>[0]): Promise<void> {
+		return this.inner.createRun(input);
+	}
+
+	endRun(input: Parameters<RunStore['endRun']>[0]): Promise<void> {
+		return this.inner.endRun(input);
+	}
+
+	async appendEvent(runId: string, event: FlueEvent): Promise<void> {
+		if (event.type === 'log') throw new Error('log persistence failed');
+		return this.inner.appendEvent(runId, event);
+	}
+
+	getEvents(runId: string, fromIndex?: number): Promise<FlueEvent[]> {
+		return this.inner.getEvents(runId, fromIndex);
+	}
+
+	getRun(runId: string): Promise<RunRecord | null> {
+		return this.inner.getRun(runId);
+	}
+}
+
+class FailingCreateRunStore implements RunStore {
+	async createRun(_input: Parameters<RunStore['createRun']>[0]): Promise<void> {
+		throw new Error('create failed');
+	}
+
+	async endRun(_input: Parameters<RunStore['endRun']>[0]): Promise<void> {}
+
+	async appendEvent(_runId: string, _event: FlueEvent): Promise<void> {}
+
+	async getEvents(_runId: string, _fromIndex?: number): Promise<FlueEvent[]> {
+		return [];
+	}
+
+	async getRun(_runId: string): Promise<RunRecord | null> {
+		return null;
+	}
+}
 
 class SlowNonTerminalRunStore implements RunStore {
 	private inner = new InMemoryRunStore();

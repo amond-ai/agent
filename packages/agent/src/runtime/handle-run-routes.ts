@@ -2,7 +2,6 @@
 
 import { InvalidRequestError, RunNotFoundError, RunStoreUnavailableError } from '../errors.ts';
 import type { FlueEvent } from '../types.ts';
-import { SSE_HEARTBEAT_MS } from './handle-agent.ts';
 import type { RunOwner } from './run-registry.ts';
 import type { RunRecord, RunStore } from './run-store.ts';
 import type { RunSubscriberRegistry } from './run-subscribers.ts';
@@ -18,6 +17,7 @@ export interface HandleRunRouteOptions {
 
 const EVENTS_DEFAULT_LIMIT = 100;
 const EVENTS_MAX_LIMIT = 1000;
+const SSE_HEARTBEAT_MS = 15_000;
 
 /** Buffer cap for events published while a live stream is replaying history. */
 const REPLAY_BUFFER_CAP = 1000;
@@ -101,6 +101,10 @@ interface ReplayThenTailOptions {
 	subscribers: RunSubscriberRegistry;
 	runId: string;
 	fromIndex: number | undefined;
+}
+
+export function streamActiveRunEvents(store: RunStore, subscribers: RunSubscriberRegistry, runId: string): Response {
+	return streamReplayThenTail({ store, subscribers, runId, fromIndex: undefined });
 }
 
 function streamReplayThenTail(opts: ReplayThenTailOptions): Response {
@@ -207,7 +211,6 @@ function streamReplayThenTail(opts: ReplayThenTailOptions): Response {
 			})();
 		},
 		cancel() {
-			closed = true;
 			onClose?.();
 		},
 	});

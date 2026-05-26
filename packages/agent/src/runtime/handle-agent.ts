@@ -1,9 +1,10 @@
 /** Shared per-agent HTTP dispatcher for the Node and Cloudflare targets. */
 
 import type { FlueContextInternal } from '../client.ts';
-import { InvalidRequestError, parseJsonBody, RunEventTooLargeError, toHttpResponse, toPublicError } from '../errors.ts';
+import { InvalidRequestError, parseJsonBody, RunEventTooLargeError, RunStoreUnavailableError, toHttpResponse, toPublicError } from '../errors.ts';
 import type { AttachedAgentEvent, AttachedAgentEventCallback, CreatedAgent, DirectAgentPayload, DispatchReceipt, FlueEvent, FlueEventCallback } from '../types.ts';
 import type { DispatchInput, DispatchProcessor } from './dispatch-queue.ts';
+import { streamActiveRunEvents } from './handle-run-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
 import type { RunOwner, RunRegistry } from './run-registry.ts';
 import type { RunStore } from './run-store.ts';
@@ -149,7 +150,7 @@ export type CreateContextFn = (
  *   - Cloudflare: `doInstance.runFiber('flue:workflow:<runId>', run)`.
  *
  * The caller is responsible for any logging on completion/error; this wrapper
- * starts accepted workflow execution after returning the 202 response.
+ * starts durably admitted workflow execution for any HTTP observation mode.
  */
 export type StartWorkflowAdmissionFn = (runId: string, run: () => Promise<unknown>) => Promise<unknown>;
 
@@ -178,7 +179,6 @@ export interface HandleWorkflowOptions {
 	handler: WorkflowHandler;
 	createContext: CreateContextFn;
 	startWorkflowAdmission?: StartWorkflowAdmissionFn;
-	runHandler?: RunHandlerFn;
 	runStore?: RunStore;
 	runSubscribers?: RunSubscriberRegistry;
 	runRegistry?: RunRegistry;
@@ -227,7 +227,6 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promise<Response> {
 	const { request, workflowName, handler, createContext, runStore, runSubscribers, runRegistry, restartedFromRunId } = opts;
 	const startWorkflowAdmission = opts.startWorkflowAdmission ?? defaultStartWorkflowAdmission;
-	const runHandler = opts.runHandler ?? defaultRunHandler;
 	const runId = opts.runId ?? generateWorkflowRunId(workflowName);
 	// Workflows have one instance per run, so the workflow instance id and
 	// the run id are the same value. Per-workflow Durable Object classes route
@@ -240,45 +239,11 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 		const isSSE = accept.includes('text/event-stream');
 		const wait = new URL(request.url).searchParams.get('wait');
 		const owner = { kind: 'workflow' as const, workflowName, instanceId };
+		if (isSSE && wait !== 'result' && !runSubscribers) throw new Error('[flue] Workflow SSE requires a run subscriber registry.');
 
-		if (wait === 'result') {
-			return await runSyncMode({
-				label: workflowName,
-				owner,
-				id: runId,
-				runId,
-				handler,
-				payload,
-				request,
-				createContext,
-				runHandler,
-				runStore,
-				runSubscribers,
-				runRegistry,
-				restartedFromRunId,
-			});
-		}
-
-		if (isSSE) {
-			return runSseMode({
-				label: workflowName,
-				owner,
-				id: runId,
-				runId,
-				handler,
-				payload,
-				request,
-				createContext,
-				runHandler,
-				runStore,
-				runSubscribers,
-				runRegistry,
-				restartedFromRunId,
-			});
-		}
-
-		return runWorkflowAdmissionMode({
+		const execution = await prepareWorkflowExecution({
 			label: workflowName,
+			observationMode: wait === 'result' ? 'wait_result' : isSSE ? 'sse' : 'accepted',
 			owner,
 			id: runId,
 			runId,
@@ -292,6 +257,10 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 			runRegistry,
 			restartedFromRunId,
 		});
+
+		if (isSSE && wait !== 'result') return await runSseMode(execution);
+		if (wait === 'result') return await runSyncMode(execution);
+		return await runWorkflowAdmissionMode(execution);
 	} catch (err) {
 		const response = toHttpResponse(err);
 		response.headers.set('X-Flue-Run-Id', runId);
@@ -300,22 +269,6 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 }
 
 // ─── Mode implementations ───────────────────────────────────────────────────
-
-interface WorkflowModeOptions {
-	label: string;
-	owner: RunOwner;
-	id: string;
-	runId: string;
-	handler: WorkflowHandler;
-	payload: unknown;
-	request: Request;
-	createContext: CreateContextFn;
-	runHandler: RunHandlerFn;
-	runStore?: RunStore;
-	runSubscribers?: RunSubscriberRegistry;
-	runRegistry?: RunRegistry;
-	restartedFromRunId?: string;
-}
 
 export interface InvokeWorkflowAttachedOptions {
 	owner: RunOwner;
@@ -391,6 +344,7 @@ async function waitForAgentSessionLock(target: AgentSessionTarget, payload: unkn
 
 interface WorkflowAdmissionOptions {
 	label: string;
+	observationMode: 'accepted' | 'sse' | 'wait_result';
 	owner: RunOwner;
 	id: string;
 	runId: string;
@@ -405,9 +359,23 @@ interface WorkflowAdmissionOptions {
 	restartedFromRunId?: string;
 }
 
-async function runWorkflowAdmissionMode(opts: WorkflowAdmissionOptions): Promise<Response> {
+interface AdmittedWorkflowExecution {
+	label: string;
+	observationMode: 'accepted' | 'sse' | 'wait_result';
+	owner: RunOwner;
+	runId: string;
+	runStore: RunStore;
+	runSubscribers?: RunSubscriberRegistry;
+	lifecycle: WorkflowRunLifecycle;
+	startWorkflowAdmission: StartWorkflowAdmissionFn;
+	handler: WorkflowHandler;
+	completion?: Promise<unknown>;
+}
+
+async function prepareWorkflowExecution(opts: WorkflowAdmissionOptions): Promise<AdmittedWorkflowExecution> {
 	const {
 		label,
+		observationMode,
 		owner,
 		id,
 		runId,
@@ -421,9 +389,7 @@ async function runWorkflowAdmissionMode(opts: WorkflowAdmissionOptions): Promise
 		runRegistry,
 		restartedFromRunId,
 	} = opts;
-
-	// Accepted workflow execution relies on `startWorkflowAdmission` for target-specific
-	// execution context (`runFiber` on Cloudflare), so it does not also use `runHandler`.
+	if (!runStore) throw new RunStoreUnavailableError();
 	const lifecycle = await createWorkflowRunLifecycle({
 		owner,
 		id,
@@ -435,37 +401,52 @@ async function runWorkflowAdmissionMode(opts: WorkflowAdmissionOptions): Promise
 		runSubscribers,
 		runRegistry,
 		restartedFromRunId,
+		requirePersistedAdmission: true,
 	});
-	const { ctx } = lifecycle;
+	return { label, observationMode, owner, runId, runStore, runSubscribers, lifecycle, startWorkflowAdmission, handler };
+}
+
+function startWorkflowExecution(execution: AdmittedWorkflowExecution): Promise<unknown> {
+	if (execution.completion) return execution.completion;
+	const { label, observationMode, runId, lifecycle, handler, startWorkflowAdmission } = execution;
 	let didRun = false;
 	const run = async (): Promise<unknown> => {
 		didRun = true;
-		return withWorkflowRunLifecycle(lifecycle, () => handler(ctx));
+		return withWorkflowRunLifecycle(lifecycle, () => handler(lifecycle.ctx));
 	};
-
+	let scheduled: Promise<unknown>;
 	try {
-		const scheduled = startWorkflowAdmission(runId, run);
-		scheduled.then(
-			(result) => {
-				console.log(
-					'[flue] Workflow completed:',
-					label,
-					result !== undefined ? JSON.stringify(result) : '(no return)',
-				);
-			},
-			async (err) => {
-				console.error('[flue] Workflow error:', label, err);
-				if (!didRun) await emitRunEnd(lifecycle, { isError: true, error: err });
-			},
-		);
+		scheduled = startWorkflowAdmission(runId, run);
 	} catch (error) {
-		await emitRunEnd(lifecycle, { isError: true, error });
+		execution.completion = emitRunEnd(lifecycle, { isError: true, error }).then(() => Promise.reject(error));
+		execution.completion.catch(() => undefined);
 		throw error;
 	}
+	execution.completion = scheduled.catch(async (error) => {
+		if (!didRun) await emitRunEnd(lifecycle, { isError: true, error });
+		throw error;
+	});
+	execution.completion.then(
+		(result) => {
+			console.log('[flue] Workflow completed:', { workflowName: label, observationMode, runId, outcome: 'completed' }, result !== undefined ? JSON.stringify(result) : '(no return)');
+		},
+		(error) => {
+			console.error('[flue] Workflow error:', { workflowName: label, observationMode, runId, operation: 'execution', outcome: 'failed' }, error);
+		},
+	);
+	return execution.completion;
+}
 
-	return new Response(JSON.stringify({ status: 'accepted', runId }), {
+async function runWorkflowAdmissionMode(execution: AdmittedWorkflowExecution): Promise<Response> {
+	try {
+		startWorkflowExecution(execution);
+	} catch (error) {
+		await execution.completion?.catch(() => undefined);
+		throw error;
+	}
+	return new Response(JSON.stringify({ status: 'accepted', runId: execution.runId }), {
 		status: 202,
-		headers: { 'content-type': 'application/json', 'X-Flue-Run-Id': runId },
+		headers: { 'content-type': 'application/json', 'X-Flue-Run-Id': execution.runId },
 	});
 }
 
@@ -610,10 +591,7 @@ function nextEventIndex(events: FlueEvent[]): number {
 	return events.reduce((next, event) => Math.max(next, (event.eventIndex ?? -1) + 1), 0);
 }
 
-/**
- * Shared heartbeat interval for SSE streams.
- */
-export const SSE_HEARTBEAT_MS = 15_000;
+const SSE_HEARTBEAT_MS = 15_000;
 
 function runDirectSseMode(opts: DirectAttachedOptions): Response {
 	const { readable, writable } = new TransformStream();
@@ -687,76 +665,31 @@ export async function invokeDirectAttached(opts: DirectAttachedOptions): Promise
 	}
 }
 
-function runSseMode(opts: WorkflowModeOptions): Response {
-	const { runId } = opts;
-
-	const { readable, writable } = new TransformStream();
-	const writer = writable.getWriter();
-	const encoder = new TextEncoder();
-	let closed = false;
-
-	// Writes after client disconnect are intentionally dropped; the handler
-	// should still finish so run history can be finalized.
-	const writeSSE = async (data: unknown, eventType: string): Promise<void> => {
-		if (closed) return;
-		const eventIndex = getEventIndex(data) ?? 0;
-		const lines: string[] = [];
-		lines.push(`event: ${eventType}`);
-		lines.push(`id: ${eventIndex}`);
-		lines.push(`data: ${typeof data === 'string' ? data : JSON.stringify(data)}`);
-		lines.push('', '');
-		try {
-			await writer.write(encoder.encode(lines.join('\n')));
-		} catch {
-		}
-	};
-
-	const writeHeartbeat = async (): Promise<void> => {
-		if (closed) return;
-		try {
-			await writer.write(encoder.encode(': heartbeat\n\n'));
-		} catch {
-		}
-	};
-
-	const heartbeat = setInterval(() => {
-		writeHeartbeat().catch(() => {});
-	}, SSE_HEARTBEAT_MS);
-
-	(async () => {
-		try {
-			await invokeWorkflowAttached({
-				...opts,
-				onEvent: (event) => writeSSE(event, event.type),
-				emitIdleOnComplete: true,
-			});
-		} catch (error) {
-			await writeSSE({ message: error instanceof Error ? error.message : String(error) }, 'error');
-		} finally {
-			clearInterval(heartbeat);
-			closed = true;
-			try {
-				await writer.close();
-			} catch {
-			}
-		}
-	})();
-
-	return new Response(readable, {
-		headers: {
-			'content-type': 'text/event-stream',
-			'cache-control': 'no-cache',
-			connection: 'keep-alive',
-			'X-Flue-Run-Id': runId,
-		},
-	});
+async function runSseMode(execution: AdmittedWorkflowExecution): Promise<Response> {
+	if (!execution.runSubscribers) throw new Error('[flue] Workflow SSE requires a run subscriber registry.');
+	const response = streamActiveRunEvents(execution.runStore, execution.runSubscribers, execution.runId);
+	response.headers.set('X-Flue-Run-Id', execution.runId);
+	try {
+		startWorkflowExecution(execution);
+	} catch (error) {
+		await execution.completion?.catch(() => undefined);
+		await response.body?.cancel();
+		throw error;
+	}
+	return response;
 }
 
-async function runSyncMode(opts: WorkflowModeOptions): Promise<Response> {
-	const invocation = await invokeWorkflowAttached(opts);
+async function runSyncMode(execution: AdmittedWorkflowExecution): Promise<Response> {
+	let result: unknown;
+	try {
+		result = await startWorkflowExecution(execution);
+	} catch (error) {
+		await execution.completion?.catch(() => undefined);
+		throw error;
+	}
 	return new Response(
-		JSON.stringify({ result: invocation.result === undefined ? null : invocation.result, _meta: { runId: invocation.runId } }),
-		{ headers: { 'content-type': 'application/json', 'X-Flue-Run-Id': invocation.runId } },
+		JSON.stringify({ result: result === undefined ? null : result, _meta: { runId: execution.runId } }),
+		{ headers: { 'content-type': 'application/json', 'X-Flue-Run-Id': execution.runId } },
 	);
 }
 
@@ -828,6 +761,7 @@ interface WorkflowRunLifecycleOptions {
 	runRegistry?: RunRegistry;
 	restartedFromRunId?: string;
 	restartedAsRunId?: string;
+	requirePersistedAdmission?: boolean;
 }
 
 interface WorkflowRunLifecycle extends WorkflowRunLifecycleOptions {
@@ -842,17 +776,23 @@ async function createWorkflowRunLifecycle(options: WorkflowRunLifecycleOptions):
 	const ctx = options.createContext(options.id, options.runId, options.payload, options.request);
 	const runStore = options.runStore;
 	const owner = options.owner;
-	const didCreateRun = runStore
-		? await persistRunAdmission('createRun', false, () =>
-			runStore.createRun({
-				runId: options.runId,
-				owner,
-				startedAt,
-				payload: options.payload,
-				restartedFromRunId: options.restartedFromRunId,
-			}),
-		)
-		: false;
+	let didCreateRun = false;
+	try {
+		didCreateRun = runStore
+			? await persistRunAdmission('createRun', options.requirePersistedAdmission === true, () =>
+				runStore.createRun({
+					runId: options.runId,
+					owner,
+					startedAt,
+					payload: options.payload,
+					restartedFromRunId: options.restartedFromRunId,
+				}),
+			)
+			: false;
+	} catch (error) {
+		console.error('[flue] Workflow admission error:', { workflowName: owner.workflowName, runId: options.runId, operation: 'createRun', outcome: 'admission_failed' }, error);
+		throw error;
+	}
 	if (didCreateRun) await safeRegistry('recordRunStart', () =>
 		options.runRegistry?.recordRunStart({
 			runId: options.runId,

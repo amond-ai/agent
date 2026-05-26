@@ -71,7 +71,7 @@ export interface FlueRuntime {
 	 */
 	createContext?: CreateContextFn;
 
-	/** Optional Node workflow admission execution wrapper. Defaults to direct invocation. */
+	/** Optional Node HTTP workflow admitted execution wrapper. Defaults to direct invocation. */
 	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 
 	/** Optional Node foreground handler wrapper. Defaults to direct invocation. */
@@ -344,7 +344,7 @@ function workflowRouteSpec() {
 		operationId: 'invokeWorkflow',
 		summary: 'Start a workflow run',
 		description:
-			'Starts the named HTTP-exposed workflow. By default this is fire-and-forget and returns an accepted run id; use ?wait=result for a synchronous JSON result or Accept: text/event-stream to stream run events.',
+			'Starts the named HTTP-exposed workflow through one admitted execution path. By default it returns an accepted run id; use ?wait=result for a synchronous JSON observation or Accept: text/event-stream to observe live run events while the connection remains available.',
 		requestBody: {
 			required: false,
 			content: {
@@ -541,7 +541,6 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 				handler,
 				createContext,
 				startWorkflowAdmission: rt.startWorkflowAdmission,
-				runHandler: rt.runHandler,
 				runStore: rt.runStore,
 				runSubscribers: rt.runSubscribers,
 				runRegistry: rt.runRegistry,

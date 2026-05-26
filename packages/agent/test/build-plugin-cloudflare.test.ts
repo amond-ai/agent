@@ -53,7 +53,17 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).toContain("'x-flue-restarted-from-run-id': interruptedRunId");
 		expect(entry).toContain('restartedAsRunId: restartRunId');
 		expect(entry).toContain('Flue workflow execution was interrupted and restarted as run');
+		expect(entry).toContain('Flue workflow recovery input is unavailable; replacement admission was not attempted.');
+		expect(entry).toContain("outcome: 'restart_admitted'");
+		expect(entry).toContain("outcome: 'restart_failed'");
+		expect(entry).not.toContain('JSON.stringify(payload ?? {})');
 		expect(entry).toContain("return doInstance.runFiber('flue:workflow:' + runId");
+		const workflowHttpBody = entry.slice(entry.indexOf('async function dispatchWorkflow'), entry.indexOf('async function dispatchAgent'));
+		expect(workflowHttpBody).toContain("return doInstance.runFiber('flue:workflow:' + runId");
+		expect(workflowHttpBody).not.toContain('keepAliveWhile');
+		expect(workflowHttpBody).not.toContain('runHandler:');
+		expect(entry).toContain('messageWorkflowSocket');
+		expect(entry.slice(entry.indexOf('async function messageWorkflowSocket'))).toContain('keepAliveWhile');
 		expect(entry).not.toContain('recoverAgentRun');
 		expect(entry).not.toContain('reserveRecoveredAgentSession');
 		expect(entry).not.toContain('flue:webhook:');
