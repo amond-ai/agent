@@ -312,29 +312,6 @@ await session.prompt('Review the latest changes.');
 await session.task('Research related issues.', { agent: 'researcher' });
 ```
 
-### Delegated Agents
-
-Use `session.delegate()` when authored code needs an awaited answer from another deployed agent in the same built application. The target must be a default-exported `createAgent(...)` value discovered from `agents/<name>.ts`, and runs with its own configuration and sandbox in a generated one-shot session.
-
-```ts
-import reviewer from '../agents/reviewer.ts';
-
-const result = await session.delegate('Review this API boundary.', {
-  agent: reviewer,
-  id: 'architecture-reviewer',
-});
-```
-
-Choose the primitive that matches the ownership boundary:
-
-| Method | Work runs in | Completion |
-| --- | --- | --- |
-| `session.task()` | A child session in the current harness and sandbox | Awaits the result |
-| `session.delegate()` | Another discovered deployed agent instance in an isolated generated session | Awaits the result |
-| `dispatch()` | A persistent session owned by another discovered deployed agent instance | Returns an acceptance receipt |
-
-Delegation does not require the target agent to expose HTTP or WebSocket channels, does not write to its default persistent session, and does not create a workflow run. It is attached execution: cancellation and cleanup are best effort if the caller or runtime disappears before completion.
-
 ### Provider Settings
 
 Use `providers` when model traffic needs provider-specific runtime settings,
