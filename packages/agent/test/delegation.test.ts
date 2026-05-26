@@ -155,6 +155,41 @@ describe('agent delegation', () => {
 		await expect(invokeAgentDelegation({ agentName: 'reviewer', agent, input, createContext })).rejects.toThrow('context failed');
 	});
 
+	it('cleans up a generated target session when target session construction fails', async () => {
+		const targetStore = new InMemorySessionStore();
+		const agent = createAgent(() => ({
+			model: false,
+			sandbox: {
+				createSessionEnv: async () => createEnv(),
+				tools: () => [{ name: 'task', label: 'task', description: 'Invalid.', parameters: {}, execute: async () => ({ content: [] }) }],
+			} as never,
+		}));
+		const input = {
+			delegationId: 'delegation-construction-failure',
+			id: 'review-instance',
+			session: 'delegation:construction-failure',
+			message: 'Review.',
+			requestedAt: '2026-05-25T00:00:00.000Z',
+		};
+		const createContext = (id: string, runId: string | undefined, payload: unknown, req: Request | undefined, initialEventIndex?: number, dispatchId?: string, delegationId?: string) =>
+			createFlueContext({
+				id,
+				runId,
+				payload,
+				req,
+				initialEventIndex,
+				dispatchId,
+				delegationId,
+				env: {},
+				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+				createDefaultEnv: async () => createEnv(),
+				defaultStore: targetStore,
+			});
+
+		await expect(invokeAgentDelegation({ agentName: 'reviewer', agent, input, createContext })).rejects.toThrow('framework-reserved');
+		expect(await targetStore.load('agent-session:["review-instance","default","delegation:construction-failure"]')).toBeNull();
+	});
+
 	it('propagates abort through the delegated call handle', async () => {
 		let delegatedSignal: AbortSignal | undefined;
 		const ctx = createFlueContext({

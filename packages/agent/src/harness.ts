@@ -85,29 +85,36 @@ export class Harness implements FlueHarness {
 		}
 
 		let data = existingData;
+		let created = false;
 		if (!data && mode !== 'get') {
 			data = createEmptySessionData();
 			await this.store.save(storageKey, data);
+			created = true;
 		}
 
-		const session = new Session({
-			name: sessionName,
-			storageKey,
-			affinityKey,
-			config: this.config,
-			env: this.env,
-			store: this.store,
-			existingData: data,
-			onAgentEvent: this.decorateEventCallback(this.eventCallback),
-			agentTools: this.agentTools,
-			toolFactory: this.toolFactory,
-			taskDepth: 0,
-			createTaskSession: (taskOptions) => this.createTaskSession(taskOptions),
-			invokeAgentDelegation: this.invokeAgentDelegation,
-			onDelete: () => this.openSessions.delete(sessionName),
-		});
-		this.openSessions.set(sessionName, session);
-		return session;
+		try {
+			const session = new Session({
+				name: sessionName,
+				storageKey,
+				affinityKey,
+				config: this.config,
+				env: this.env,
+				store: this.store,
+				existingData: data,
+				onAgentEvent: this.decorateEventCallback(this.eventCallback),
+				agentTools: this.agentTools,
+				toolFactory: this.toolFactory,
+				taskDepth: 0,
+				createTaskSession: (taskOptions) => this.createTaskSession(taskOptions),
+				invokeAgentDelegation: this.invokeAgentDelegation,
+				onDelete: () => this.openSessions.delete(sessionName),
+			});
+			this.openSessions.set(sessionName, session);
+			return session;
+		} catch (error) {
+			if (created) await this.store.delete(storageKey).catch(() => {});
+			throw error;
+		}
 	}
 
 	private async deleteSession(name: string | undefined): Promise<void> {
