@@ -107,7 +107,7 @@ const channelModules = {
 ${channelModuleEntries}
 };
 const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);
-const { manifest, directHandlers, localAgentHandlers, createdAgents, deployedAgentNames, workflowHandlers, localWorkflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps } = normalized;
+const { manifest, directHandlers, localAgentHandlers, createdAgents, dispatchAgentNames, workflowHandlers, localWorkflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps } = normalized;
 
 const isLocalMode = process.env.FLUE_MODE === 'local';
 const localCliTarget = process.env.FLUE_CLI_TARGET;
@@ -140,19 +140,18 @@ const dispatchQueue = new InMemoryDispatchQueue(createAgentDispatchProcessor({
   createContext: createContextForRequest,
 }));
 
-function resolveDeployedAgentDelegation(agent) {
-  const targetAgent = deployedAgentNames.get(agent);
-  if (!targetAgent) return undefined;
-  return {
-    targetAgent,
-    invoke: (input, signal) => invokeAgentDelegation({
-      agentName: targetAgent,
-      agent,
-      input,
-      signal,
-      createContext: createContextForRequest,
-    }),
-  };
+async function invokeDeployedAgentDelegation(agent, input, signal) {
+  const agentName = dispatchAgentNames.get(agent);
+  if (!agentName) {
+    throw new Error('[flue] delegate() target created agent is not a discovered default-exported agent in this built application.');
+  }
+  return invokeAgentDelegation({
+    agentName,
+    agent,
+    input,
+    signal,
+    createContext: createContextForRequest,
+  });
 }
 
 function createContextForRequest(id, runId, payload, req, initialEventIndex, dispatchId, delegationId) {
@@ -170,7 +169,7 @@ function createContextForRequest(id, runId, payload, req, initialEventIndex, dis
     },
     createDefaultEnv,
     defaultStore,
-    resolveAgentDelegation: resolveDeployedAgentDelegation,
+    invokeAgentDelegation: invokeDeployedAgentDelegation,
   });
 }
 
@@ -198,7 +197,7 @@ configureFlueRuntime({
   manifest,
   handlers: directHandlers,
   dispatchQueue,
-  resolveDispatchAgentName: (agent) => deployedAgentNames.get(agent),
+  resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),
   workflowHandlers,
   agentRouteMiddleware,
   agentWebSocketMiddleware,
