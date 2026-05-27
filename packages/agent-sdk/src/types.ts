@@ -26,7 +26,7 @@ export interface RunPointer {
 
 export interface AgentManifestEntry {
 	name: string;
-	channels: { http?: true; websocket?: true };
+	transports: { http?: true; websocket?: true };
 	created: boolean;
 }
 
