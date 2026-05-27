@@ -15,7 +15,6 @@ describe('Node build plugin', () => {
 
 		expect(entry).toContain("import * as handler_triage_0 from '/tmp/triage.ts'");
 		expect(entry).toContain("import * as workflow_daily_report_0 from '/tmp/daily-report.ts'");
-		expect(entry).toContain("import * as channel_slack_0 from '/tmp/slack.ts'");
 		expect(entry).toContain("import { getPackagedSkills } from 'virtual:flue/packaged-skills';");
 		expect(entry).toContain('const packagedSkills = getPackagedSkills();');
 		expect(entry).toContain('Bash,\n  InMemoryFs,\n  createFlueContext,');
@@ -30,9 +29,7 @@ describe('Node build plugin', () => {
 		expect(entry).toContain('const dispatchAgentNames = new Map();');
 		expect(entry).toContain('dispatchAgentNames.set(mod.default, name);');
 		expect(entry).toContain('resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),');
-		expect(entry).toContain('const channelModules = {');
-		expect(entry).toContain('const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);');
-		expect(entry).toContain('channelApps,');
+		expect(entry).toContain('const normalized = normalizeBuiltModules(agentModules, workflowModules);');
 		const dispatchQueueBody = entry.slice(entry.indexOf('const dispatchQueue ='), entry.indexOf('function createContextForRequest'));
 		expect(dispatchQueueBody).not.toContain('runStore');
 		expect(dispatchQueueBody).not.toContain('runSubscribers');
@@ -164,60 +161,6 @@ describe('Node build plugin', () => {
 			expect(allowed.status).toBe(200);
 			expect(allowed.headers.get('x-route')).toBe('yes');
 			expect(await allowed.json()).toMatchObject({ result: { ok: true } });
-		} finally {
-			child.kill('SIGTERM');
-		}
-	});
-
-	it('mounts discovered channel applications with registered agent listeners', async () => {
-		const root = createFixtureRoot('flue-mounted-channel-');
-		fs.mkdirSync(path.join(root, 'agents'));
-		fs.mkdirSync(path.join(root, 'channels'));
-		fs.writeFileSync(
-			path.join(root, 'channels', 'events.ts'),
-			`import { Hono } from 'hono';\n` +
-				`import { defineChannel } from '@flue/runtime';\n` +
-				`const app = new Hono();\n` +
-				`const channel = defineChannel({ app });\n` +
-				`app.post('/emit', async (c) => c.json(await channel.emit('message', { event: { text: 'hello' }, thread: { id: 'one' } })));\n` +
-				`export default channel;\n`,
-		);
-		fs.writeFileSync(
-			path.join(root, 'agents', 'assistant.ts'),
-			`import { createAgent } from '@flue/runtime';\n` +
-				`import events from '../channels/events.ts';\n` +
-				`events.on('message', async () => {});\n` +
-				`export default createAgent(() => ({ model: false }));\n`,
-		);
-		await build({ root, target: 'node' });
-
-		const { child, port } = await startGeneratedServer(root);
-		try {
-			const response = await fetch(`http://localhost:${port}/channels/events/emit`, { method: 'POST' });
-			expect(response.status).toBe(200);
-			expect(await response.json()).toEqual({ invoked: 1, errors: [] });
-		} finally {
-			child.kill('SIGTERM');
-		}
-	});
-
-	it('mounts discovered channel applications below custom app prefixes', async () => {
-		const root = createFixtureRoot('flue-prefixed-channel-');
-		fs.mkdirSync(path.join(root, 'agents'));
-		fs.mkdirSync(path.join(root, 'channels'));
-		fs.writeFileSync(path.join(root, 'agents', 'assistant.ts'), `import { createAgent } from '@flue/runtime';\nexport default createAgent(() => ({ model: false }));\n`);
-		fs.writeFileSync(
-			path.join(root, 'channels', 'hooks.ts'),
-			`import { Hono } from 'hono';\nimport { defineChannel } from '@flue/runtime';\nconst app = new Hono();\napp.get('/health', (c) => c.text('ok'));\nexport default defineChannel({ app });\n`,
-		);
-		fs.writeFileSync(path.join(root, 'app.ts'), `import { Hono } from 'hono';\nimport { flue } from '@flue/runtime/app';\nconst app = new Hono();\napp.route('/api', flue());\nexport default app;\n`);
-		await build({ root, target: 'node' });
-
-		const { child, port } = await startGeneratedServer(root);
-		try {
-			const response = await fetch(`http://localhost:${port}/api/channels/hooks/health`);
-			expect(response.status).toBe(200);
-			expect(await response.text()).toBe('ok');
 		} finally {
 			child.kill('SIGTERM');
 		}
@@ -534,8 +477,8 @@ describe('Node build plugin', () => {
 		}
 	});
 
-	it('fails local CLI mode without an inherited IPC channel', async () => {
-		const root = createFixtureRoot('flue-local-ipc-missing-channel-');
+	it('fails local CLI mode without an inherited IPC connection', async () => {
+		const root = createFixtureRoot('flue-local-ipc-missing-connection-');
 		fs.mkdirSync(path.join(root, 'workflows'));
 		fs.writeFileSync(path.join(root, 'workflows', 'job.ts'), `export async function run() { return true; }\n`);
 		await build({ root, target: 'node' });
@@ -545,7 +488,7 @@ describe('Node build plugin', () => {
 			env: { ...process.env, FLUE_MODE: 'local', FLUE_CLI_TARGET: 'workflow', FLUE_CLI_NAME: 'job' },
 		});
 		const output = await waitForProcessExit(child);
-		expect(output).toContain('Local CLI execution requires an inherited IPC channel');
+		expect(output).toContain('Local CLI execution requires an inherited IPC connection');
 	});
 
 	it('loads workflow entrypoints exported through ordinary module syntax', async () => {
@@ -589,55 +532,6 @@ describe('Node build plugin', () => {
 		try {
 			const stderr = await waitForProcessExit(child);
 			expect(stderr).toContain('default-export the same created agent value');
-		} finally {
-			if (child.exitCode === null) child.kill('SIGTERM');
-		}
-	});
-
-	it('rejects deprecated channels exports on agents', async () => {
-		const root = createFixtureRoot('flue-agent-invalid-channel-');
-		fs.mkdirSync(path.join(root, 'agents'));
-		fs.writeFileSync(
-			path.join(root, 'agents', 'assistant.ts'),
-			`import { createAgent } from '@flue/runtime';\n` +
-				`export const channels = [{ __flueChannel: true, name: 'incoming' }];\n` +
-				`export default createAgent(() => ({ model: false }));\n`,
-		);
-		await build({ root, target: 'node' });
-
-		const port = await findAvailablePort();
-		const child = spawn('node', [path.join(root, 'dist', 'server.mjs')], {
-			cwd: root,
-			stdio: ['ignore', 'pipe', 'pipe'],
-			env: { ...process.env, PORT: String(port), FLUE_MODE: 'local' },
-		});
-		try {
-			const output = await waitForProcessExit(child);
-			expect(output).toContain('exports channels, which is no longer supported. Export route middleware for HTTP access or websocket middleware for WebSocket access.');
-		} finally {
-			if (child.exitCode === null) child.kill('SIGTERM');
-		}
-	});
-
-	it('rejects deprecated channels exports on workflows', async () => {
-		const root = createFixtureRoot('flue-workflow-invalid-channel-');
-		fs.mkdirSync(path.join(root, 'workflows'));
-		fs.writeFileSync(
-			path.join(root, 'workflows', 'job.ts'),
-			`export const channels = [];\n` +
-				`export async function run() { return true; }\n`,
-		);
-		await build({ root, target: 'node' });
-
-		const port = await findAvailablePort();
-		const child = spawn('node', [path.join(root, 'dist', 'server.mjs')], {
-			cwd: root,
-			stdio: ['ignore', 'pipe', 'pipe'],
-			env: { ...process.env, PORT: String(port), FLUE_MODE: 'local' },
-		});
-		try {
-			const output = await waitForProcessExit(child);
-			expect(output).toContain('Workflow "job" exports channels, which is no longer supported. Export route middleware for HTTP access or websocket middleware for WebSocket access.');
 		} finally {
 			if (child.exitCode === null) child.kill('SIGTERM');
 		}
@@ -785,7 +679,6 @@ function testBuildContext(): BuildContext {
 	return {
 		agents: [{ name: 'triage', filePath: '/tmp/triage.ts' }],
 		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts' }],
-		channels: [{ name: 'slack', filePath: '/tmp/slack.ts' }],
 		root: '/tmp/flue-test',
 		output: '/tmp/flue-test/dist',
 		runtimeVersion: '0.0.0-test',

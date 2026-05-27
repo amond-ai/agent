@@ -10,34 +10,34 @@ import {
 	InMemorySessionStore,
 	invokeWorkflowAttached,
 	invokeDirectAttached,
-	registeredAgentsForChannel,
-	registeredWorkflowsForChannel,
+	registeredAgentsForTransport,
+	registeredWorkflowsForTransport,
 	type FlueRuntime,
 } from '../src/internal.ts';
 import type { FlueEvent } from '../src/types.ts';
 
 describe('WebSocket transport foundation', () => {
-	it('admits HTTP and WebSocket channels independently', () => {
+	it('admits HTTP and WebSocket transports independently', () => {
 		const runtime: FlueRuntime = {
 			target: 'cloudflare',
 			manifest: {
 				agents: [
-					{ name: 'http-only', channels: { http: true }, created: true },
-					{ name: 'socket-only', channels: { websocket: true }, created: true },
-					{ name: 'dual', channels: { http: true, websocket: true }, created: true },
+					{ name: 'http-only', transports: { http: true }, created: true },
+					{ name: 'socket-only', transports: { websocket: true }, created: true },
+					{ name: 'dual', transports: { http: true, websocket: true }, created: true },
 				],
 				workflows: [
-					{ name: 'http-job', channels: { http: true } },
-					{ name: 'socket-job', channels: { websocket: true } },
-					{ name: 'dual-job', channels: { http: true, websocket: true } },
+					{ name: 'http-job', transports: { http: true } },
+					{ name: 'socket-job', transports: { websocket: true } },
+					{ name: 'dual-job', transports: { http: true, websocket: true } },
 				],
 			},
 		};
 
-		expect(registeredAgentsForChannel(runtime, 'http')).toEqual(['http-only', 'dual']);
-		expect(registeredAgentsForChannel(runtime, 'websocket')).toEqual(['socket-only', 'dual']);
-		expect(registeredWorkflowsForChannel(runtime, 'http')).toEqual(['http-job', 'dual-job']);
-		expect(registeredWorkflowsForChannel(runtime, 'websocket')).toEqual(['socket-job', 'dual-job']);
+		expect(registeredAgentsForTransport(runtime, 'http')).toEqual(['http-only', 'dual']);
+		expect(registeredAgentsForTransport(runtime, 'websocket')).toEqual(['socket-only', 'dual']);
+		expect(registeredWorkflowsForTransport(runtime, 'http')).toEqual(['http-job', 'dual-job']);
+		expect(registeredWorkflowsForTransport(runtime, 'websocket')).toEqual(['socket-job', 'dual-job']);
 	});
 
 	it('does not admit Node direct HTTP handlers without route exposure', () => {
@@ -45,18 +45,18 @@ describe('WebSocket transport foundation', () => {
 			target: 'node',
 			handlers: { internal: async () => null },
 			manifest: {
-				agents: [{ name: 'internal', channels: {}, created: true }],
+				agents: [{ name: 'internal', transports: {}, created: true }],
 			},
 		};
 
-		expect(registeredAgentsForChannel(runtime, 'http')).not.toContain('internal');
-		expect(registeredAgentsForChannel(runtime, 'websocket')).not.toContain('internal');
+		expect(registeredAgentsForTransport(runtime, 'http')).not.toContain('internal');
+		expect(registeredAgentsForTransport(runtime, 'websocket')).not.toContain('internal');
 	});
 
 	it('does not admit WebSocket-only workflows through HTTP POST', async () => {
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'socket-job', channels: { websocket: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'socket-job', transports: { websocket: true } }] },
 			workflowHandlers: { 'socket-job': async () => ({ ok: true }) },
 			createContext: createContext,
 		});
@@ -69,34 +69,18 @@ describe('WebSocket transport foundation', () => {
 		expect(await response.json()).toMatchObject({ error: { type: 'workflow_not_http' } });
 	});
 
-	it('mounts configured channel applications lazily below a flue prefix', async () => {
-		const mounted = new Hono();
-		mounted.post('/events', async (c) => c.json({ path: new URL(c.req.url).pathname }));
-		const app = new Hono();
-		app.route('/api', flue());
-		configureFlueRuntime({
-			target: 'node',
-			channelApps: { slack: mounted },
-		});
-
-		const response = await app.fetch(new Request('http://localhost/api/channels/slack/events', { method: 'POST' }));
-
-		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ path: '/events' });
-	});
-
 	it('forwards Cloudflare upgrades only for WebSocket-exposed targets and normalizes mounted paths', async () => {
 		const forwarded: string[] = [];
 		configureFlueRuntime({
 			target: 'cloudflare',
 			manifest: {
 				agents: [
-					{ name: 'assistant', channels: { websocket: true }, created: true },
-					{ name: 'http-agent', channels: { http: true }, created: true },
+					{ name: 'assistant', transports: { websocket: true }, created: true },
+					{ name: 'http-agent', transports: { http: true }, created: true },
 				],
 				workflows: [
-					{ name: 'job', channels: { websocket: true } },
-					{ name: 'http-job', channels: { http: true } },
+					{ name: 'job', transports: { websocket: true } },
+					{ name: 'http-job', transports: { http: true } },
 				],
 			},
 			routeAgentRequest: async (request) => {
@@ -125,7 +109,7 @@ describe('WebSocket transport foundation', () => {
 		configureFlueRuntime({
 			target: 'cloudflare',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true, websocket: true }, created: true }],
+				agents: [{ name: 'assistant', transports: { http: true, websocket: true }, created: true }],
 			},
 			agentRouteMiddleware: {
 				assistant: async (c, next) => {
@@ -160,7 +144,7 @@ describe('WebSocket transport foundation', () => {
 		let forwardedBody = '';
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
 			agentRouteMiddleware: {
 				assistant: async (c, next) => {
 					verifiedBody = await c.req.text();
@@ -191,7 +175,7 @@ describe('WebSocket transport foundation', () => {
 		let forwardedBody = '';
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [], workflows: [{ name: 'signed', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'signed', transports: { http: true } }] },
 			workflowRouteMiddleware: {
 				signed: async (c, next) => {
 					verifiedBody = await c.req.text();
@@ -221,7 +205,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = 0;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
 			agentRouteMiddleware: {
 				assistant: async (_c, next) => {
 					await next();
@@ -246,7 +230,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
 			agentRouteMiddleware: { assistant: async () => undefined },
 			routeAgentRequest: async () => {
 				forwarded = true;
@@ -266,7 +250,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
 			agentRouteMiddleware: {
 				assistant: async (c) => {
 					c.res = c.text('Assigned Unauthorized', 401);
@@ -291,7 +275,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { websocket: true }, created: true }] },
 			agentWebSocketMiddleware: { assistant: async () => undefined },
 			routeAgentRequest: async () => {
 				forwarded = true;
@@ -312,7 +296,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { websocket: true }, created: true }] },
 			agentWebSocketMiddleware: {
 				assistant: async (c) => {
 					c.res = c.text('Assigned Socket Unauthorized', 401);
@@ -338,7 +322,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { websocket: true }, created: true }] },
 			routeAgentRequest: async () => {
 				forwarded = true;
 				return Response.json({ ok: true });
@@ -388,7 +372,7 @@ describe('WebSocket transport foundation', () => {
 	it('rejects detached HTTP webhook mode for direct agent prompts', async () => {
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
 			handlers: { assistant: async () => null },
 			createContext,
 		});

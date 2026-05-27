@@ -133,7 +133,7 @@ describe('run store persistence sizing', () => {
 		const runSubscribers = createRunSubscriberRegistry();
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'hello', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'hello', transports: { http: true } }] },
 			workflowHandlers: { hello: async () => ({ result: 'x'.repeat(1_100_000) }) },
 			createContext: (id, runId, payload, req) =>
 				createFlueContext({
@@ -170,7 +170,7 @@ describe('run store persistence sizing', () => {
 		const runSubscribers = createRunSubscriberRegistry();
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'hello', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'hello', transports: { http: true } }] },
 			workflowHandlers: {
 				hello: async (ctx) => {
 					ctx.log.info('x'.repeat(1_100_000));
@@ -212,7 +212,7 @@ describe('run store persistence sizing', () => {
 		const runSubscribers = createRunSubscriberRegistry();
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'hello', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'hello', transports: { http: true } }] },
 			workflowHandlers: {
 				hello: async () => {
 					throw new Error('x'.repeat(1_100_000));
@@ -256,7 +256,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		let admissions = 0;
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
 			handlers: {},
 			workflowHandlers: { 'daily-report': async (ctx) => ({ echoed: ctx.payload }) },
 			createContext: (id, runId, payload, req) =>
@@ -310,7 +310,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		let foregroundRuns = 0;
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
 			handlers: {},
 			workflowHandlers: { 'daily-report': async (ctx) => ({ echoed: ctx.payload }) },
 			createContext: (id, runId, payload, req) =>
@@ -357,7 +357,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		let verifiedBody = '';
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'signed', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'signed', transports: { http: true } }] },
 			workflowHandlers: { signed: async (ctx) => ({ echoed: ctx.payload }) },
 			workflowRouteMiddleware: {
 				signed: async (c, next) => {
@@ -397,7 +397,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 	it('returns workflow errors through wait=result while keeping the run id header', async () => {
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'explode', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'explode', transports: { http: true } }] },
 			handlers: {},
 			workflowHandlers: { explode: async () => { throw new Error('boom'); } },
 			createContext: (id, runId, payload, req) =>
@@ -426,7 +426,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		const runStore = new DelayedEndRunStore();
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'explode', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'explode', transports: { http: true } }] },
 			workflowHandlers: { explode: async () => ({ ok: true }) },
 			createContext: (id, runId, payload, req) =>
 				createFlueContext({
@@ -467,7 +467,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		let foregroundRuns = 0;
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
 			handlers: {},
 			workflowHandlers: { 'daily-report': async () => ({ ok: true }) },
 			createContext: (id, runId, payload, req) =>
@@ -514,7 +514,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 	it('delivers live SSE events after non-terminal persistence fails', async () => {
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
 			workflowHandlers: { 'daily-report': async (ctx) => { ctx.log.info('live'); return { ok: true }; } },
 			createContext: (id, runId, payload, req) =>
 				createFlueContext({
@@ -545,7 +545,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 	it('ignores Last-Event-ID when initiating a new workflow SSE run', async () => {
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
 			workflowHandlers: { 'daily-report': async () => ({ ok: true }) },
 			createContext: (id, runId, payload, req) =>
 				createFlueContext({
@@ -579,7 +579,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 			let executions = 0;
 			configureFlueRuntime({
 				target: 'node',
-				manifest: { agents: [], workflows: [{ name: 'durable', channels: { http: true } }] },
+				manifest: { agents: [], workflows: [{ name: 'durable', transports: { http: true } }] },
 				workflowHandlers: { durable: async () => { executions++; return { ok: true }; } },
 				createContext: (id, runId, payload, req) =>
 					createFlueContext({
@@ -609,7 +609,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		let executions = 0;
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'durable', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'durable', transports: { http: true } }] },
 			workflowHandlers: { durable: async () => { executions++; return { ok: true }; } },
 			createContext: (id, runId, payload, req) =>
 				createFlueContext({
@@ -643,7 +643,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 		});
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'optional-agent', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'optional-agent', transports: { http: true } }] },
 			handlers: {},
 			workflowHandlers: {
 				'optional-agent': async (ctx) => {
@@ -698,7 +698,7 @@ describe('POST /workflows/:name routes via flue()', () => {
 	it('rejects internal-only workflows and non-POST methods', async () => {
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'internal', channels: {} }] },
+			manifest: { agents: [], workflows: [{ name: 'internal', transports: {} }] },
 			handlers: {},
 			workflowHandlers: { internal: async () => null },
 			createContext: (() => null) as never,
@@ -721,7 +721,7 @@ describe('Bare /runs/:runId routes via flue()', () => {
 
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'hello', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'hello', transports: { http: true } }] },
 			workflowHandlers: {
 				hello: async (_ctx) => ({ greeting: 'hi' }),
 			},
@@ -898,7 +898,7 @@ describe('Bare /runs/:runId routes via flue()', () => {
 
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'hello', channels: { http: true }, created: false }] },
+			manifest: { agents: [{ name: 'hello', transports: { http: true }, created: false }] },
 			routeAgentRequest: async (request) => {
 				routedBodies.push(await request.text());
 				return Response.json({ ok: true });
@@ -926,7 +926,7 @@ describe('Bare /runs/:runId routes via flue()', () => {
 
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'hello', channels: { http: true } }] },
+			manifest: { agents: [], workflows: [{ name: 'hello', transports: { http: true } }] },
 			workflowHandlers: {
 				hello: async (ctx) => {
 					ctx.log.info('before return');
@@ -1091,10 +1091,10 @@ describe('admin() routes', () => {
 			runtimeVersion: '9.9.9',
 			manifest: {
 				agents: [
-					{ name: 'hello', channels: {}, created: false },
-					{ name: 'offline', channels: {}, created: false },
+					{ name: 'hello', transports: {}, created: false },
+					{ name: 'offline', transports: {}, created: false },
 				],
-				workflows: [{ name: 'daily-report', channels: { http: true } }],
+				workflows: [{ name: 'daily-report', transports: { http: true } }],
 			},
 			workflowHandlers: { 'daily-report': async () => ({ ok: true }) },
 			createContext: (id, runId, payload, req) =>
@@ -1174,7 +1174,7 @@ describe('admin() routes', () => {
 		configureFlueRuntime({
 			target: 'cloudflare',
 			runtimeVersion: '9.9.9',
-			manifest: { agents: [{ name: 'hello', channels: {}, created: false }] },
+			manifest: { agents: [{ name: 'hello', transports: {}, created: false }] },
 			createRunRegistryForRequest: () => ({
 				recordRunStart: async () => {},
 				recordRunEnd: async () => {},
@@ -1206,7 +1206,7 @@ describe('admin() routes', () => {
 		configureFlueRuntime({
 			target: 'cloudflare',
 			runtimeVersion: '9.9.9',
-			manifest: { agents: [{ name: 'hello', channels: {}, created: false }] },
+			manifest: { agents: [{ name: 'hello', transports: {}, created: false }] },
 			createRunRegistryForRequest: () => ({
 				recordRunStart: async () => {},
 				recordRunEnd: async () => {},

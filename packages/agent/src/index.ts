@@ -63,12 +63,6 @@ export type {
 	AgentWebSocketHandler,
 	WorkflowRouteHandler,
 	WorkflowWebSocketHandler,
-	ChannelEventMap,
-	ChannelEventContext,
-	ChannelListener,
-	ChannelEmitResult,
-	DefinedChannel,
-	ChannelOptions,
 	AgentDispatchRequest,
 	NamedAgentDispatchRequest,
 	DispatchReceipt,
@@ -86,7 +80,6 @@ export { Type, fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvide
 export { createTools, BUILTIN_TOOL_NAMES } from './agent.ts';
 export { defineTool } from './tool.ts';
 export { createAgent, defineAgentProfile } from './agent-definition.ts';
-export { defineChannel } from './channels.ts';
 export { dispatch } from './runtime/flue-app.ts';
 export type { McpServerConnection, McpServerOptions, McpTransport } from './mcp.ts';
 export { connectMcpServer } from './mcp.ts';

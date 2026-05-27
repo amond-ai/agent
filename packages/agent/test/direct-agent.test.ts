@@ -36,7 +36,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
+				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(agent) },
 			dispatchQueue: new InMemoryDispatchQueue({
@@ -74,7 +74,7 @@ describe('direct attached agent delivery', () => {
 		let verifiedBody = '';
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			agentRouteMiddleware: {
 				assistant: async (c, next) => {
@@ -102,7 +102,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
+				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createFakeContext([]),
@@ -133,7 +133,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
+				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createFakeContext(prompts),
@@ -161,7 +161,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
+				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createFakeContext([]),
@@ -194,7 +194,7 @@ describe('direct attached agent delivery', () => {
 	it('streams structured correlated errors for failed attached prompts', async () => {
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
+			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
 			handlers: { assistant: async () => { throw new Error('do not leak'); } },
 			createContext: createTestContext,
 		});
@@ -218,7 +218,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
+				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createTestContext,
@@ -247,7 +247,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true }, created: true }],
+				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			handlers: {
 				assistant: createDirectAgentHandler(createAgent(() => ({

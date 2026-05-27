@@ -62,7 +62,6 @@ export interface FlueRuntime {
 	agentWebSocketMiddleware?: Record<string, MiddlewareHandler>;
 	workflowRouteMiddleware?: Record<string, MiddlewareHandler>;
 	workflowWebSocketMiddleware?: Record<string, MiddlewareHandler>;
-	channelApps?: Record<string, Hono<any, any, any>>;
 	nodeWebSocketAgentRoute?: MiddlewareHandler;
 	nodeWebSocketWorkflowRoute?: MiddlewareHandler;
 
@@ -139,16 +138,16 @@ export interface FlueRuntime {
 export interface FlueManifest {
 	agents: Array<{
 		name: string;
-		channels: { http?: true; websocket?: true };
+		transports: { http?: true; websocket?: true };
 		created: boolean;
 	}>;
 	workflows?: Array<{
 		name: string;
-		channels: { http?: boolean; websocket?: boolean };
+		transports: { http?: boolean; websocket?: boolean };
 	}>;
 }
 
-export type AttachedChannel = 'http' | 'websocket';
+export type ExposedTransport = 'http' | 'websocket';
 
 const RUN_ROUTES_BY_ID: ReadonlyArray<readonly [string, HandleRunRouteOptions['action']]> = [
 	['/runs/:runId', 'get'],
@@ -216,9 +215,6 @@ export function flue(): Hono {
 	const app = new Hono();
 
 	app.get('/openapi.json', lazyOpenApiRouteHandler(app, publicOpenApiOptions));
-
-	app.all('/channels/:name', channelAppRouteHandler);
-	app.all('/channels/:name/:path{.+}', channelAppRouteHandler);
 
 	app.post(
 		'/workflows/:name',
@@ -458,20 +454,11 @@ function runRouteSpec(action: HandleRunRouteOptions['action']) {
 	};
 }
 
-const channelAppRouteHandler: MiddlewareHandler = async (c) => {
-	const rt = requiredRuntime();
-	const name = c.req.param('name') ?? '';
-	const channelApp = rt.channelApps?.[name];
-	if (!channelApp) throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
-	const suffix = c.req.param('path') ?? '';
-	return channelApp.fetch(normalizeAttachedRequest(c.req.raw, `/${suffix}`), c.env);
-};
-
 const workflowSocketRouteHandler: MiddlewareHandler = async (c, next) => {
 	if (!isWebSocketUpgrade(c.req.raw)) return next();
 	const rt = requiredRuntime();
 	const name = c.req.param('name') ?? '';
-	if (!registeredWorkflowsForChannel(rt, 'websocket').includes(name)) {
+	if (!registeredWorkflowsForTransport(rt, 'websocket').includes(name)) {
 		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 	}
 	return runAttachedMiddleware(c, rt.workflowWebSocketMiddleware?.[name], async () => {
@@ -494,7 +481,7 @@ const agentSocketRouteHandler: MiddlewareHandler = async (c, next) => {
 	const rt = requiredRuntime();
 	const name = c.req.param('name') ?? '';
 	const id = c.req.param('id') ?? '';
-	if (!registeredAgentsForChannel(rt, 'websocket').includes(name) || id.trim() === '') {
+	if (!registeredAgentsForTransport(rt, 'websocket').includes(name) || id.trim() === '') {
 		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 	}
 	return runAttachedMiddleware(c, rt.agentWebSocketMiddleware?.[name], async () => {
@@ -524,7 +511,7 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 		method: c.req.method,
 		name,
 		registeredWorkflows: workflows.map((workflow) => workflow.name),
-		httpWorkflows: registeredWorkflowsForChannel(rt, 'http'),
+		httpWorkflows: registeredWorkflowsForTransport(rt, 'http'),
 	});
 	const request = c.req.raw.clone();
 
@@ -578,7 +565,7 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 		method: c.req.method,
 		name,
 		id,
-		registeredAgents: registeredAgentsForChannel(rt, 'http'),
+		registeredAgents: registeredAgentsForTransport(rt, 'http'),
 	});
 	const request = c.req.raw.clone();
 
@@ -746,14 +733,14 @@ function normalizeAttachedRequest(request: Request, pathname: string): Request {
 	return new Request(url, request);
 }
 
-export function registeredAgentsForChannel(rt: FlueRuntime, channel: AttachedChannel): readonly string[] {
+export function registeredAgentsForTransport(rt: FlueRuntime, transport: ExposedTransport): readonly string[] {
 	return (rt.manifest?.agents ?? [])
-		.filter((agent) => agent.channels[channel] === true)
+		.filter((agent) => agent.transports[transport] === true)
 		.map((agent) => agent.name);
 }
 
-export function registeredWorkflowsForChannel(rt: FlueRuntime, channel: AttachedChannel): readonly string[] {
+export function registeredWorkflowsForTransport(rt: FlueRuntime, transport: ExposedTransport): readonly string[] {
 	return (rt.manifest?.workflows ?? [])
-		.filter((workflow) => workflow.channels[channel] === true)
+		.filter((workflow) => workflow.transports[transport] === true)
 		.map((workflow) => workflow.name);
 }

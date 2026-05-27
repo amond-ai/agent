@@ -21,7 +21,7 @@ Flue isn't another AI SDK. It's a proper runtime-agnostic framework — think As
 
 ## Examples
 
-Message-driven agents receive direct HTTP or WebSocket messages at `/agents/:name/:id`; authored provider channel apps mount beneath `/channels/:channel/*` and agent-owned `channel.on(...)` listeners explicitly `dispatch(...)` work. See [Message-Driven Agents](docs/message-driven-agents.md) for these surfaces and inbound-only channel examples. Runnable WebSocket examples are available for [Node](examples/node-websocket) and [Cloudflare](examples/cloudflare-websocket).
+Message-driven agents receive direct HTTP or WebSocket messages at `/agents/:name/:id`; application-owned integrations may call `dispatch(...)` to deliver asynchronous input into agent sessions. See [Message-Driven Agents](docs/message-driven-agents.md) for these surfaces. Runnable WebSocket examples are available for [Node](examples/node-websocket) and [Cloudflare](examples/cloudflare-websocket).
 
 For external tracing, metrics, and error reporting, see [Observability](apps/docs/src/content/docs/guide/observability.md), the public `observe(...)`-based [Braintrust tracing example](examples/braintrust), and the [Sentry error-reporting example](examples/sentry).
 
@@ -417,7 +417,7 @@ Repeatable; later files override earlier ones on key collision. Shell-set env va
 
 ### Trigger From the CLI (`flue run`)
 
-Build and run any workflow locally, perfect for CI or one-shot scripted invocations. The CLI invokes the built Node artifact through a private child-process channel, independent of public workflow routes and middleware.
+Build and run any workflow locally, perfect for CI or one-shot scripted invocations. The CLI invokes the built Node artifact through private child-process communication, independent of public workflow routes and middleware.
 
 ```bash
 flue run hello --target node \

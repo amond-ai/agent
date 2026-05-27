@@ -7,7 +7,6 @@ export default defineConfig({
 		'src/client-compat.ts',
 		'src/sandbox-compat.ts',
 		'src/internal.ts',
-		'src/channels.ts',
 		'src/cloudflare/index.ts',
 		'src/node/index.ts',
 	],

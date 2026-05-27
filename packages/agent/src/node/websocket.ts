@@ -9,7 +9,7 @@ import type {
 	WorkflowWebSocketClientMessage,
 } from '../types.ts';
 import type { FlueManifest, FlueRuntime } from '../runtime/flue-app.ts';
-import { registeredAgentsForChannel, registeredWorkflowsForChannel } from '../runtime/flue-app.ts';
+import { registeredAgentsForTransport, registeredWorkflowsForTransport } from '../runtime/flue-app.ts';
 import type { AgentHandler, CreateContextFn, RunHandlerFn, WorkflowHandler } from '../runtime/handle-agent.ts';
 import { invokeDirectAttached, invokeWorkflowAttached } from '../runtime/handle-agent.ts';
 import { generateWorkflowRunId } from '../runtime/ids.ts';
@@ -51,8 +51,8 @@ export function createNodeWebSocketTransport(options: NodeWebSocketTransportOpti
 	installErrorEvent();
 	const server = new WebSocketServer({ noServer: true, maxPayload: options.maxPayload ?? 1024 * 1024 });
 	const runtime: FlueRuntime = { target: 'node', manifest: options.manifest };
-	const agents = new Set(registeredAgentsForChannel(runtime, 'websocket'));
-	const workflows = new Set(registeredWorkflowsForChannel(runtime, 'websocket'));
+	const agents = new Set(registeredAgentsForTransport(runtime, 'websocket'));
+	const workflows = new Set(registeredWorkflowsForTransport(runtime, 'websocket'));
 	const agentRoute = upgradeWebSocket((c) => {
 		const name = c.req.param('name') ?? '';
 		const id = c.req.param('id') ?? '';

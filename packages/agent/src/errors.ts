@@ -93,7 +93,7 @@ import type { FluePublicError } from './types.ts';
  *           type: 'agent_error',
  *           message,
  *           details: 'Available: "x", "y", "z"',             // ✗ leaks names
- *           dev: '',                                         // ✗ wasted channel
+	 *           dev: '',                                         // ✗ wasted field
  *           status: 500,                                     // ✗ wrong status
  *         });
  *       }

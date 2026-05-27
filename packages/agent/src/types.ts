@@ -1,6 +1,6 @@
 import type { AgentMessage, AgentTool, ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { ImageContent, Model, TSchema } from '@earendil-works/pi-ai';
-import type { Hono, MiddlewareHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
 import type * as v from 'valibot';
 
 
@@ -10,39 +10,6 @@ export type AgentRouteHandler = MiddlewareHandler;
 export type AgentWebSocketHandler = MiddlewareHandler;
 export type WorkflowRouteHandler = MiddlewareHandler;
 export type WorkflowWebSocketHandler = MiddlewareHandler;
-
-export type ChannelEventMap = object;
-
-export interface ChannelEventContext<TEvent, TThread> {
-	event: TEvent;
-	thread: TThread;
-}
-
-export type ChannelListener<TEvent, TThread> = (
-	ctx: ChannelEventContext<TEvent, TThread>,
-) => void | Promise<void>;
-
-export interface ChannelEmitResult {
-	invoked: number;
-	errors: unknown[];
-}
-
-export interface DefinedChannel<TEvents extends ChannelEventMap, TThread> {
-	readonly __flueDefinedChannel: true;
-	readonly app?: Hono<any, any, any>;
-	on<TKey extends keyof TEvents & string>(
-		type: TKey,
-		listener: ChannelListener<TEvents[TKey], TThread>,
-	): () => void;
-	emit<TKey extends keyof TEvents & string>(
-		type: TKey,
-		ctx: ChannelEventContext<TEvents[TKey], TThread>,
-	): Promise<ChannelEmitResult>;
-}
-
-export interface ChannelOptions<_TEvents extends ChannelEventMap, _TThread> {
-	app?: Hono<any, any, any>;
-}
 
 export interface AgentDispatchRequest {
 	id: string;

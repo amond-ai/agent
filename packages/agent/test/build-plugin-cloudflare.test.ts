@@ -27,7 +27,6 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).toContain('resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),');
 		expect(entry).not.toContain('runId: input.dispatchId');
 		expect(entry).not.toContain('createDurableDispatchRunStore');
-		expect(entry).not.toContain('Cloudflare external-channel dispatch processing is not supported yet');
 		expect(entry).not.toContain('createAgentDispatchProcessor');
 	});
 
@@ -121,20 +120,6 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).not.toContain('shouldSendProtocolMessages()');
 	});
 
-	it('imports discovered channel applications for worker-level mounted routes', async () => {
-		const entry = await new CloudflarePlugin().generateEntryPoint(testBuildContext());
-
-		expect(entry).toContain("import * as channel_github_0 from '/tmp/github.ts';");
-		expect(entry).toContain('const channelModules = {');
-		expect(entry).toContain('const channelApps = {};');
-		expect(entry).toContain('const localWorkflowHandlers = {};');
-		expect(entry).toContain('localWorkflowHandlers[name] = mod.run;');
-		expect(entry).toContain('localWorkflowHandlers,');
-		expect(entry).toContain('mod.default.__flueDefinedChannel !== true');
-		expect(entry).toContain('const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);');
-		expect(entry).toContain('channelApps,');
-	});
-
 	it('allows custom app routing to own Cloudflare WebSocket middleware and mounts', async () => {
 		const entry = await new CloudflarePlugin().generateEntryPoint({ ...testBuildContext(), appEntry: '/tmp/app.ts' });
 
@@ -158,7 +143,6 @@ function testBuildContext(): BuildContext {
 	return {
 		agents: [{ name: 'moderator', filePath: '/tmp/moderator.ts' }],
 		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts' }],
-		channels: [{ name: 'github', filePath: '/tmp/github.ts' }],
 		root: '/tmp/flue-test',
 		output: '/tmp/flue-test/dist',
 		runtimeVersion: '0.0.0-test',

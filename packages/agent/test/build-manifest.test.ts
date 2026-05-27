@@ -12,7 +12,6 @@ const discoveryOnlyPlugin: BuildPlugin = {
 		return `export default ${JSON.stringify({
 			agents: ctx.agents.map((agent) => agent.name),
 			workflows: ctx.workflows.map((workflow) => workflow.name),
-			channels: ctx.channels.map((channel) => channel.name),
 		})};\n`;
 	},
 };
@@ -28,33 +27,6 @@ describe('build discovery outputs', () => {
 		await expect(build({ root, plugin: discoveryOnlyPlugin })).resolves.toEqual({ changed: true });
 		expect(fs.readFileSync(path.join(root, 'dist', 'server.mjs'), 'utf-8')).toContain('assistant');
 		expect(fs.readFileSync(path.join(root, 'dist', 'server.mjs'), 'utf-8')).toContain('job');
-	});
-
-	it('discovers channel modules beneath the selected source root only', async () => {
-		const root = createFixtureRoot('flue-channel-discovery-');
-		fs.mkdirSync(path.join(root, 'channels'));
-		fs.mkdirSync(path.join(root, '.flue', 'agents'), { recursive: true });
-		fs.mkdirSync(path.join(root, '.flue', 'channels'));
-		fs.writeFileSync(path.join(root, 'channels', 'bare.ts'), `export default null;\n`);
-		fs.writeFileSync(path.join(root, '.flue', 'agents', 'assistant.ts'), `export default null;\n`);
-		fs.writeFileSync(path.join(root, '.flue', 'channels', 'github.ts'), `export default null;\n`);
-		fs.writeFileSync(path.join(root, '.flue', 'channels.ts'), `export default null;\n`);
-
-		await build({ root, plugin: discoveryOnlyPlugin });
-		const entry = fs.readFileSync(path.join(root, 'dist', 'server.mjs'), 'utf-8');
-		expect(entry).toContain('github');
-		expect(entry).not.toContain('bare');
-	});
-
-	it('rejects duplicate channel basenames', async () => {
-		const root = createFixtureRoot('flue-duplicate-channels-');
-		fs.mkdirSync(path.join(root, 'agents'));
-		fs.mkdirSync(path.join(root, 'channels'));
-		fs.writeFileSync(path.join(root, 'agents', 'assistant.ts'), `export default null;\n`);
-		fs.writeFileSync(path.join(root, 'channels', 'github.ts'), `export default null;\n`);
-		fs.writeFileSync(path.join(root, 'channels', 'github.js'), `export default null;\n`);
-
-		await expect(build({ root, plugin: discoveryOnlyPlugin })).rejects.toThrow('Duplicate channel basename "github"');
 	});
 });
 

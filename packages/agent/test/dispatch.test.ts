@@ -25,7 +25,7 @@ describe('global dispatch', () => {
 			target: 'node',
 			handlers: {},
 			dispatchQueue: queue,
-			manifest: { agents: [{ name: 'moderator', channels: {}, created: true }] },
+			manifest: { agents: [{ name: 'moderator', transports: {}, created: true }] },
 		});
 
 		const receipt = await dispatch({ agent: 'moderator', id: 'guild:1', input: { type: 'flagged' } });
@@ -48,7 +48,7 @@ describe('global dispatch', () => {
 		configureFlueRuntime({
 			target: 'node',
 			dispatchQueue: new InMemoryDispatchQueue({ process(item) { dispatches.push(item); } }),
-			manifest: { agents: [{ name: 'moderator', channels: {}, created: true }] },
+			manifest: { agents: [{ name: 'moderator', transports: {}, created: true }] },
 		});
 
 		await dispatch({ agent: 'moderator', id: 'guild:1', input });
@@ -67,7 +67,7 @@ describe('global dispatch', () => {
 			target: 'node',
 			dispatchQueue: new InMemoryDispatchQueue({ process(input) { dispatches.push(input); } }),
 			resolveDispatchAgentName: (candidate) => candidate === agent ? 'moderator' : undefined,
-			manifest: { agents: [{ name: 'moderator', channels: {}, created: true }] },
+			manifest: { agents: [{ name: 'moderator', transports: {}, created: true }] },
 		});
 
 		await dispatch(agent, { id: 'guild:1', session: 'case:1', input: { type: 'created' } });
@@ -86,7 +86,7 @@ describe('global dispatch', () => {
 					return { dispatchId: input.dispatchId, acceptedAt: input.acceptedAt };
 				},
 			},
-			manifest: { agents: [{ name: 'moderator', channels: {}, created: true }] },
+			manifest: { agents: [{ name: 'moderator', transports: {}, created: true }] },
 		});
 
 		const receipt = await dispatch({ agent: 'moderator', id: 'guild:1', input: null });
@@ -187,7 +187,7 @@ describe('global dispatch', () => {
 		configureFlueRuntime({
 			target: 'node', dispatchQueue: queue,
 			resolveDispatchAgentName: (candidate) => candidate === agent ? 'moderator' : undefined,
-			manifest: { agents: [{ name: 'moderator', channels: {}, created: true }] },
+			manifest: { agents: [{ name: 'moderator', transports: {}, created: true }] },
 		});
 
 		await dispatch(agent, { id: 'guild:1', input: { type: 'global' } });
