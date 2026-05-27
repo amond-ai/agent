@@ -572,7 +572,6 @@ class CloudflareReloader implements DevReloader {
 		if (normalized === 'wrangler.jsonc' || normalized === 'wrangler.json' || normalized === 'wrangler.toml') return true;
 		if (normalized.startsWith('agents/') || normalized.startsWith('.flue/agents/')) return true;
 		if (normalized.startsWith('workflows/') || normalized.startsWith('.flue/workflows/')) return true;
-		if (normalized.startsWith('channels/') || normalized.startsWith('.flue/channels/')) return true;
 		return /^(?:\.flue\/)?app\.(?:ts|mts|js|mjs)$/.test(normalized);
 	}
 

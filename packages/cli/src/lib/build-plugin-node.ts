@@ -7,7 +7,7 @@ export class NodePlugin implements BuildPlugin {
 	bundle: BuildPlugin['bundle'] = 'vite';
 
 	generateEntryPoint(ctx: BuildContext): string {
-		const { agents, appEntry, channels, workflows } = ctx;
+		const { agents, appEntry, workflows } = ctx;
 		const runtimeVersion = JSON.stringify(ctx.runtimeVersion);
 
 		const agentImports = agents
@@ -31,16 +31,6 @@ export class NodePlugin implements BuildPlugin {
 			.join('\n');
 		const workflowModuleEntries = workflows
 			.map((workflow, index) => `  ${JSON.stringify(workflow.name)}: ${workflowVarName(workflow.name, index)},`)
-			.join('\n');
-		const channelImports = channels
-			.map((channel, index) => {
-				const varName = channelVarName(channel.name, index);
-				const filePath = channel.filePath.replace(/\\/g, '/');
-				return `import * as ${varName} from '${filePath}';`;
-			})
-			.join('\n');
-		const channelModuleEntries = channels
-			.map((channel, index) => `  ${JSON.stringify(channel.name)}: ${channelVarName(channel.name, index)},`)
 			.join('\n');
 
 		// User-supplied app.ts (if any). The generated entry imports the user's
@@ -86,7 +76,6 @@ import {
 } from '@flue/runtime/internal';
 ${agentImports}
 ${workflowImports}
-${channelImports}
 ${userAppImport}
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -102,11 +91,8 @@ ${agentModuleEntries}
 const workflowModules = {
 ${workflowModuleEntries}
 };
-const channelModules = {
-${channelModuleEntries}
-};
-const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);
-const { manifest, directHandlers, localAgentHandlers, createdAgents, dispatchAgentNames, workflowHandlers, localWorkflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps } = normalized;
+const normalized = normalizeBuiltModules(agentModules, workflowModules);
+const { manifest, directHandlers, localAgentHandlers, createdAgents, dispatchAgentNames, workflowHandlers, localWorkflowHandlers, websocketAgentHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware } = normalized;
 
 const isLocalMode = process.env.FLUE_MODE === 'local';
 const localCliTarget = process.env.FLUE_CLI_TARGET;
@@ -186,7 +172,6 @@ configureFlueRuntime({
   agentWebSocketMiddleware,
   workflowRouteMiddleware,
   workflowWebSocketMiddleware,
-  channelApps,
   nodeWebSocketAgentRoute: websocketTransport?.agentRoute,
   nodeWebSocketWorkflowRoute: websocketTransport?.workflowRoute,
   createContext: createContextForRequest,
@@ -219,7 +204,7 @@ const app = createDefaultFlueApp();`
 // ─── Start ──────────────────────────────────────────────────────────────────
 
 function sendLocalMessage(message, done) {
-  if (!process.send) throw new Error('[flue] Local CLI execution requires an inherited IPC channel.');
+  if (!process.send) throw new Error('[flue] Local CLI execution requires an inherited IPC connection.');
   process.send(message, done);
 }
 
@@ -326,7 +311,7 @@ function startLocalAgent(name, id) {
 
 if (isLocalCliMode) {
   if (typeof process.send !== 'function') {
-    throw new Error('[flue] Local CLI execution requires an inherited IPC channel.');
+    throw new Error('[flue] Local CLI execution requires an inherited IPC connection.');
   }
   if (!localCliName || (localCliTarget !== 'workflow' && localCliTarget !== 'agent')) {
     failLocalStartup('Invalid local CLI target configuration.');
@@ -373,9 +358,4 @@ function agentVarName(name: string, index: number): string {
 function workflowVarName(name: string, index: number): string {
 	const readableName = name.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'workflow';
 	return `workflow_${readableName}_${index}`;
-}
-
-function channelVarName(name: string, index: number): string {
-	const readableName = name.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '') || 'channel';
-	return `channel_${readableName}_${index}`;
 }
