@@ -54,6 +54,8 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).toContain('restartedAsRunId: restartRunId');
 		expect(entry).toContain('Flue workflow execution was interrupted and restarted as run');
 		expect(entry).toContain('Flue workflow recovery input is unavailable; replacement admission was not attempted.');
+		expect(entry).toContain('const handler = localWorkflowHandlers[workflowName];');
+		expect(entry).toContain('const handler = isInternalRestart ? localWorkflowHandlers[workflowName] : workflowHandlers[workflowName];');
 		expect(entry).toContain("outcome: 'restart_admitted'");
 		expect(entry).toContain("outcome: 'restart_failed'");
 		expect(entry).not.toContain('JSON.stringify(payload ?? {})');
@@ -63,7 +65,11 @@ describe('Cloudflare build plugin', () => {
 		expect(workflowHttpBody).not.toContain('keepAliveWhile');
 		expect(workflowHttpBody).not.toContain('runHandler:');
 		expect(entry).toContain('messageWorkflowSocket');
-		expect(entry.slice(entry.indexOf('async function messageWorkflowSocket'))).toContain('keepAliveWhile');
+		const workflowSocketBody = entry.slice(entry.indexOf('async function messageWorkflowSocket'), entry.indexOf('function socketRequest'));
+		expect(workflowSocketBody).toContain('startWorkflowAdmission:');
+		expect(workflowSocketBody).toContain("doInstance.runFiber('flue:workflow:' + runId");
+		expect(workflowSocketBody).not.toContain('keepAliveWhile');
+		expect(workflowSocketBody).not.toContain('runHandler:');
 		expect(entry).not.toContain('recoverAgentRun');
 		expect(entry).not.toContain('reserveRecoveredAgentSession');
 		expect(entry).not.toContain('flue:webhook:');
@@ -98,6 +104,8 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).toContain("url.search = '';");
 		expect(entry).toContain('request: socketRequest(connection)');
 		const agentSocketBody = entry.slice(entry.indexOf('async function messageAgentSocket'), entry.indexOf('async function messageWorkflowSocket'));
+		expect(agentSocketBody).toContain('keepAliveWhile');
+		expect(agentSocketBody).not.toContain('startWorkflowAdmission:');
 		expect(agentSocketBody).not.toContain('runStore:');
 		expect(agentSocketBody).not.toContain('runSubscribers');
 		expect(agentSocketBody).not.toContain('runRegistry:');
@@ -110,6 +118,9 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).toContain("import * as channel_github_0 from '/tmp/github.ts';");
 		expect(entry).toContain('const channelModules = {');
 		expect(entry).toContain('const channelApps = {};');
+		expect(entry).toContain('const localWorkflowHandlers = {};');
+		expect(entry).toContain('localWorkflowHandlers[name] = mod.run;');
+		expect(entry).toContain('localWorkflowHandlers,');
 		expect(entry).toContain('mod.default.__flueDefinedChannel !== true');
 		expect(entry).toContain('const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);');
 		expect(entry).toContain('channelApps,');

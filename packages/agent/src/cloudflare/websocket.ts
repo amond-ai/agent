@@ -1,6 +1,6 @@
 import { InvalidRequestError } from '../errors.ts';
 import type { AgentWebSocketClientMessage, WebSocketServerMessage, WorkflowWebSocketClientMessage } from '../types.ts';
-import type { AgentHandler, CreateContextFn, RunHandlerFn, WorkflowHandler } from '../runtime/handle-agent.ts';
+import type { AgentHandler, CreateContextFn, RunHandlerFn, StartWorkflowAdmissionFn, WorkflowHandler } from '../runtime/handle-agent.ts';
 import { invokeDirectAttached, invokeWorkflowAttached } from '../runtime/handle-agent.ts';
 import type { RunRegistry } from '../runtime/run-registry.ts';
 import type { RunStore } from '../runtime/run-store.ts';
@@ -25,7 +25,6 @@ export interface CloudflareWebSocketConnection {
 interface CloudflareAttachedOptions {
 	request: Request;
 	createContext: CreateContextFn;
-	runHandler?: RunHandlerFn;
 	runStore?: RunStore;
 	runSubscribers?: RunSubscriberRegistry;
 	runRegistry?: RunRegistry;
@@ -36,12 +35,14 @@ export interface CloudflareAgentWebSocketOptions extends CloudflareAttachedOptio
 	id: string;
 	handler: AgentHandler;
 	beforePrompt?: (session: string) => void | Promise<void>;
+	runHandler?: RunHandlerFn;
 }
 
 export interface CloudflareWorkflowWebSocketOptions extends CloudflareAttachedOptions {
 	name: string;
 	runId: string;
 	handler: WorkflowHandler;
+	startWorkflowAdmission: StartWorkflowAdmissionFn;
 }
 
 type SocketMessage = string | ArrayBuffer | ArrayBufferView;
@@ -160,18 +161,30 @@ async function invokeWorkflow(
 	message: WorkflowWebSocketClientMessage,
 	options: CloudflareWorkflowWebSocketOptions,
 ): Promise<void> {
-	send(connection, { version: 1, type: 'started', requestId: message.requestId, runId: options.runId });
+	let didStart = false;
+	const bufferedEvents: Array<Parameters<NonNullable<Parameters<typeof invokeWorkflowAttached>[0]['onEvent']>>[0]> = [];
 	try {
 		const invocation = await invokeWorkflowAttached({
 			owner: { kind: 'workflow', workflowName: options.name, instanceId: options.runId },
 			id: options.runId,
 			runId: options.runId,
-			payload: message.payload,
+			payload: message.payload === undefined ? {} : message.payload,
 			request: options.request,
 			handler: options.handler,
 			createContext: options.createContext,
-			runHandler: options.runHandler,
-			onEvent: (event) => send(connection, { version: 1, type: 'event', requestId: message.requestId, runId: options.runId, event }),
+			startWorkflowAdmission: options.startWorkflowAdmission,
+			onAdmitted: () => {
+				didStart = true;
+				send(connection, { version: 1, type: 'started', requestId: message.requestId, runId: options.runId });
+				for (const event of bufferedEvents) send(connection, { version: 1, type: 'event', requestId: message.requestId, runId: options.runId, event });
+			},
+			onEvent: (event) => {
+				if (!didStart) {
+					bufferedEvents.push(event);
+					return;
+				}
+				send(connection, { version: 1, type: 'event', requestId: message.requestId, runId: options.runId, event });
+			},
 			emitIdleOnComplete: true,
 			runStore: options.runStore,
 			runSubscribers: options.runSubscribers,

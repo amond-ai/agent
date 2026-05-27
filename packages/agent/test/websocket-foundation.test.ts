@@ -431,6 +431,73 @@ describe('WebSocket transport foundation', () => {
 		expect(await runRegistry.lookupRun(runId)).toMatchObject({ status: 'errored' });
 	});
 
+	it('invokes workflow socket work through durable admission while preserving attached events', async () => {
+		const events: FlueEvent[] = [];
+		const runStore = new InMemoryRunStore();
+		const runRegistry = new InMemoryRunRegistry();
+		const runId = 'workflow:daily-report:admitted';
+		let admissions = 0;
+
+		const invocation = await invokeWorkflowAttached({
+			owner: { kind: 'workflow', workflowName: 'daily-report', instanceId: runId },
+			id: runId,
+			runId,
+			payload: { day: 'today' },
+			request: new Request('http://localhost/workflows/daily-report', { headers: { upgrade: 'websocket' } }),
+			createContext,
+			startWorkflowAdmission: async (_runId, run) => { admissions++; return run(); },
+			handler: async (ctx) => { ctx.log.info('running'); return { echoed: ctx.payload }; },
+			onEvent: (event) => { events.push(event); },
+			emitIdleOnComplete: true,
+			runStore,
+			runRegistry,
+		});
+
+		expect(admissions).toBe(1);
+		expect(invocation).toEqual({ runId, result: { echoed: { day: 'today' } } });
+		expect(events.map((event) => event.type)).toEqual(['run_start', 'log', 'idle', 'run_end']);
+		expect(await runStore.getRun(runId)).toMatchObject({ status: 'completed', result: { echoed: { day: 'today' } } });
+	});
+
+	it('preserves replacement linkage when a recovered workflow socket attempt is replaced', async () => {
+		const runStore = new InMemoryRunStore();
+		const runRegistry = new InMemoryRunRegistry();
+		const interruptedRunId = 'workflow:daily-report:socket-a';
+		const replacementRunId = 'workflow:daily-report:socket-b';
+		const interruptedOwner = { kind: 'workflow' as const, workflowName: 'daily-report', instanceId: interruptedRunId };
+		await runStore.createRun({ runId: interruptedRunId, owner: interruptedOwner, startedAt: new Date().toISOString(), payload: { day: 'today' } });
+
+		await failRecoveredRun({
+			label: 'daily-report',
+			owner: interruptedOwner,
+			id: interruptedRunId,
+			runId: interruptedRunId,
+			payload: { day: 'today' },
+			request: new Request('http://localhost/workflows/daily-report'),
+			createContext,
+			error: new Error('interrupted'),
+			restartedAsRunId: replacementRunId,
+			runStore,
+			runRegistry,
+		});
+		await invokeWorkflowAttached({
+			owner: { kind: 'workflow', workflowName: 'daily-report', instanceId: replacementRunId },
+			id: replacementRunId,
+			runId: replacementRunId,
+			payload: { day: 'today' },
+			restartedFromRunId: interruptedRunId,
+			request: new Request('http://localhost/workflows/daily-report'),
+			createContext,
+			startWorkflowAdmission: async (_runId, run) => run(),
+			handler: async () => ({ ok: true }),
+			runStore,
+			runRegistry,
+		});
+
+		expect(await runStore.getRun(interruptedRunId)).toMatchObject({ status: 'errored', restartedAsRunId: replacementRunId });
+		expect(await runStore.getRun(replacementRunId)).toMatchObject({ status: 'completed', restartedFromRunId: interruptedRunId });
+	});
+
 	it('invokes attached work with an event sink independent of HTTP response formatting', async () => {
 		const events: FlueEvent[] = [];
 		const runStore = new InMemoryRunStore();

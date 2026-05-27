@@ -6,8 +6,8 @@ import {
 	messageCloudflareWorkflowWebSocket,
 	type CloudflareWebSocketConnection,
 } from '../src/cloudflare/websocket.ts';
-import { createFlueContext, InMemoryRunRegistry, InMemoryRunStore, InMemorySessionStore } from '../src/internal.ts';
-import type { WebSocketServerMessage } from '../src/types.ts';
+import { createFlueContext, InMemoryRunRegistry, InMemoryRunStore, InMemorySessionStore, type RunRecord, type RunStore } from '../src/internal.ts';
+import type { FlueEvent, WebSocketServerMessage } from '../src/types.ts';
 
 describe('Cloudflare WebSocket transport', () => {
 	it('keeps agent sockets open across sequential prompts', async () => {
@@ -58,24 +58,128 @@ describe('Cloudflare WebSocket transport', () => {
 		expect(connection.closed).toBeUndefined();
 	});
 
-	it('runs one workflow invocation and closes normally after its result', async () => {
+	it('runs one workflow invocation through durable admission and closes normally after its result', async () => {
 		const connection = new TestConnection();
+		let admissions = 0;
 		connectCloudflareWorkflowWebSocket(connection, { name: 'job', runId: 'workflow:job:test', requestUrl: 'https://example.com/workflows/job' });
 		await messageCloudflareWorkflowWebSocket(connection, JSON.stringify({ version: 1, type: 'invoke', requestId: 'work-1', payload: { ok: true } }), {
 			name: 'job',
 			runId: 'workflow:job:test',
 			request: new Request('https://example.com/workflows/job'),
-			handler: async (ctx) => ctx.payload,
+			handler: async (ctx) => { ctx.log.info('working'); return ctx.payload; },
 			createContext,
+			startWorkflowAdmission: async (runId, run) => { admissions++; expect(runId).toBe('workflow:job:test'); return run(); },
 			runStore: new InMemoryRunStore(),
 			runRegistry: new InMemoryRunRegistry(),
 		});
 
+		expect(admissions).toBe(1);
 		expect(connection.messages[0]).toMatchObject({ type: 'ready', target: 'workflow', name: 'job' });
+		expect(connection.messages[1]).toMatchObject({ type: 'started', requestId: 'work-1', runId: 'workflow:job:test' });
+		expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'event', requestId: 'work-1', runId: 'workflow:job:test', event: expect.objectContaining({ type: 'run_start' }) }));
+		expect(connection.messages.findIndex((message) => message.type === 'started')).toBeLessThan(connection.messages.findIndex((message) => message.type === 'event'));
 		expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'result', requestId: 'work-1', result: { ok: true } }));
 		expect(connection.closed).toEqual({ code: 1000, reason: 'Workflow completed' });
 	});
+
+	it('does not send started when durable execution scheduling fails', async () => {
+		const connection = new TestConnection();
+		connectCloudflareWorkflowWebSocket(connection, { name: 'job', runId: 'workflow:job:admission-error', requestUrl: 'https://example.com/workflows/job' });
+		await messageCloudflareWorkflowWebSocket(connection, JSON.stringify({ version: 1, type: 'invoke', requestId: 'work-admission-error', payload: {} }), {
+			name: 'job',
+			runId: 'workflow:job:admission-error',
+			request: new Request('https://example.com/workflows/job'),
+			handler: async () => null,
+			createContext,
+			startWorkflowAdmission: () => { throw new Error('no fiber'); },
+			runStore: new InMemoryRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+		});
+
+		expect(connection.messages.some((message) => message.type === 'started')).toBe(false);
+		expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'error', requestId: 'work-admission-error' }));
+		expect(connection.closed).toEqual({ code: 1011, reason: 'Workflow failed' });
+	});
+
+	it('normalizes an omitted workflow payload for recoverable admission', async () => {
+		const connection = new TestConnection();
+		const runStore = new InMemoryRunStore();
+		connectCloudflareWorkflowWebSocket(connection, { name: 'job', runId: 'workflow:job:empty', requestUrl: 'https://example.com/workflows/job' });
+		await messageCloudflareWorkflowWebSocket(connection, JSON.stringify({ version: 1, type: 'invoke', requestId: 'work-empty' }), {
+			name: 'job',
+			runId: 'workflow:job:empty',
+			request: new Request('https://example.com/workflows/job'),
+			handler: async (ctx) => ctx.payload,
+			createContext,
+			startWorkflowAdmission: async (_runId, run) => run(),
+			runStore,
+			runRegistry: new InMemoryRunRegistry(),
+		});
+
+		expect(await runStore.getRun('workflow:job:empty')).toMatchObject({ payload: {}, result: {} });
+		expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'result', result: {} }));
+	});
+
+	it('preserves an explicit null workflow payload', async () => {
+		const connection = new TestConnection();
+		const runStore = new InMemoryRunStore();
+		connectCloudflareWorkflowWebSocket(connection, { name: 'job', runId: 'workflow:job:null', requestUrl: 'https://example.com/workflows/job' });
+		await messageCloudflareWorkflowWebSocket(connection, JSON.stringify({ version: 1, type: 'invoke', requestId: 'work-null', payload: null }), {
+			name: 'job',
+			runId: 'workflow:job:null',
+			request: new Request('https://example.com/workflows/job'),
+			handler: async (ctx) => ctx.payload,
+			createContext,
+			startWorkflowAdmission: async (_runId, run) => run(),
+			runStore,
+			runRegistry: new InMemoryRunRegistry(),
+		});
+
+		expect(await runStore.getRun('workflow:job:null')).toMatchObject({ payload: null, result: null });
+		expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'result', result: null }));
+	});
+
+	it('does not send started or execute a workflow when durable admission persistence fails', async () => {
+		const connection = new TestConnection();
+		let admissions = 0;
+		let executions = 0;
+		connectCloudflareWorkflowWebSocket(connection, { name: 'job', runId: 'workflow:job:failed', requestUrl: 'https://example.com/workflows/job' });
+		await messageCloudflareWorkflowWebSocket(connection, JSON.stringify({ version: 1, type: 'invoke', requestId: 'work-2', payload: { ok: true } }), {
+			name: 'job',
+			runId: 'workflow:job:failed',
+			request: new Request('https://example.com/workflows/job'),
+			handler: async () => { executions++; return null; },
+			createContext,
+			startWorkflowAdmission: async (_runId, run) => { admissions++; return run(); },
+			runStore: new FailingRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+		});
+
+		expect(admissions).toBe(0);
+		expect(executions).toBe(0);
+		expect(connection.messages.some((message) => message.type === 'started')).toBe(false);
+		expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'error', requestId: 'work-2', runId: 'workflow:job:failed' }));
+		expect(connection.closed).toEqual({ code: 1011, reason: 'Workflow failed' });
+	});
 });
+
+class FailingRunStore implements RunStore {
+	async createRun(_input: Parameters<RunStore['createRun']>[0]): Promise<void> {
+		throw new Error('create failed');
+	}
+
+	async endRun(_input: Parameters<RunStore['endRun']>[0]): Promise<void> {}
+
+	async appendEvent(_runId: string, _event: FlueEvent): Promise<void> {}
+
+	async getEvents(_runId: string, _fromIndex?: number): Promise<FlueEvent[]> {
+		return [];
+	}
+
+	async getRun(_runId: string): Promise<RunRecord | null> {
+		return null;
+	}
+}
 
 class TestConnection implements CloudflareWebSocketConnection {
 	attachment = null as ReturnType<CloudflareWebSocketConnection['deserializeAttachment']>;

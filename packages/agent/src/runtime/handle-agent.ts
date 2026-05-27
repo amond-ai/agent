@@ -150,7 +150,7 @@ export type CreateContextFn = (
  *   - Cloudflare: `doInstance.runFiber('flue:workflow:<runId>', run)`.
  *
  * The caller is responsible for any logging on completion/error; this wrapper
- * starts durably admitted workflow execution for any HTTP observation mode.
+ * starts durably admitted workflow execution for any supported observation mode.
  */
 export type StartWorkflowAdmissionFn = (runId: string, run: () => Promise<unknown>) => Promise<unknown>;
 
@@ -228,9 +228,6 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 	const { request, workflowName, handler, createContext, runStore, runSubscribers, runRegistry, restartedFromRunId } = opts;
 	const startWorkflowAdmission = opts.startWorkflowAdmission ?? defaultStartWorkflowAdmission;
 	const runId = opts.runId ?? generateWorkflowRunId(workflowName);
-	// Workflows have one instance per run, so the workflow instance id and
-	// the run id are the same value. Per-workflow Durable Object classes route
-	// their finite invocation by that shared `instanceId` / `runId` identity.
 	const instanceId = runId;
 
 	try {
@@ -278,7 +275,9 @@ export interface InvokeWorkflowAttachedOptions {
 	payload: unknown;
 	request: Request;
 	createContext: CreateContextFn;
+	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 	runHandler?: RunHandlerFn;
+	onAdmitted?: (runId: string) => void;
 	onEvent?: FlueEventCallback;
 	emitIdleOnComplete?: boolean;
 	runStore?: RunStore;
@@ -344,7 +343,7 @@ async function waitForAgentSessionLock(target: AgentSessionTarget, payload: unkn
 
 interface WorkflowAdmissionOptions {
 	label: string;
-	observationMode: 'accepted' | 'sse' | 'wait_result';
+	observationMode: 'accepted' | 'sse' | 'wait_result' | 'websocket';
 	owner: RunOwner;
 	id: string;
 	runId: string;
@@ -357,11 +356,14 @@ interface WorkflowAdmissionOptions {
 	runSubscribers?: RunSubscriberRegistry;
 	runRegistry?: RunRegistry;
 	restartedFromRunId?: string;
+	onAdmitted?: (runId: string) => void;
+	onEvent?: FlueEventCallback;
+	emitIdleOnComplete?: boolean;
 }
 
 interface AdmittedWorkflowExecution {
 	label: string;
-	observationMode: 'accepted' | 'sse' | 'wait_result';
+	observationMode: 'accepted' | 'sse' | 'wait_result' | 'websocket';
 	owner: RunOwner;
 	runId: string;
 	runStore: RunStore;
@@ -369,6 +371,9 @@ interface AdmittedWorkflowExecution {
 	lifecycle: WorkflowRunLifecycle;
 	startWorkflowAdmission: StartWorkflowAdmissionFn;
 	handler: WorkflowHandler;
+	onAdmitted?: (runId: string) => void;
+	onEvent?: FlueEventCallback;
+	emitIdleOnComplete?: boolean;
 	completion?: Promise<unknown>;
 }
 
@@ -388,6 +393,9 @@ async function prepareWorkflowExecution(opts: WorkflowAdmissionOptions): Promise
 		runSubscribers,
 		runRegistry,
 		restartedFromRunId,
+		onAdmitted,
+		onEvent,
+		emitIdleOnComplete,
 	} = opts;
 	if (!runStore) throw new RunStoreUnavailableError();
 	const lifecycle = await createWorkflowRunLifecycle({
@@ -403,27 +411,48 @@ async function prepareWorkflowExecution(opts: WorkflowAdmissionOptions): Promise
 		restartedFromRunId,
 		requirePersistedAdmission: true,
 	});
-	return { label, observationMode, owner, runId, runStore, runSubscribers, lifecycle, startWorkflowAdmission, handler };
+	return { label, observationMode, owner, runId, runStore, runSubscribers, lifecycle, startWorkflowAdmission, handler, onAdmitted, onEvent, emitIdleOnComplete };
 }
 
 function startWorkflowExecution(execution: AdmittedWorkflowExecution): Promise<unknown> {
 	if (execution.completion) return execution.completion;
-	const { label, observationMode, runId, lifecycle, handler, startWorkflowAdmission } = execution;
+	const { label, observationMode, runId, lifecycle, handler, startWorkflowAdmission, onEvent, emitIdleOnComplete } = execution;
 	let didRun = false;
+	let didEmitIdle = false;
+	if (onEvent || emitIdleOnComplete) {
+		lifecycle.ctx.setEventCallback((event) => {
+			if (event.type === 'idle') didEmitIdle = true;
+			return onEvent?.(event);
+		});
+	}
 	const run = async (): Promise<unknown> => {
 		didRun = true;
-		return withWorkflowRunLifecycle(lifecycle, () => handler(lifecycle.ctx));
+		try {
+			return await withWorkflowRunLifecycle(lifecycle, async () => {
+				try {
+					return await handler(lifecycle.ctx);
+				} finally {
+					if (emitIdleOnComplete && !didEmitIdle) lifecycle.ctx.emitEvent({ type: 'idle' });
+				}
+			});
+		} finally {
+			lifecycle.ctx.setEventCallback(undefined);
+		}
 	};
 	let scheduled: Promise<unknown>;
 	try {
 		scheduled = startWorkflowAdmission(runId, run);
 	} catch (error) {
+		lifecycle.ctx.setEventCallback(undefined);
 		execution.completion = emitRunEnd(lifecycle, { isError: true, error }).then(() => Promise.reject(error));
 		execution.completion.catch(() => undefined);
 		throw error;
 	}
 	execution.completion = scheduled.catch(async (error) => {
-		if (!didRun) await emitRunEnd(lifecycle, { isError: true, error });
+		if (!didRun) {
+			await emitRunEnd(lifecycle, { isError: true, error });
+			lifecycle.ctx.setEventCallback(undefined);
+		}
 		throw error;
 	});
 	execution.completion.then(
@@ -694,7 +723,36 @@ async function runSyncMode(execution: AdmittedWorkflowExecution): Promise<Respon
 }
 
 export async function invokeWorkflowAttached(opts: InvokeWorkflowAttachedOptions): Promise<WorkflowAttachedInvocationResult> {
-	return invokeWorkflowAttachedUnlocked(opts);
+	if (!opts.startWorkflowAdmission) return invokeWorkflowAttachedUnlocked(opts);
+	const execution = await prepareWorkflowExecution({
+		label: opts.owner.workflowName,
+		observationMode: 'websocket',
+		owner: opts.owner,
+		id: opts.id,
+		runId: opts.runId,
+		handler: opts.handler,
+		payload: opts.payload,
+		request: opts.request,
+		createContext: opts.createContext,
+		startWorkflowAdmission: opts.startWorkflowAdmission,
+		runStore: opts.runStore,
+		runSubscribers: opts.runSubscribers,
+		runRegistry: opts.runRegistry,
+		restartedFromRunId: opts.restartedFromRunId,
+		onAdmitted: opts.onAdmitted,
+		onEvent: opts.onEvent,
+		emitIdleOnComplete: opts.emitIdleOnComplete,
+	});
+	let result: unknown;
+	try {
+		const completion = startWorkflowExecution(execution);
+		execution.onAdmitted?.(opts.runId);
+		result = await completion;
+	} catch (error) {
+		await execution.completion?.catch(() => undefined);
+		throw error;
+	}
+	return { runId: opts.runId, result };
 }
 
 async function invokeWorkflowAttachedUnlocked(opts: InvokeWorkflowAttachedOptions): Promise<WorkflowAttachedInvocationResult> {
