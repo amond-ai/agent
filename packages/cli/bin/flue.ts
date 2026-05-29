@@ -98,7 +98,7 @@ function printUsage() {
 			'  flue logs run_01H... --no-follow                  # replay a workflow run\n' +
 			'  flue logs run_01H... --types tool_call,log,run_end --format json\n' +
 			'\n' +
-			'Note: set the model in `createAgent(() => ({ model: "provider/model-id" }))` ' +
+			'Note: set the model in `createAgent(() => ({ model: "provider-id/model-id" }))` ' +
 			'or per-call `{ model: ... }` on prompt/skill/task.',
 	);
 }
