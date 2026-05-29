@@ -106,49 +106,48 @@ export { hasRegisteredProvider } from './runtime/providers.ts';
 export { InMemorySessionStore } from './session.ts';
 
 /**
- * Resolve `provider/model-id` to a pi-ai Model. Registered URL prefixes win
- * over pi-ai's catalog; configureProvider settings patch the resolved Model.
+ * Resolve a `provider-id/model-id` model specifier to a pi-ai Model.
+ * Registered provider IDs win over pi-ai's catalog; configured provider
+ * settings patch the resolved Model.
  */
 export function resolveModel(model: ModelConfig | undefined): Model<Api> | undefined {
 	if (model === false || model === undefined) return undefined;
 
-	const modelString = model;
+	const modelSpecifier = model;
 
-	const slash = modelString.indexOf('/');
+	const slash = modelSpecifier.indexOf('/');
 	if (slash === -1) {
 		throw new Error(
-			`[flue] Invalid model "${modelString}". ` +
-				`Use the "provider/model-id" format (e.g. "anthropic/claude-haiku-4-5").`,
+			`[flue] Invalid model specifier "${modelSpecifier}". ` +
+				`Use the "provider-id/model-id" format (e.g. "anthropic/claude-haiku-4-5").`,
 		);
 	}
-	const provider = modelString.slice(0, slash);
-	const modelId = modelString.slice(slash + 1);
+	const providerId = modelSpecifier.slice(0, slash);
+	const modelId = modelSpecifier.slice(slash + 1);
 
-	// Registered prefixes win over pi-ai's catalog.
-	const built = resolveRegisteredModel(provider, modelId);
-	if (built) {
+	const registered = resolveRegisteredModel(providerId, modelId);
+	if (registered) {
 		if (modelId === '') {
 			throw new Error(
-				`[flue] Invalid model "${modelString}". ` +
-					`The "${provider}/" prefix is registered via registerProvider(), but no model id ` +
-					`was given. Use "${provider}/<model-id>".`,
+				`[flue] Invalid model specifier "${modelSpecifier}". ` +
+					`Provider ID "${providerId}" is registered via registerProvider(), but no model ID ` +
+					`was given. Use "${providerId}/<model-id>".`,
 			);
 		}
-		// Overrides are keyed by the resolved provider slug.
-		return applyProviderSettings(built, getProviderConfiguration(built.provider));
+		return applyProviderSettings(registered, getProviderConfiguration(providerId));
 	}
 
-	// `getModel` is typed for literal model ids; runtime strings are checked by
+	// `getModel` is typed for literal model IDs; runtime strings are checked by
 	// the null return below.
-	const resolved = getModel(provider as KnownProvider, modelId as never);
+	const resolved = getModel(providerId as KnownProvider, modelId as never);
 	if (!resolved) {
 		throw new Error(
-			`[flue] Unknown model "${modelString}". ` +
-				`Provider "${provider}" / model id "${modelId}" ` +
+			`[flue] Unknown model specifier "${modelSpecifier}". ` +
+				`Provider ID "${providerId}" / model ID "${modelId}" ` +
 				`is not registered with @earendil-works/pi-ai or via registerProvider().`,
 		);
 	}
-	return applyProviderSettings(resolved, getProviderConfiguration(provider));
+	return applyProviderSettings(resolved, getProviderConfiguration(providerId));
 }
 
 function applyProviderSettings<TApi extends Api>(

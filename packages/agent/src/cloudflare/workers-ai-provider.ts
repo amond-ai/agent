@@ -121,6 +121,8 @@ interface ChatCompletionChunk {
 	usage?: ChatCompletionUsage;
 }
 
+type WorkersAIReasoningEffort = 'low' | 'medium' | 'high';
+
 interface StreamingTextBlock {
 	type: 'text';
 	text: string;
@@ -253,7 +255,7 @@ function isAbortError(error: unknown): boolean {
 	return error instanceof Error && (error.name === 'AbortError' || /aborted/i.test(error.message));
 }
 
-const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, StreamOptions> = (
+const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, SimpleStreamOptions> = (
 	model,
 	context,
 	options,
@@ -296,6 +298,7 @@ const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, StreamOp
 			if (options?.temperature !== undefined) {
 				payload.temperature = options.temperature;
 			}
+			applyReasoningEffort(payload, model, options?.reasoning);
 
 			// `onPayload`: undefined keeps the payload, any other return replaces it.
 			const overridden = await options?.onPayload?.(payload, model);
@@ -311,7 +314,7 @@ const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, StreamOp
 				Object.assign(extraHeaders, options.headers);
 			}
 
-			// `Ai.run` only types overloads for known model ids; we route
+			// `Ai.run` only types overloads for known model IDs; we route
 			// arbitrary ids through the unknown-model overload (see RunOverload).
 			// `returnRawResponse: true` + `stream: true` in the payload gives us
 			// the raw SSE Response we parse below.
@@ -586,6 +589,28 @@ function pickReasoning(delta: ChatCompletionDelta): { field: string; text: strin
 	return null;
 }
 
+function applyReasoningEffort(
+	payload: Record<string, unknown>,
+	model: Model<CloudflareAIBindingApi>,
+	level: SimpleStreamOptions['reasoning'] | undefined,
+): void {
+	if (!model.reasoning || level === undefined) return;
+	payload.reasoning_effort = mapReasoningEffort(level);
+}
+
+function mapReasoningEffort(level: NonNullable<SimpleStreamOptions['reasoning']>): WorkersAIReasoningEffort {
+	switch (level) {
+		case 'minimal':
+		case 'low':
+			return 'low';
+		case 'medium':
+			return 'medium';
+		case 'high':
+		case 'xhigh':
+			return 'high';
+	}
+}
+
 function headersToRecord(headers: Headers): Record<string, string> {
 	const out: Record<string, string> = {};
 	headers.forEach((value, key) => {
@@ -614,11 +639,6 @@ export function getCloudflareAIBindingApiProvider(): ApiProvider<
 	return {
 		api: CLOUDFLARE_AI_BINDING_API,
 		stream: streamCloudflareWorkersAi,
-		// `SimpleStreamOptions` is a superset of `StreamOptions`; reuse is safe
-		// because reasoning-effort / thinking-budget aren't sent to Workers AI.
-		streamSimple: streamCloudflareWorkersAi as unknown as StreamFunction<
-			CloudflareAIBindingApi,
-			SimpleStreamOptions
-		>,
+		streamSimple: streamCloudflareWorkersAi,
 	};
 }

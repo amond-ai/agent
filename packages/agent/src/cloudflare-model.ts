@@ -6,6 +6,3 @@
 /** Pi-ai `Api` slug for the binding-backed Workers AI provider. */
 export const CLOUDFLARE_AI_BINDING_API = 'cloudflare-ai-binding' as const;
 export type CloudflareAIBindingApi = typeof CLOUDFLARE_AI_BINDING_API;
-
-/** Provider name surfaced on AssistantMessage records and usage logs. */
-export const CLOUDFLARE_AI_BINDING_PROVIDER = 'workers-ai' as const;

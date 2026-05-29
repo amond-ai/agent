@@ -346,7 +346,7 @@ export interface CompactionConfig {
 	 * Override the model used for summarization. Defaults to the session's
 	 * model. Useful for cost optimization (cheap summarizer on an expensive
 	 * session model) or quality routing (long-context summarizer on a
-	 * short-context session). Format: `'provider/modelId'`.
+	 * short-context session). Format: `'provider-id/model-id'`.
 	 */
 	model?: string;
 }
@@ -387,7 +387,7 @@ export interface AgentConfig {
 	 * call-site override.
 	 */
 	model: Model<any> | undefined;
-	/** Resolve model config to a Model instance. Throws on invalid model strings. */
+	/** Resolve model config to a Model instance. Throws on invalid model specifiers. */
 	resolveModel: (model: ModelConfig | undefined) => Model<any> | undefined;
 	/**
 	 * Agent-wide default reasoning effort. Per-call values override this. The
@@ -647,6 +647,7 @@ export interface PromptUsage {
  * the call's primary turn.
  */
 export interface PromptModel {
+	provider: string;
 	id: string;
 }
 

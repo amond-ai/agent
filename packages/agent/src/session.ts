@@ -688,14 +688,15 @@ export class Session implements FlueSession {
 					const message = event.message;
 					const assistant = message.role === 'assistant' ? (message as AssistantMessage) : undefined;
 					const output = assistant ? (toTurnMessage(assistant) as TurnOutput) : undefined;
+					const model = this.harness.state.model;
 					this.emit({
 						type: 'turn',
 						turnId,
 						purpose: 'agent',
 						durationMs: durationSince(this.turnStartTime),
-						model: assistant?.model,
-						provider: assistant?.provider,
-						api: assistant?.api,
+						model: model?.id,
+						provider: model?.provider,
+						api: model?.api,
 						output,
 						usage: fromProviderUsage(assistant?.usage),
 						stopReason: assistant?.stopReason,
@@ -960,8 +961,8 @@ export class Session implements FlueSession {
 	}
 
 	/** Precedence: call-level > agent-level default. */
-	private resolveModelForCall(promptModel: string | undefined, callSite: string): Model<any> {
-		const model = promptModel ? this.config.resolveModel(promptModel) : this.config.model;
+	private resolveModelForCall(modelSpecifier: string | undefined, callSite: string): Model<any> {
+		const model = modelSpecifier ? this.config.resolveModel(modelSpecifier) : this.config.model;
 		return this.requireModel(model, callSite);
 	}
 
@@ -979,16 +980,16 @@ export class Session implements FlueSession {
 		if (model) return model;
 		throw new Error(
 			`[flue] No model configured for ${callSite}. ` +
-				`Pass \`{ model: "provider/model-id" }\` to this call or configure an agent model.`,
+				`Pass \`{ model: "provider-id/model-id" }\` to this call or configure an agent model.`,
 		);
 	}
 
-	private getProviderApiKey(provider: string): string | undefined {
+	private getProviderApiKey(providerId: string): string | undefined {
 		// Explicit provider configuration overrides apiKeys carried by registered
 		// provider templates. Undefined falls through to pi-ai's env-var lookup.
-		const override = getProviderConfiguration(provider)?.apiKey;
+		const override = getProviderConfiguration(providerId)?.apiKey;
 		if (override !== undefined) return override;
-		return getRegisteredApiKey(provider);
+		return getRegisteredApiKey(providerId);
 	}
 
 	/**
@@ -1686,9 +1687,9 @@ export class Session implements FlueSession {
 							turnId: handle.turnId,
 							purpose,
 							durationMs: durationSince(handle.startedAt),
-							model: response?.model ?? model.id,
-							provider: response?.provider ?? model.provider,
-							api: response?.api ?? model.api,
+							model: model.id,
+							provider: model.provider,
+							api: model.api,
 							output,
 							usage: fromProviderUsage(response?.usage),
 							stopReason: response?.stopReason,
@@ -1882,7 +1883,7 @@ export class Session implements FlueSession {
 				return {
 					text: this.getAssistantText(),
 					usage: this.aggregateUsageSince(inputEntry.id),
-					model: { id: resolvedModel.id },
+					model: { provider: resolvedModel.provider, id: resolvedModel.id },
 				};
 			},
 		);
@@ -1925,7 +1926,7 @@ export class Session implements FlueSession {
 			async ({ resolvedModel }) => {
 				const beforeLength = this.harness.state.messages.length;
 				const beforeLeafId = this.history.getLeafId();
-				const model: PromptModel = { id: resolvedModel.id };
+				const model: PromptModel = { provider: resolvedModel.provider, id: resolvedModel.id };
 
 				if (resultBundle) {
 					const result = await this.runWithResultTools(

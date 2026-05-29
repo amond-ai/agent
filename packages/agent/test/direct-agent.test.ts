@@ -62,7 +62,7 @@ describe('direct attached agent delivery', () => {
 		);
 
 		expect(res.status).toBe(200);
-		expect((await res.json()) as unknown).toEqual({ result: { text: 'reply:hello', usage: {}, model: { id: 'test' } } });
+		expect((await res.json()) as unknown).toEqual({ result: { text: 'reply:hello', usage: {}, model: { provider: 'test-provider', id: 'test' } } });
 		expect(res.headers.get('x-flue-run-id')).toBeNull();
 		expect(initCalls).toEqual(['inst-1:undefined']);
 		expect(prompts).toEqual([{ session: 'default', message: 'hello' }]);
@@ -296,15 +296,15 @@ function fakeHarness(prompts: Array<{ session: string; message: string }>): Flue
 function fakeSession(session: string, prompts: Array<{ session: string; message: string }>): FlueSession & { processDirectInput(input: { message: string }): PromiseLike<unknown> } {
 	return {
 		name: session,
-		prompt: (() => Promise.resolve({ text: '', usage: {}, model: { id: 'test' } })) as never,
+		prompt: (() => Promise.resolve({ text: '', usage: {}, model: { provider: 'test-provider', id: 'test' } })) as never,
 		processDirectInput: ({ message }: { message: string }) => {
 			prompts.push({ session, message });
-			return Promise.resolve({ text: `reply:${message}`, usage: {}, model: { id: 'test' } });
+			return Promise.resolve({ text: `reply:${message}`, usage: {}, model: { provider: 'test-provider', id: 'test' } });
 		},
 		shell: (() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 })) as never,
 		fs: {} as never,
-		skill: (() => Promise.resolve({ text: '', usage: {}, model: { id: 'test' } })) as never,
-		task: (() => Promise.resolve({ text: '', usage: {}, model: { id: 'test' } })) as never,
+		skill: (() => Promise.resolve({ text: '', usage: {}, model: { provider: 'test-provider', id: 'test' } })) as never,
+		task: (() => Promise.resolve({ text: '', usage: {}, model: { provider: 'test-provider', id: 'test' } })) as never,
 		compact: async () => {},
 		delete: async () => {},
 	};

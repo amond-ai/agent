@@ -8,10 +8,7 @@ import {
 	type Model,
 } from '@earendil-works/pi-ai';
 import type { CloudflareGatewayOptions } from '../cloudflare/gateway.ts';
-import {
-	CLOUDFLARE_AI_BINDING_API,
-	CLOUDFLARE_AI_BINDING_PROVIDER,
-} from '../cloudflare-model.ts';
+import { CLOUDFLARE_AI_BINDING_API } from '../cloudflare-model.ts';
 import type { ProviderSettings } from '../types.ts';
 
 // ─── Public types ───────────────────────────────────────────────────────────
@@ -22,14 +19,14 @@ import type { ProviderSettings } from '../types.ts';
  */
 export interface CloudflareAIBinding {
 	run(
-		model: string,
+		modelId: string,
 		inputs: Record<string, unknown>,
 		options?: Record<string, unknown>,
 	): Promise<Response | Record<string, unknown>>;
 }
 
 /**
- * Provider declarations keyed by URL prefix. HTTP providers carry endpoint
+ * Provider declarations keyed by provider ID. HTTP providers carry endpoint
  * settings; Workers AI binding providers carry the captured binding object.
  */
 export type ProviderRegistration =
@@ -42,17 +39,12 @@ export interface HttpProviderRegistration {
 	baseUrl: string;
 	/**
 	 * Optional API key. Propagated to pi-ai via the harness's per-call
-	 * `getApiKey(provider)` callback. Falls back to whatever pi-ai's normal
+	 * `getApiKey(providerId)` callback. Falls back to whatever pi-ai's normal
 	 * env-var lookup produces if unset.
 	 */
 	apiKey?: string;
 	/** Optional default headers for every outgoing request. */
 	headers?: Record<string, string>;
-	/**
-	 * Override the pi-ai `provider` slug surfaced on AssistantMessage records
-	 * and `configureProvider()` overrides. Defaults to the registry name.
-	 */
-	provider?: string;
 	/**
 	 * Default `contextWindow` (in tokens) for every model resolved through
 	 * this registration. Overridden per-model via {@link models}. Unset is
@@ -64,7 +56,7 @@ export interface HttpProviderRegistration {
 	 * Overridden per-model via {@link models}. Unset is `0`.
 	 */
 	maxTokens?: number;
-	/** Per-model overrides for {@link contextWindow} and {@link maxTokens}, keyed by model id. */
+	/** Per-model overrides for {@link contextWindow} and {@link maxTokens}, keyed by model ID. */
 	models?: Record<string, { contextWindow?: number; maxTokens?: number }>;
 }
 
@@ -72,11 +64,6 @@ export interface CloudflareAIBindingRegistration {
 	api: typeof CLOUDFLARE_AI_BINDING_API;
 	/** The captured `env.AI` reference. Read at registration time. */
 	binding: CloudflareAIBinding;
-	/**
-	 * Override the pi-ai `provider` slug. Defaults to `'workers-ai'`,
-	 * matching pi-ai's catalog convention for Cloudflare-Workers-AI models.
-	 */
-	provider?: string;
 	/**
 	 * AI Gateway options forwarded to every `env.AI.run(...)` call routed
 	 * through this registration.
@@ -104,47 +91,41 @@ function isCloudflareBindingRegistration(
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 /**
- * URL-prefix registry populated at module init by `app.ts` and generated
+ * Provider registry populated at module init by `app.ts` and generated
  * server entries.
  */
-const userModels = new Map<string, ProviderRegistration>();
+const providersById = new Map<string, ProviderRegistration>();
 
 /**
- * Register a Flue-level model provider keyed by URL prefix.
+ * Register a Flue-level model provider keyed by provider ID.
  *
  * Last-write-wins. On Cloudflare, the generated entry reserves the
- * `cloudflare` prefix for the built-in Workers AI binding integration.
+ * `cloudflare` provider ID for the built-in Workers AI binding integration.
  */
 export function registerProvider(
-	name: string,
+	providerId: string,
 	registration: ProviderRegistration,
 ): void {
-	userModels.set(name, registration);
+	providersById.set(providerId, registration);
 }
 
 
-/** Whether a URL prefix has already been registered. */
-export function hasRegisteredProvider(name: string): boolean {
-	return userModels.has(name);
+/** Whether a provider ID has already been registered. */
+export function hasRegisteredProvider(providerId: string): boolean {
+	return providersById.has(providerId);
 }
 
-/**
- * Look up a registration apiKey by the resolved pi-ai provider slug.
- */
-export function getRegisteredApiKey(provider: string): string | undefined {
-	for (const [name, def] of userModels) {
-		const effective = effectiveProviderSlug(name, def);
-		if (effective !== provider) continue;
-		// Only HTTP registrations carry apiKey.
-		if (!isCloudflareBindingRegistration(def)) return def.apiKey;
-	}
-	return undefined;
+/** Look up an API key registered for a provider ID. */
+export function getRegisteredApiKey(providerId: string): string | undefined {
+	const registration = providersById.get(providerId);
+	if (!registration || isCloudflareBindingRegistration(registration)) return undefined;
+	return registration.apiKey;
 }
 
 /**
  * Re-export of pi-ai's `registerApiProvider`. Use to register a brand-new
  * wire-protocol handler for an `api` slug pi-ai doesn't ship. Then call
- * {@link registerProvider} to alias a URL prefix to that api.
+ * {@link registerProvider} to associate a provider ID with that api.
  *
  * ```ts
  * registerApiProvider({ api: 'my-novel-api', stream, streamSimple });
@@ -160,15 +141,15 @@ export const registerApiProvider = piRegisterApiProvider;
 
 // ─── Provider override registry ─────────────────────────────────────────────
 //
-// Transport-level settings keyed by resolved pi-ai provider slug. This keeps
-// built-in catalog metadata intact while letting apps patch auth/endpoints.
+// Transport-level settings keyed by provider ID. This keeps built-in catalog
+// metadata intact while letting apps patch auth/endpoints.
 
 /**
  * Provider settings accepted by {@link configureProvider}.
  */
 export type ProviderConfiguration = ProviderSettings;
 
-const providerOverrides = new Map<string, ProviderSettings>();
+const providerSettingsById = new Map<string, ProviderSettings>();
 
 /**
  * Patch transport-level settings on an existing provider while preserving its
@@ -183,23 +164,20 @@ const providerOverrides = new Map<string, ProviderSettings>();
  * });
  * ```
  *
- * Keyed by the resolved `Model.provider` value, not necessarily the URL
- * prefix. Last-write-wins.
+ * Keyed by provider ID. Last-write-wins.
  */
 export function configureProvider(
-	provider: string,
+	providerId: string,
 	settings: ProviderConfiguration,
 ): void {
-	providerOverrides.set(provider, settings);
+	providerSettingsById.set(providerId, settings);
 }
 
-/**
- * Internal read accessor for provider overrides.
- */
+/** Internal read accessor for provider settings. */
 export function getProviderConfiguration(
-	provider: string,
+	providerId: string,
 ): ProviderSettings | undefined {
-	return providerOverrides.get(provider);
+	return providerSettingsById.get(providerId);
 }
 
 // ─── Model binding extension ────────────────────────────────────────────────
@@ -240,16 +218,14 @@ export function getModelBinding<TApi extends Api>(
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
-/**
- * Resolve `'name/modelId'` against the URL-prefix registry.
- */
+/** Resolve `'provider-id/model-id'` against the provider registry. */
 export function resolveRegisteredModel(
-	name: string,
+	providerId: string,
 	modelId: string,
 ): Model<Api> | undefined {
-	const def = userModels.get(name);
-	if (!def) return undefined;
-	return buildModelFromRegistration(name, def, modelId);
+	const registration = providersById.get(providerId);
+	if (!registration) return undefined;
+	return buildModelFromRegistration(providerId, registration, modelId);
 }
 
 /**
@@ -259,23 +235,22 @@ export function resolveRegisteredModel(
  * fields defaulting to zero.
  */
 function buildModelFromRegistration(
-	name: string,
-	def: ProviderRegistration,
+	providerId: string,
+	registration: ProviderRegistration,
 	modelId: string,
 ): Model<Api> {
-	if (isCloudflareBindingRegistration(def)) {
+	if (isCloudflareBindingRegistration(registration)) {
 		// pi-ai's catalog covers only the chat-completion subset of Workers AI;
 		// fall back to zero metadata for ids it doesn't know. The `shouldCompact`
 		// guard treats `contextWindow <= 0` as unknown.
 		const catalog = getModel('cloudflare-workers-ai' as KnownProvider, modelId as never);
-		const provider = def.provider ?? CLOUDFLARE_AI_BINDING_PROVIDER;
 		const base: Model<Api> = catalog
-			? { ...catalog, api: CLOUDFLARE_AI_BINDING_API, provider, baseUrl: '' }
+			? { ...catalog, api: CLOUDFLARE_AI_BINDING_API, provider: providerId, baseUrl: '' }
 			: {
 					id: modelId,
 					name: modelId,
 					api: CLOUDFLARE_AI_BINDING_API,
-					provider,
+					provider: providerId,
 					baseUrl: '',
 					reasoning: false,
 					input: ['text'],
@@ -283,30 +258,20 @@ function buildModelFromRegistration(
 					contextWindow: 0,
 					maxTokens: 0,
 				};
-		return attachModelBinding(base, def.binding, def.gateway);
+		return attachModelBinding(base, registration.binding, registration.gateway);
 	}
 
 	return {
 		id: modelId,
 		name: modelId,
-		api: def.api,
-		provider: def.provider ?? name,
-		baseUrl: def.baseUrl,
+		api: registration.api,
+		provider: providerId,
+		baseUrl: registration.baseUrl,
 		reasoning: false,
 		input: ['text'],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-		contextWindow: def.models?.[modelId]?.contextWindow ?? def.contextWindow ?? 0,
-		maxTokens: def.models?.[modelId]?.maxTokens ?? def.maxTokens ?? 0,
-		headers: def.headers,
+		contextWindow: registration.models?.[modelId]?.contextWindow ?? registration.contextWindow ?? 0,
+		maxTokens: registration.models?.[modelId]?.maxTokens ?? registration.maxTokens ?? 0,
+		headers: registration.headers,
 	};
-}
-
-/**
- * Compute the provider slug emitted on the resolved Model.
- */
-function effectiveProviderSlug(name: string, def: ProviderRegistration): string {
-	if (isCloudflareBindingRegistration(def)) {
-		return def.provider ?? CLOUDFLARE_AI_BINDING_PROVIDER;
-	}
-	return def.provider ?? name;
 }

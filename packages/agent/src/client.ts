@@ -136,11 +136,11 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 			);
 			if (!hasInitModel(resolvedOptions)) {
 				throw new Error(
-					'[flue] createAgent() requires a model. Return { model: "provider/model-id" }, { model: false }, or a profile with a model.',
+					'[flue] createAgent() requires a model. Return { model: "provider-id/model-id" }, { model: false }, or a profile with a model.',
 				);
 			}
 			if (definition.model !== false && typeof definition.model !== 'string') {
-				throw new Error('[flue] createAgent() model must be a model string or false.');
+				throw new Error('[flue] createAgent() model must be a model specifier or false.');
 			}
 
 			const name = options?.name ?? 'default';

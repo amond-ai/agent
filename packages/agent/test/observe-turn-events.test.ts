@@ -56,7 +56,7 @@ describe('observe model-turn telemetry', () => {
 	it('exposes exact model request input and terminal output through public events', async () => {
 		const provider = `faux-${crypto.randomUUID()}`;
 		const modelId = 'observer';
-		const modelString = `${provider}/${modelId}`;
+		const modelSpecifier = `${provider}/${modelId}`;
 		const registration = registerFauxProvider({
 			provider,
 			models: [{ id: modelId, reasoning: true }],
@@ -79,13 +79,13 @@ describe('observe model-turn telemetry', () => {
 					systemPrompt: '',
 					skills: {},
 					model: undefined,
-					resolveModel: (model) => model === modelString ? registration.getModel(modelId) : undefined,
+					resolveModel: (model) => model === modelSpecifier ? registration.getModel(modelId) : undefined,
 				},
 				createDefaultEnv: async () => createEnv(),
 				defaultStore: new InMemorySessionStore(),
 			});
 			const agent = createAgent(() => ({
-				model: modelString,
+				model: modelSpecifier,
 				thinkingLevel: 'high',
 				tools: [{
 					name: 'lookup',
@@ -97,8 +97,9 @@ describe('observe model-turn telemetry', () => {
 			const harness = await ctx.init(agent);
 			const session = await harness.session();
 
-			await session.prompt('What reaches the model?');
+			const response = await session.prompt('What reaches the model?');
 
+			expect(response.model).toEqual({ provider, id: modelId });
 			const turnStart = events.find((event): event is Extract<FlueEvent, { type: 'turn_start' }> => event.type === 'turn_start');
 			const turnRequest = events.find((event): event is Extract<FlueEvent, { type: 'turn_request' }> => event.type === 'turn_request');
 			const turn = events.find((event): event is Extract<FlueEvent, { type: 'turn' }> => event.type === 'turn');
@@ -171,7 +172,7 @@ describe('observe model-turn telemetry', () => {
 	it('exposes compaction summarization calls as purpose-specific model turns', async () => {
 		const provider = `faux-${crypto.randomUUID()}`;
 		const modelId = 'compact';
-		const modelString = `${provider}/${modelId}`;
+		const modelSpecifier = `${provider}/${modelId}`;
 		const registration = registerFauxProvider({ provider, models: [{ id: modelId }] });
 		registration.setResponses([
 			fauxAssistantMessage('first answer'),
@@ -187,7 +188,7 @@ describe('observe model-turn telemetry', () => {
 				runId: undefined,
 				payload: {},
 				env: {},
-				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelString ? registration.getModel(modelId) : undefined },
+				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelSpecifier ? registration.getModel(modelId) : undefined },
 				createDefaultEnv: async () => createEnv(),
 				defaultStore: new InMemorySessionStore(),
 			});
@@ -195,7 +196,7 @@ describe('observe model-turn telemetry', () => {
 				events.push(event);
 			});
 			const harness = await ctx.init(createAgent(() => ({
-				model: modelString,
+				model: modelSpecifier,
 				compaction: { keepRecentTokens: 0 },
 			})));
 			const session = await harness.session();
@@ -224,7 +225,7 @@ describe('observe model-turn telemetry', () => {
 	it('correlates direct and dispatched input processing without workflow runs', async () => {
 		const provider = `faux-${crypto.randomUUID()}`;
 		const modelId = 'persistent';
-		const modelString = `${provider}/${modelId}`;
+		const modelSpecifier = `${provider}/${modelId}`;
 		const registration = registerFauxProvider({ provider, models: [{ id: modelId }] });
 		registration.setResponses([
 			fauxAssistantMessage('direct response'),
@@ -238,11 +239,11 @@ describe('observe model-turn telemetry', () => {
 				dispatchId,
 				payload: {},
 				env: {},
-				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelString ? registration.getModel(modelId) : undefined },
+				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelSpecifier ? registration.getModel(modelId) : undefined },
 				createDefaultEnv: async () => createEnv(),
 				defaultStore: new InMemorySessionStore(),
 			});
-			const agent = createAgent(() => ({ model: modelString }));
+			const agent = createAgent(() => ({ model: modelSpecifier }));
 
 			const directEvents: FlueEvent[] = [];
 			const directCtx = createContext();
@@ -280,7 +281,7 @@ describe('observe model-turn telemetry', () => {
 	it('runs model-invoked tasks within the owning prompt operation', async () => {
 		const provider = `faux-${crypto.randomUUID()}`;
 		const modelId = 'task-tool';
-		const modelString = `${provider}/${modelId}`;
+		const modelSpecifier = `${provider}/${modelId}`;
 		const registration = registerFauxProvider({ provider, models: [{ id: modelId }] });
 		registration.setResponses([
 			fauxAssistantMessage(fauxToolCall('task', { prompt: 'Research this.' }), { stopReason: 'toolUse' }),
@@ -298,12 +299,12 @@ describe('observe model-turn telemetry', () => {
 				runId: undefined,
 				payload: {},
 				env: {},
-				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelString ? registration.getModel(modelId) : undefined },
+				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelSpecifier ? registration.getModel(modelId) : undefined },
 				createDefaultEnv: async () => createEnv(),
 				defaultStore: new InMemorySessionStore(),
 			});
 			ctx.subscribeEvent((event) => { events.push(event); });
-			const session = await (await ctx.init(createAgent(() => ({ model: modelString })))).session();
+			const session = await (await ctx.init(createAgent(() => ({ model: modelSpecifier })))).session();
 
 			const result = await session.prompt('Use a task.');
 
@@ -323,7 +324,7 @@ describe('observe model-turn telemetry', () => {
 	it('correlates multiple tool-mediated turns within one operation', async () => {
 		const provider = `faux-${crypto.randomUUID()}`;
 		const modelId = 'tools';
-		const modelString = `${provider}/${modelId}`;
+		const modelSpecifier = `${provider}/${modelId}`;
 		const registration = registerFauxProvider({ provider, models: [{ id: modelId }] });
 		registration.setResponses([
 			fauxAssistantMessage(fauxToolCall('lookup', { query: 'record' }), { stopReason: 'toolUse' }),
@@ -340,7 +341,7 @@ describe('observe model-turn telemetry', () => {
 				runId: undefined,
 				payload: {},
 				env: {},
-				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelString ? registration.getModel(modelId) : undefined },
+				agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: (model) => model === modelSpecifier ? registration.getModel(modelId) : undefined },
 				createDefaultEnv: async () => createEnv(),
 				defaultStore: new InMemorySessionStore(),
 			});
@@ -348,7 +349,7 @@ describe('observe model-turn telemetry', () => {
 				events.push(event);
 			});
 			const harness = await ctx.init(createAgent(() => ({
-				model: modelString,
+				model: modelSpecifier,
 				tools: [{
 					name: 'lookup',
 					description: 'Look up a record.',

@@ -305,13 +305,13 @@ await session.task('Research related issues.', { agent: 'researcher' });
 
 ### Provider Settings
 
-Use `providers` when model traffic needs provider-specific runtime settings,
-such as an enterprise API gateway, provider-compatible proxy, custom endpoint,
-or gateway-specific credentials. This is common for managed credentials, audit
-logging, traffic routing, or self-hosted OpenAI-compatible providers.
+Use `configureProvider(...)` when model traffic needs provider-specific runtime
+settings, such as an enterprise API gateway, provider-compatible proxy, custom
+endpoint, or gateway-specific credentials. This is common for managed credentials,
+audit logging, traffic routing, or self-hosted OpenAI-compatible providers.
 
-Configure these settings in `app.ts` instead of mutating global model state. They
-apply to every harness and session that resolves models through that provider.
+Configure these settings in `app.ts` using the provider ID from the model value.
+They apply to every harness and session that resolves models through that provider.
 
 ```ts
 // .flue/app.ts
