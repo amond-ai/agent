@@ -1,31 +1,8 @@
 /**
- * Flue config file support — `flue.config.{ts,mts,mjs,js,cjs,cts}`.
+ * Configure how the Flue CLI finds and builds a project.
  *
- * Modeled on Vite/Astro:
- *
- *   - The config file lives at the project root. Its directory IS the root for
- *     the purposes of resolving any relative paths it sets (`root`, `output`).
- *   - Discovery: `--config <path>` (resolved vs. cwd) wins; otherwise we search
- *     a starting directory (`--root` if given, else cwd) for any of the
- *     supported extensions, in order.
- *   - Loading: plain Node dynamic `import()`. We rely on Node's native
- *     TypeScript type-stripping (Node ≥ 22.18 / ≥ 23.6 by default) to handle
- *     `.ts` configs. We deliberately do NOT bundle the config — `flue.config`
- *     is a flat declarative surface, and "what valid TS works" should match
- *     the same rules the user already absorbed for the rest of the runtime.
- *     The CLI bin pre-checks the Node version before we ever get here, so
- *     `ERR_UNKNOWN_FILE_EXTENSION` shouldn't surface in practice.
- *   - Validation: valibot schema on the user-facing shape.
- *   - Resolution: CLI inline > config file > built-in defaults. CLI flags
- *     always win on a per-field basis — only the fields the user actually
- *     passed get to override the file.
- *
- * The two public types mirror Astro's `AstroUserConfig` / `AstroConfig`
- * split: `UserFlueConfig` is what users author (everything optional);
- * `FlueConfig` is the resolved shape with required defaults filled in.
- *
- * Provider/model configuration lives in `app.ts`, where runtime env is
- * available.
+ * Use {@link defineConfig} in a `flue.config.ts` file for type checking and
+ * editor completion.
  */
 
 import * as fs from 'node:fs';
@@ -37,48 +14,57 @@ import { resolveSourceRoot } from './source-root.ts';
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * User-facing config shape — everything optional so `defineConfig({})` is
- * valid. Defaults are filled in at resolution time. Modeled on Astro's
- * `AstroUserConfig`.
+ * Configuration authored in `flue.config.ts`. Only the fields declared by
+ * this interface are accepted.
  */
 export interface UserFlueConfig {
 	/**
-	 * Build target. Required somewhere — either here or via `--target`.
+	 * Build and development target. Required unless `--target` is passed to the
+	 * CLI. There is no default.
+	 *
+	 * - `'node'` builds a Node.js server.
+	 * - `'cloudflare'` builds a Workers-compatible application.
 	 */
 	target?: 'node' | 'cloudflare';
 	/**
-	 * Project root. Relative paths are resolved vs. the directory containing
-	 * the config file (Vite-style: the config file's dir IS the root by
-	 * default). Defaults to that directory if unset.
+	 * Project root. Relative values loaded from a configuration file resolve
+	 * from the directory containing that file. Defaults to that directory, or
+	 * to the search directory when no configuration file is loaded.
+	 *
+	 * Flue uses `<root>/.flue` when it exists as a directory, otherwise
+	 * `<root>/src` when it exists as a directory, otherwise `<root>`.
 	 */
 	root?: string;
 	/**
-	 * Build output dir. Relative paths are resolved vs. the directory
-	 * containing the config file. Defaults to `<root>/dist`.
+	 * Build output directory. Relative values loaded from a configuration file
+	 * resolve from the directory containing that file, not from
+	 * {@link UserFlueConfig.root}. Defaults to `<root>/dist`.
 	 */
 	output?: string;
 }
 
-/**
- * Resolved config — what the rest of the CLI consumes. All paths are
- * absolute; all required fields are present.
- */
+/** Fully resolved configuration returned by {@link resolveConfig}. */
 export interface FlueConfig {
+	/** Selected build and development target. */
 	target: 'node' | 'cloudflare';
 	/** Absolute project-root path. */
 	root: string;
+	/** Absolute directory from which authored modules are discovered. */
 	sourceRoot: string;
 	/** Absolute build-output path. */
 	output: string;
 }
 
 /**
- * Identity helper for type inference and editor intellisense, à la Vite's
- * `defineConfig`. Returns its argument unchanged.
+ * Provides type checking and editor completion for `flue.config.ts`. Returns
+ * the configuration unchanged.
  *
  * ```ts
  * import { defineConfig } from '@flue/cli/config';
- * export default defineConfig({ target: 'node' });
+ *
+ * export default defineConfig({
+ *   target: 'node',
+ * });
  * ```
  */
 export function defineConfig(config: UserFlueConfig): UserFlueConfig {
@@ -89,6 +75,9 @@ export function defineConfig(config: UserFlueConfig): UserFlueConfig {
 
 const TargetSchema = v.picklist(['node', 'cloudflare'] as const);
 
+// TODO: Decide whether empty `root` and `output` strings should be rejected or
+// resolved as relative paths. They currently pass validation but fall back as
+// though unset during path resolution.
 const UserFlueConfigSchema = v.strictObject({
 	target: v.optional(TargetSchema),
 	root: v.optional(v.string()),
@@ -96,6 +85,11 @@ const UserFlueConfigSchema = v.strictObject({
 });
 
 // ─── Discovery ──────────────────────────────────────────────────────────────
+
+// TODO: Audit the package-visible resolver API before documenting it as a
+// supported embedding surface. In particular: validate inline values, define
+// relative inline-path semantics, and normalize resolveConfigPath() results
+// when callers pass a relative cwd.
 
 /**
  * Config file basenames searched, in priority order. TypeScript first because
@@ -341,7 +335,10 @@ function resolvePath(
 	return path.resolve(value);
 }
 
-function formatValidationError(configPath: string, issues: readonly v.BaseIssue<unknown>[]): string {
+function formatValidationError(
+	configPath: string,
+	issues: readonly v.BaseIssue<unknown>[],
+): string {
 	const lines = [`[flue] Invalid config in ${configPath}:`];
 	for (const issue of issues) {
 		const dotPath = v.getDotPath(issue);
