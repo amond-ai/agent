@@ -37,6 +37,7 @@ export class Harness implements FlueHarness {
 	readonly fs: FlueFs;
 
 	private openSessions = new Map<string, Session>();
+	private pendingSessionOperations = new Map<string, Promise<void>>();
 
 	constructor(
 		private instanceId: string,
@@ -97,8 +98,25 @@ export class Harness implements FlueHarness {
 		});
 	}
 
-	private async openSession(name: string | undefined, mode: OpenMode): Promise<FlueSession> {
+	private openSession(name: string | undefined, mode: OpenMode): Promise<FlueSession> {
 		const sessionName = normalizeSessionName(name);
+		return this.runSessionOperation(sessionName, () => this.loadSession(sessionName, mode));
+	}
+
+	private runSessionOperation<T>(sessionName: string, operation: () => Promise<T>): Promise<T> {
+		const previous = this.pendingSessionOperations.get(sessionName) ?? Promise.resolve();
+		const result = previous.then(operation);
+		const tail = result.then(() => {}, () => {});
+		this.pendingSessionOperations.set(sessionName, tail);
+		void tail.then(() => {
+			if (this.pendingSessionOperations.get(sessionName) === tail) {
+				this.pendingSessionOperations.delete(sessionName);
+			}
+		});
+		return result;
+	}
+
+	private async loadSession(sessionName: string, mode: OpenMode): Promise<Session> {
 		const open = this.openSessions.get(sessionName);
 		if (open) {
 			if (mode === 'create') {
@@ -142,14 +160,16 @@ export class Harness implements FlueHarness {
 		return session;
 	}
 
-	private async deleteSession(name: string | undefined): Promise<void> {
+	private deleteSession(name: string | undefined): Promise<void> {
 		const sessionName = normalizeSessionName(name);
-		const open = this.openSessions.get(sessionName);
-		if (open) {
-			await open.delete();
-			return;
-		}
-		await deleteSessionTree(this.store, createSessionStorageKey(this.instanceId, this.name, sessionName));
+		return this.runSessionOperation(sessionName, async () => {
+			const open = this.openSessions.get(sessionName);
+			if (open) {
+				await open.delete();
+				return;
+			}
+			await deleteSessionTree(this.store, createSessionStorageKey(this.instanceId, this.name, sessionName));
+		});
 	}
 
 	private async createTaskSession(options: CreateTaskSessionOptions): Promise<Session> {

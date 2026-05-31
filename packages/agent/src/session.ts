@@ -541,6 +541,7 @@ export class Session implements FlueSession {
 	private agentTools: ToolDefinition[];
 	private toolFactory: SessionToolFactory | undefined;
 	private deleted = false;
+	private deletionPromise: Promise<void> | undefined;
 	private activeOperation: OperationKind | undefined;
 	private activeOperationId: string | undefined;
 	private toolStartTimes = new Map<string, number>();
@@ -952,12 +953,24 @@ export class Session implements FlueSession {
 		this.onDelete?.();
 	}
 
-	async delete(): Promise<void> {
-		if (this.deleted) return;
+	delete(): Promise<void> {
+		if (this.deletionPromise) return this.deletionPromise;
+		if (this.deleted) return Promise.resolve();
+		if (this.activeOperation) {
+			return Promise.reject(
+				new Error(
+					`[flue] Session "${this.name}" cannot be deleted while ${this.activeOperation} is running. ` +
+						'Wait for the active operation to finish before deleting the session.',
+				),
+			);
+		}
 		this.deleted = true;
-		this.abort();
-		await deleteSessionTree(this.store, this.storageKey);
-		this.onDelete?.();
+		this.deletionPromise = Promise.resolve()
+			.then(() => deleteSessionTree(this.store, this.storageKey))
+			.then(() => {
+				this.onDelete?.();
+			});
+		return this.deletionPromise;
 	}
 
 	/** Precedence: call-level > agent-level default. */

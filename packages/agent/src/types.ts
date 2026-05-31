@@ -609,7 +609,11 @@ export interface FlueSessions {
 	get(name?: string): Promise<FlueSession>;
 	/** Create a new session. Defaults to `'default'`. Throws if it already exists. */
 	create(name?: string): Promise<FlueSession>;
-	/** Delete a session's stored conversation state. Defaults to `'default'`. No-op when missing. */
+	/**
+	 * Delete a session's stored conversation state. Defaults to `'default'`.
+	 * No-op when missing. Rejects if the open session has an active operation.
+	 * Session-management requests for one name are applied in request order.
+	 */
 	delete(name?: string): Promise<void>;
 }
 
@@ -702,7 +706,11 @@ export interface FlueSession {
 	 */
 	compact(): Promise<void>;
 
-	/** Delete this session's stored conversation state. */
+	/**
+	 * Delete this session's stored conversation state. Rejects while an
+	 * operation is active. Once deletion starts, the session is unusable and
+	 * concurrent calls share the same deletion work.
+	 */
 	delete(): Promise<void>;
 }
 
