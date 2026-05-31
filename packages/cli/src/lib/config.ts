@@ -28,8 +28,9 @@ export interface UserFlueConfig {
 	target?: 'node' | 'cloudflare';
 	/**
 	 * Project root. Must not be empty. Relative values loaded from a
-	 * configuration file resolve from the directory containing that file.
-	 * Defaults to that directory, or to the search directory when no
+	 * configuration file resolve from the directory containing that file;
+	 * relative inline values resolve from the caller's working directory.
+	 * Defaults to the config directory, or to the search directory when no
 	 * configuration file is loaded.
 	 *
 	 * Flue uses `<root>/.flue` when it exists as a directory, otherwise
@@ -38,8 +39,9 @@ export interface UserFlueConfig {
 	root?: string;
 	/**
 	 * Build output directory. Must not be empty. Relative values loaded from a
-	 * configuration file resolve from the directory containing that file, not
-	 * from {@link UserFlueConfig.root}. Defaults to `<root>/dist`.
+	 * configuration file resolve from the directory containing that file;
+	 * relative inline values resolve from the caller's working directory. Paths
+	 * do not resolve from {@link UserFlueConfig.root}. Defaults to `<root>/dist`.
 	 */
 	output?: string;
 }
@@ -86,11 +88,6 @@ const UserFlueConfigSchema = v.strictObject({
 
 // ─── Discovery ──────────────────────────────────────────────────────────────
 
-// TODO: Audit the package-visible resolver API before documenting it as a
-// supported embedding surface. In particular: validate inline values, define
-// relative inline-path semantics, and normalize resolveConfigPath() results
-// when callers pass a relative cwd.
-
 /**
  * Config file basenames searched, in priority order. TypeScript first because
  * Flue's audience writes TS agents; the rest mirror Vite's supported set.
@@ -105,7 +102,7 @@ const CONFIG_BASENAMES = Object.freeze([
 ]);
 
 export interface ResolveConfigPathOptions {
-	/** Where to start searching when `configFile` is not set. */
+	/** Working directory for config discovery and relative `configFile` paths. */
 	cwd: string;
 	/**
 	 * Explicit config-file path (relative to `cwd`, or absolute), or `false`
@@ -117,7 +114,9 @@ export interface ResolveConfigPathOptions {
 
 /**
  * Resolve the absolute path of the user's `flue.config.*` file, or
- * `undefined` if none is found and the user didn't ask for one.
+ * `undefined` if none is found and the user didn't ask for one. Relative `cwd`
+ * values resolve from the process working directory; relative `configFile`
+ * values resolve from the normalized `cwd`.
  *
  * Throws if `configFile` is an explicit path that doesn't exist on disk —
  * that's a typo, not a "config not configured" situation.
@@ -125,10 +124,9 @@ export interface ResolveConfigPathOptions {
 export function resolveConfigPath(opts: ResolveConfigPathOptions): string | undefined {
 	if (opts.configFile === false) return undefined;
 
+	const cwd = path.resolve(opts.cwd);
 	if (opts.configFile) {
-		const explicit = path.isAbsolute(opts.configFile)
-			? opts.configFile
-			: path.resolve(opts.cwd, opts.configFile);
+		const explicit = path.resolve(cwd, opts.configFile);
 		if (!fs.existsSync(explicit)) {
 			throw new Error(`[flue] Config file not found: ${opts.configFile}`);
 		}
@@ -136,7 +134,7 @@ export function resolveConfigPath(opts: ResolveConfigPathOptions): string | unde
 	}
 
 	for (const basename of CONFIG_BASENAMES) {
-		const candidate = path.join(opts.cwd, basename);
+		const candidate = path.join(cwd, basename);
 		if (fs.existsSync(candidate)) return candidate;
 	}
 	return undefined;
@@ -193,21 +191,19 @@ async function loadConfigModule(absConfigPath: string): Promise<unknown> {
 // ─── Resolution ─────────────────────────────────────────────────────────────
 
 export interface ResolveConfigOptions {
-	/** Working directory of the CLI invocation; default search base. */
+	/** Caller's working directory; default search base for config discovery. */
 	cwd: string;
 	/**
-	 * Optional starting directory to search for the config. If unset, falls
-	 * back to `cwd`. Used when the CLI received `--root` and we want to look
-	 * for a config inside that directory rather than cwd. Vite has the same
-	 * behavior with `--root`.
+	 * Optional starting directory for config discovery. Defaults to `cwd`.
+	 * Relative values resolve from the process working directory.
 	 */
 	searchFrom?: string;
-	/** Explicit `--config` value, or `false` to skip loading. */
+	/** Explicit config-file path relative to `cwd`, or `false` to skip loading. */
 	configFile?: string | false;
 	/**
-	 * Inline overrides from the CLI. Only fields the user actually passed
-	 * should be present — `undefined` means "fall through to the config file
-	 * value or the default".
+	 * Inline overrides. Only fields the caller actually supplied should be
+	 * present — `undefined` means "fall through to the config-file value or the
+	 * default". Relative paths resolve from `cwd`.
 	 */
 	inline?: UserFlueConfig;
 }
@@ -226,7 +222,7 @@ export interface ResolvedConfigResult {
  * entry point CLIs and embedders call.
  *
  * Precedence (highest first):
- *   1. CLI inline values (`opts.inline.*`)
+ *   1. Inline values (`opts.inline.*`)
  *   2. `flue.config.ts`
  *   3. Built-in defaults
  *
@@ -266,7 +262,11 @@ export async function resolveConfig(opts: ResolveConfigOptions): Promise<Resolve
 	// file set them.
 	const configDir = configPath ? path.dirname(configPath) : searchFrom;
 
-	const inline = opts.inline ?? {};
+	const inlineResult = v.safeParse(UserFlueConfigSchema, opts.inline ?? {});
+	if (!inlineResult.success) {
+		throw new Error(formatValidationError('inline options', inlineResult.issues));
+	}
+	const inline = inlineResult.output;
 
 	// Merge: per-field, inline > file. We don't merge nested structures because
 	// the surface is flat today.
@@ -285,19 +285,17 @@ export async function resolveConfig(opts: ResolveConfigOptions): Promise<Resolve
 		);
 	}
 
-	// Resolve root. Inline values were already absolutized by the CLI; file
-	// values are resolved vs. the config dir; default is the config dir (or
-	// searchFrom if no config). All paths emerge absolute.
+	// Resolve root. Inline values resolve from cwd; file values resolve from the
+	// config dir; default is the config dir (or searchFrom if no config). All
+	// paths emerge absolute.
 	const root = resolvePath(merged.root, {
-		fromConfig: !!fileConfig.root && inline.root === undefined,
-		configDir,
+		baseDir: inline.root === undefined ? configDir : cwd,
 		fallback: configDir,
 	});
 
 	// Resolve output the same way; default is `<root>/dist`.
 	const output = resolvePath(merged.output, {
-		fromConfig: !!fileConfig.output && inline.output === undefined,
-		configDir,
+		baseDir: inline.output === undefined ? configDir : cwd,
 		fallback: path.join(root, 'dist'),
 	});
 	const sourceRoot = resolveSourceRoot(root);
@@ -314,25 +312,14 @@ export async function resolveConfig(opts: ResolveConfigOptions): Promise<Resolve
 	};
 }
 
-/**
- * Resolve a possibly-relative path to an absolute one.
- *
- * - If `value` is undefined, returns `fallback`.
- * - If `value` is absolute, returns it as-is.
- * - If `value` is relative AND came from the config file, resolves vs. the
- *   config dir.
- * - If `value` is relative AND came from the CLI, the CLI is responsible for
- *   already having absolutized it (`path.resolve` against cwd at parse time)
- *   — this branch is defensive and resolves against `process.cwd()`.
- */
+/** Resolve a possibly-relative path to an absolute one. */
 function resolvePath(
 	value: string | undefined,
-	opts: { fromConfig: boolean; configDir: string; fallback: string },
+	opts: { baseDir: string; fallback: string },
 ): string {
-	if (!value) return opts.fallback;
+	if (value === undefined) return opts.fallback;
 	if (path.isAbsolute(value)) return value;
-	if (opts.fromConfig) return path.resolve(opts.configDir, value);
-	return path.resolve(value);
+	return path.resolve(opts.baseDir, value);
 }
 
 function formatValidationError(
