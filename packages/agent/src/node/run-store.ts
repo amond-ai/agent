@@ -11,7 +11,12 @@ import type { FlueEvent } from '../types.ts';
 
 interface InstanceRuns {
 	runs: Map<string, RunRecord>;
-	events: Map<string, FlueEvent[]>;
+	events: Map<string, StoredRunEvent[]>;
+}
+
+interface StoredRunEvent {
+	eventIndex?: number;
+	payload: string;
 }
 
 export class InMemoryRunStore implements RunStore {
@@ -60,8 +65,7 @@ export class InMemoryRunStore implements RunStore {
 		if (!run) return;
 		const instance = this.getInstance(ownerKey(run.owner));
 		const events = instance.events.get(runId) ?? [];
-		serializedEventForPersistence(event);
-		events.push(event);
+		events.push({ eventIndex: event.eventIndex, payload: serializedEventForPersistence(event) });
 		instance.events.set(runId, events);
 	}
 
@@ -69,8 +73,9 @@ export class InMemoryRunStore implements RunStore {
 		const run = await this.getRun(runId);
 		if (!run) return [];
 		const events = this.getInstance(ownerKey(run.owner)).events.get(runId) ?? [];
-		if (fromIndex === undefined) return [...events];
-		return events.filter((event) => typeof event.eventIndex === 'number' && event.eventIndex >= fromIndex);
+		return events
+			.filter((event) => fromIndex === undefined || (typeof event.eventIndex === 'number' && event.eventIndex >= fromIndex))
+			.map((event) => JSON.parse(event.payload) as FlueEvent);
 	}
 
 	async getRun(runId: string): Promise<RunRecord | null> {

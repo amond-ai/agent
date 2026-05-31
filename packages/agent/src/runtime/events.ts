@@ -3,14 +3,14 @@
 import type { FlueContext, FlueEvent } from '../types.ts';
 
 /**
- * Receives a decorated event and its originating context. Workflow events may
- * carry `runId`; direct and dispatched agent events carry `instanceId` and
- * optional `dispatchId` without becoming workflow runs. Synchronous subscriber
- * failures are logged and do not halt dispatch or the originating execution.
+ * Receives a decorated event snapshot and its originating context. Workflow
+ * events may carry `runId`; direct and dispatched agent events carry
+ * `instanceId` and optional `dispatchId` without becoming workflow runs.
+ * Subscriber failures are logged and do not halt dispatch or the originating
+ * execution. Returned promises are observed for rejection but are not awaited.
  */
-export type FlueEventSubscriber = (event: FlueEvent, ctx: FlueContext) => void;
+export type FlueEventSubscriber = (event: FlueEvent, ctx: FlueContext) => void | Promise<void>;
 
-// TODO: Isolate observers from persisted event objects and handle async callback rejections without adding backpressure.
 const subscribers = new Set<FlueEventSubscriber>();
 
 /**
@@ -34,10 +34,10 @@ const subscribers = new Set<FlueEventSubscriber>();
  * never unsubscribe — the returned function is provided for tests
  * and dynamic-wiring scenarios.
  *
- * Subscribers are invoked synchronously from the event emit path.
- * They should be cheap and side-effect-only; do not block, do not
- * throw, do not mutate the event. Queue async work with application-owned
- * rejection handling rather than awaiting it.
+ * Subscribers are invoked synchronously from the event emit path with an
+ * isolated JSON snapshot. They should be cheap and side-effect-only; returned
+ * promises are observed for rejection but are not awaited. Queue substantial
+ * work outside the callback rather than blocking emission.
  */
 export function observe(subscriber: FlueEventSubscriber): () => void {
 	subscribers.add(subscriber);
@@ -53,13 +53,25 @@ export function observe(subscriber: FlueEventSubscriber): () => void {
  */
 export function dispatchGlobalEvent(event: FlueEvent, ctx: FlueContext): void {
 	if (subscribers.size === 0) return;
+	let serializedEvent: string | undefined;
+	try {
+		serializedEvent = JSON.stringify(event);
+		if (serializedEvent === undefined) throw new Error('Event snapshot serialization returned undefined.');
+	} catch (error) {
+		reportSubscriberFailure(error);
+		return;
+	}
 	// Snapshot to a local array so subscribers that unsubscribe
 	// themselves mid-dispatch don't perturb the iteration.
 	for (const subscriber of [...subscribers]) {
 		try {
-			subscriber(event, ctx);
+			Promise.resolve(subscriber(JSON.parse(serializedEvent) as FlueEvent, ctx)).catch(reportSubscriberFailure);
 		} catch (error) {
-			console.error('[flue:observe] subscriber threw:', error);
+			reportSubscriberFailure(error);
 		}
 	}
+}
+
+function reportSubscriberFailure(error: unknown): void {
+	console.error('[flue:observe] subscriber failed:', error);
 }

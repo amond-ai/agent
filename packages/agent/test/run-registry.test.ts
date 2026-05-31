@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
-import { admin, flue } from '../src/app.ts';
+import { admin, flue, observe } from '../src/app.ts';
 import { createAgent } from '../src/agent-definition.ts';
 import {
 	configureFlueRuntime,
@@ -127,6 +127,40 @@ describe('run store persistence sizing', () => {
 		expect(await runStore.getEvents(runId)).toEqual([event]);
 	});
 
+	it('stores detached JSON event snapshots', async () => {
+		const runStore = new InMemoryRunStore();
+		const runId = 'workflow:trace:snapshot';
+		await runStore.createRun({
+			runId,
+			owner: workflowOwner('trace', runId),
+			startedAt: '2026-05-24T00:00:00.000Z',
+			payload: {},
+		});
+		const attributes = { nested: { value: 'original' }, omitted: undefined };
+		const event: FlueEvent = {
+			type: 'log',
+			level: 'info',
+			message: 'snapshot',
+			attributes,
+			runId,
+		};
+		await runStore.appendEvent(runId, event);
+
+		attributes.nested.value = 'mutated after append';
+		const firstRead = await runStore.getEvents(runId);
+		expect(firstRead).toMatchObject([{
+			type: 'log',
+			attributes: { nested: { value: 'original' } },
+		}]);
+		expect((firstRead[0] as Extract<FlueEvent, { type: 'log' }>).attributes).not.toHaveProperty('omitted');
+
+		((firstRead[0] as Extract<FlueEvent, { type: 'log' }>).attributes?.nested as { value: string }).value = 'mutated after read';
+		expect(await runStore.getEvents(runId)).toMatchObject([{
+			type: 'log',
+			attributes: { nested: { value: 'original' } },
+		}]);
+	});
+
 	it('surfaces oversized persisted events to callers', async () => {
 		const runStore = new InMemoryRunStore();
 		const runRegistry = new InMemoryRunRegistry();
@@ -249,6 +283,65 @@ describe('run store persistence sizing', () => {
 });
 
 describe('POST /workflows/:name routes via flue()', () => {
+	it('keeps persisted workflow history isolated from global observer mutation', async () => {
+		const runStore = new InMemoryRunStore();
+		const runRegistry = new InMemoryRunRegistry();
+		const runSubscribers = createRunSubscriberRegistry();
+		const stopObserving = observe((event) => {
+			if (event.type === 'log') {
+				event.message = 'mutated';
+				(event.attributes?.nested as { value: string }).value = 'mutated';
+			}
+			if (event.type === 'run_end' && !event.isError) event.result = { mutated: true };
+		});
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'hello', transports: { http: true } }] },
+			workflowHandlers: {
+				hello: async (ctx) => {
+					ctx.log.info('original', { nested: { value: 'original' } });
+					return { ok: true };
+				},
+			},
+			createContext: (id, runId, payload, req) =>
+				createFlueContext({
+					id,
+					runId,
+					payload,
+					env: {},
+					req,
+					agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+					createDefaultEnv: async () => ({}) as never,
+					defaultStore: new InMemorySessionStore(),
+				}),
+			runStore,
+			runRegistry,
+			runSubscribers,
+		});
+		const app = new Hono();
+		app.route('/', flue());
+
+		try {
+			const response = await app.fetch(
+				new Request('http://localhost/workflows/hello?wait=result', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({}),
+				}),
+			);
+			const runId = ((await response.json()) as { _meta: { runId: string } })._meta.runId;
+			const events = await runStore.getEvents(runId);
+			expect(events.find((event) => event.type === 'log')).toMatchObject({
+				message: 'original',
+				attributes: { nested: { value: 'original' } },
+			});
+			expect(events.find((event) => event.type === 'run_end')).toMatchObject({
+				result: { ok: true },
+			});
+		} finally {
+			stopObserving();
+		}
+	});
 	it('admits an HTTP workflow, returns a run id, and exposes run inspection', async () => {
 		const runStore = new InMemoryRunStore();
 		const runRegistry = new InMemoryRunRegistry();

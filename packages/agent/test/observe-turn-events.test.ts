@@ -1,5 +1,5 @@
 import { fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall, registerFauxProvider, Type } from '@earendil-works/pi-ai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAgent } from '../src/agent-definition.ts';
 import { observe } from '../src/app.ts';
 import { createFlueContext, InMemorySessionStore, type DispatchInput } from '../src/internal.ts';
@@ -50,6 +50,102 @@ describe('observe model-turn telemetry', () => {
 			console.error = originalError;
 			stopThrowing();
 			stopRecording();
+		}
+	});
+
+	it('isolates event snapshots between observers', () => {
+		const seen: FlueEvent[] = [];
+		const stopMutating = observe((event, ctx) => {
+			if (ctx.id !== 'observer-mutation' || event.type !== 'log') return;
+			event.message = 'mutated';
+			(event.attributes?.nested as { value: string }).value = 'mutated';
+		});
+		const stopRecording = observe((event, ctx) => {
+			if (ctx.id === 'observer-mutation') seen.push(event);
+		});
+		const ctx = createFlueContext({
+			id: 'observer-mutation',
+			runId: undefined,
+			payload: {},
+			env: {},
+			agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+			createDefaultEnv: async () => createEnv(),
+			defaultStore: new InMemorySessionStore(),
+		});
+
+		try {
+			ctx.log.info('original', { nested: { value: 'original' } });
+			expect(seen).toMatchObject([{
+				type: 'log',
+				message: 'original',
+				attributes: { nested: { value: 'original' } },
+			}]);
+		} finally {
+			stopMutating();
+			stopRecording();
+		}
+	});
+
+	it('handles rejected observer promises without blocking later observers', async () => {
+		let rejectObserver!: (error: Error) => void;
+		const pending = new Promise<void>((_resolve, reject) => {
+			rejectObserver = reject;
+		});
+		const error = new Error('observer rejection');
+		const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const seen: string[] = [];
+		const stopRejecting = observe((_event, ctx) => {
+			if (ctx.id === 'observer-rejection') return pending;
+		});
+		const stopRecording = observe((event, ctx) => {
+			if (ctx.id === 'observer-rejection') seen.push(event.type);
+		});
+		const ctx = createFlueContext({
+			id: 'observer-rejection',
+			runId: undefined,
+			payload: {},
+			env: {},
+			agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+			createDefaultEnv: async () => createEnv(),
+			defaultStore: new InMemorySessionStore(),
+		});
+
+		try {
+			ctx.emitEvent({ type: 'idle' });
+			expect(seen).toEqual(['idle']);
+			rejectObserver(error);
+			await Promise.resolve();
+			expect(failure).toHaveBeenCalledWith('[flue:observe] subscriber failed:', error);
+		} finally {
+			stopRejecting();
+			stopRecording();
+			failure.mockRestore();
+		}
+	});
+
+	it('logs and skips observer delivery when an event snapshot cannot be serialized', () => {
+		const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const seen: FlueEvent[] = [];
+		const stopRecording = observe((event, ctx) => {
+			if (ctx.id === 'observer-serialization') seen.push(event);
+		});
+		const ctx = createFlueContext({
+			id: 'observer-serialization',
+			runId: undefined,
+			payload: {},
+			env: {},
+			agentConfig: { systemPrompt: '', skills: {}, model: undefined, resolveModel: () => undefined },
+			createDefaultEnv: async () => createEnv(),
+			defaultStore: new InMemorySessionStore(),
+		});
+
+		try {
+			ctx.log.info('not serializable', { total: 1n });
+			expect(seen).toEqual([]);
+			expect(failure).toHaveBeenCalledWith('[flue:observe] subscriber failed:', expect.any(TypeError));
+		} finally {
+			stopRecording();
+			failure.mockRestore();
 		}
 	});
 
