@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveConfig } from '../../cli/src/lib/config.ts';
+import { resolveConfig, resolveConfigPath } from '../../cli/src/lib/config.ts';
 
 const fixtureRoots: string[] = [];
 
@@ -40,6 +40,68 @@ describe('authored config paths', () => {
 
 		expect(flueConfig.root).toBe(path.join(root, 'app'));
 		expect(flueConfig.output).toBe(path.join(root, 'build'));
+	});
+});
+
+describe('inline config paths', () => {
+	it.each(['root', 'output'] as const)('rejects an empty `%s` path', async (field) => {
+		const root = createFixtureRoot();
+
+		await expect(
+			resolveConfig({ cwd: root, inline: { target: 'node', [field]: '' } }),
+		).rejects.toThrow(new RegExp(`Invalid config[\\s\\S]*${field}: Path must not be empty\\.`));
+	});
+
+	it('rejects an unsupported target', async () => {
+		const root = createFixtureRoot();
+
+		await expect(
+			resolveConfig({ cwd: root, inline: { target: 'unsupported' as 'node' } }),
+		).rejects.toThrow(/Invalid config[\s\S]*target:/);
+	});
+
+	it('resolves relative paths from a normalized caller cwd', async () => {
+		const root = createFixtureRoot();
+		const cwd = path.relative(process.cwd(), root);
+
+		const { flueConfig } = await resolveConfig({
+			cwd,
+			configFile: false,
+			inline: { target: 'node', root: './app', output: './build' },
+		});
+
+		expect(flueConfig.root).toBe(path.join(root, 'app'));
+		expect(flueConfig.output).toBe(path.join(root, 'build'));
+	});
+
+	it('overrides config-file paths relative to the caller cwd', async () => {
+		const root = createFixtureRoot();
+		writeConfig(
+			root,
+			`export default { target: 'cloudflare', root: './file-app', output: './file-build' };\n`,
+		);
+
+		const { flueConfig } = await resolveConfig({
+			cwd: root,
+			inline: { target: 'node', root: './inline-app', output: './inline-build' },
+		});
+
+		expect(flueConfig).toMatchObject({
+			target: 'node',
+			root: path.join(root, 'inline-app'),
+			output: path.join(root, 'inline-build'),
+		});
+	});
+});
+
+describe('config discovery paths', () => {
+	it('returns an absolute path when cwd is relative', () => {
+		const root = createFixtureRoot();
+		writeConfig(root, `export default { target: 'node' };\n`);
+
+		expect(resolveConfigPath({ cwd: path.relative(process.cwd(), root) })).toBe(
+			path.join(root, 'flue.config.mjs'),
+		);
 	});
 });
 
