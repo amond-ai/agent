@@ -168,7 +168,7 @@ async function invokeWorkflow(
 			owner: { kind: 'workflow', workflowName: options.name, instanceId: options.runId },
 			id: options.runId,
 			runId: options.runId,
-			payload: message.payload === undefined ? {} : message.payload,
+			payload: message.payload,
 			request: options.request,
 			handler: options.handler,
 			createContext: options.createContext,

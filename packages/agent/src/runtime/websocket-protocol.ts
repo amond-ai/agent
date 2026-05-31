@@ -26,7 +26,7 @@ export function parseWorkflowWebSocketMessage(raw: string): WorkflowWebSocketCli
 	if (value.version !== 1 || value.type !== 'invoke' || typeof value.requestId !== 'string' || value.requestId === '') {
 		throw new InvalidRequestError({ reason: 'Workflow WebSocket messages require protocol version 1, type "invoke", and a string requestId.' });
 	}
-	return { version: 1, type: 'invoke', requestId: value.requestId, payload: value.payload };
+	return { version: 1, type: 'invoke', requestId: value.requestId, payload: value.payload === undefined ? {} : value.payload };
 }
 
 export function createWebSocketErrorMessage(error: unknown, requestId?: string, runId?: string): WebSocketErrorMessage | Extract<WorkflowWebSocketServerMessage, { type: 'error' }> {

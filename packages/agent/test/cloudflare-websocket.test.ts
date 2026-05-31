@@ -91,7 +91,7 @@ describe('Cloudflare WebSocket transport', () => {
 			request: new Request('https://example.com/workflows/job'),
 			handler: async () => null,
 			createContext,
-			startWorkflowAdmission: () => { throw new Error('no fiber'); },
+			startWorkflowAdmission: async () => { throw new Error('no fiber'); },
 			runStore: new InMemoryRunStore(),
 			runRegistry: new InMemoryRunRegistry(),
 		});
@@ -161,6 +161,36 @@ describe('Cloudflare WebSocket transport', () => {
 		expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'error', requestId: 'work-2', runId: 'workflow:job:failed' }));
 		expect(connection.closed).toEqual({ code: 1011, reason: 'Workflow failed' });
 	});
+
+	it('accepts one workflow invocation only', async () => {
+		const connection = new TestConnection();
+		let executions = 0;
+		let release: (() => void) | undefined;
+		connectCloudflareWorkflowWebSocket(connection, { name: 'job', runId: 'workflow:job:single', requestUrl: 'https://example.com/workflows/job' });
+		const options = {
+			name: 'job',
+			runId: 'workflow:job:single',
+			request: new Request('https://example.com/workflows/job'),
+			handler: async () => { executions++; await new Promise<void>((resolve) => { release = resolve; }); return null; },
+			createContext,
+			startWorkflowAdmission: async (_runId: string, run: () => Promise<unknown>) => run(),
+			runStore: new InMemoryRunStore(),
+			runRegistry: new InMemoryRunRegistry(),
+		};
+		const first = messageCloudflareWorkflowWebSocket(connection, JSON.stringify({ version: 1, type: 'invoke', requestId: 'work-one' }), options);
+		await waitFor(() => release !== undefined);
+
+		try {
+			await messageCloudflareWorkflowWebSocket(connection, JSON.stringify({ version: 1, type: 'invoke', requestId: 'work-two' }), options);
+
+			expect(connection.messages).toContainEqual(expect.objectContaining({ type: 'error', requestId: 'work-two', error: expect.objectContaining({ type: 'invalid_request' }) }));
+			expect(executions).toBe(1);
+			expect(connection.closed).toEqual({ code: 1008, reason: 'Workflow accepts one invocation only' });
+		} finally {
+			release?.();
+			await first;
+		}
+	});
 });
 
 class FailingRunStore implements RunStore {
@@ -215,6 +245,14 @@ function agentOptions() {
 		runStore: new InMemoryRunStore(),
 		runRegistry: new InMemoryRunRegistry(),
 	};
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+	for (let attempt = 0; attempt < 100; attempt++) {
+		if (predicate()) return;
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	throw new Error('Expected condition was not met.');
 }
 
 function createContext(id: string, runId: string | undefined, payload: unknown, req: Request) {

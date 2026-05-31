@@ -11,7 +11,7 @@ import type {
 } from '../types.ts';
 import type { FlueManifest, FlueRuntime } from '../runtime/flue-app.ts';
 import { registeredAgentsForTransport, registeredWorkflowsForTransport } from '../runtime/flue-app.ts';
-import type { AgentHandler, CreateContextFn, RunHandlerFn, WorkflowHandler } from '../runtime/handle-agent.ts';
+import type { AgentHandler, CreateContextFn, RunHandlerFn, StartWorkflowAdmissionFn, WorkflowHandler } from '../runtime/handle-agent.ts';
 import { invokeDirectAttached, invokeWorkflowAttached } from '../runtime/handle-agent.ts';
 import { generateWorkflowRunId } from '../runtime/ids.ts';
 import type { RunRegistry } from '../runtime/run-registry.ts';
@@ -29,6 +29,7 @@ export interface NodeWebSocketTransportOptions {
 	workflowHandlers: Record<string, WorkflowHandler>;
 	maxPayload?: number;
 	createContext: CreateContextFn;
+	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 	runHandler?: RunHandlerFn;
 	runStore?: RunStore;
 	runSubscribers?: RunSubscriberRegistry;
@@ -192,12 +193,11 @@ async function invokeWorkflow(
 			owner: { kind: 'workflow', workflowName: target.name, instanceId: runId },
 			id: runId,
 			runId,
-			payload: message.payload === undefined ? {} : message.payload,
+			payload: message.payload,
 			request,
 			handler: target.handler,
 			createContext: options.createContext,
-			runHandler: options.runHandler,
-			startWorkflowAdmission: (_runId, run) => Promise.resolve().then(run),
+			startWorkflowAdmission: options.startWorkflowAdmission ?? ((_runId, run) => Promise.resolve().then(run)),
 			onAdmitted: () => {
 				didStart = true;
 				send(socket, { version: 1, type: 'started', requestId: message.requestId, runId });

@@ -155,13 +155,13 @@ export type CreateContextFn = (
 export type StartWorkflowAdmissionFn = (runId: string, run: () => Promise<unknown>) => Promise<unknown>;
 
 /**
- * Foreground handler execution wrapper. Wraps the call to `handler(ctx)` so
- * targets can layer in keepalive / context propagation. Defaults to direct
+ * Direct-agent foreground execution wrapper. Wraps the call to `handler(ctx)`
+ * so targets can layer in keepalive / context propagation. Defaults to direct
  * invocation when omitted.
  */
 export type RunHandlerFn = (
 	ctx: FlueContextInternal,
-	handler: AgentHandler | WorkflowHandler,
+	handler: AgentHandler,
 ) => unknown | Promise<unknown>;
 
 export interface HandleAgentOptions {
@@ -272,7 +272,6 @@ export interface InvokeWorkflowAttachedOptions {
 	request: Request;
 	createContext: CreateContextFn;
 	startWorkflowAdmission?: StartWorkflowAdmissionFn;
-	runHandler?: RunHandlerFn;
 	onAdmitted?: (runId: string) => void;
 	onEvent?: FlueEventCallback;
 	emitIdleOnComplete?: boolean;
@@ -332,7 +331,6 @@ interface WorkflowAdmissionOptions {
 	request: Request;
 	createContext: CreateContextFn;
 	startWorkflowAdmission: StartWorkflowAdmissionFn;
-	runHandler?: RunHandlerFn;
 	runStore?: RunStore;
 	runSubscribers?: RunSubscriberRegistry;
 	runRegistry?: RunRegistry;
@@ -348,7 +346,6 @@ interface AdmittedWorkflowExecution {
 	lifecycle: WorkflowRunLifecycle;
 	startWorkflowAdmission: StartWorkflowAdmissionFn;
 	handler: WorkflowHandler;
-	runHandler: RunHandlerFn;
 	onAdmitted?: (runId: string) => void;
 	onEvent?: FlueEventCallback;
 	emitIdleOnComplete?: boolean;
@@ -365,7 +362,6 @@ async function prepareWorkflowExecution(opts: WorkflowAdmissionOptions): Promise
 		request,
 		createContext,
 		startWorkflowAdmission,
-		runHandler = defaultRunHandler,
 		runStore,
 		runSubscribers,
 		runRegistry,
@@ -386,12 +382,12 @@ async function prepareWorkflowExecution(opts: WorkflowAdmissionOptions): Promise
 		runRegistry,
 		requirePersistedAdmission: true,
 	});
-	return { runId, runStore, runSubscribers, lifecycle, startWorkflowAdmission, handler, runHandler, onAdmitted, onEvent, emitIdleOnComplete };
+	return { runId, runStore, runSubscribers, lifecycle, startWorkflowAdmission, handler, onAdmitted, onEvent, emitIdleOnComplete };
 }
 
 function startWorkflowExecution(execution: AdmittedWorkflowExecution): Promise<unknown> {
 	if (execution.completion) return execution.completion;
-	const { runId, lifecycle, handler, runHandler, startWorkflowAdmission, onEvent, emitIdleOnComplete } = execution;
+	const { runId, lifecycle, handler, startWorkflowAdmission, onEvent, emitIdleOnComplete } = execution;
 	let didRun = false;
 	let didEmitIdle = false;
 	if (onEvent || emitIdleOnComplete) {
@@ -404,8 +400,9 @@ function startWorkflowExecution(execution: AdmittedWorkflowExecution): Promise<u
 		didRun = true;
 		try {
 			return await withWorkflowRunLifecycle(lifecycle, async () => {
+				execution.onAdmitted?.(runId);
 				try {
-					return await runHandler(lifecycle.ctx, handler);
+					return await handler(lifecycle.ctx);
 				} finally {
 					if (emitIdleOnComplete && !didEmitIdle) lifecycle.ctx.emitEvent({ type: 'idle' });
 				}
@@ -653,7 +650,6 @@ export async function invokeWorkflowAttached(opts: InvokeWorkflowAttachedOptions
 		request: opts.request,
 		createContext: opts.createContext,
 		startWorkflowAdmission: opts.startWorkflowAdmission,
-		runHandler: opts.runHandler,
 		runStore: opts.runStore,
 		runSubscribers: opts.runSubscribers,
 		runRegistry: opts.runRegistry,
@@ -663,9 +659,7 @@ export async function invokeWorkflowAttached(opts: InvokeWorkflowAttachedOptions
 	});
 	let result: unknown;
 	try {
-		const completion = startWorkflowExecution(execution);
-		execution.onAdmitted?.(opts.runId);
-		result = await completion;
+		result = await startWorkflowExecution(execution);
 	} catch (error) {
 		await execution.completion?.catch(() => undefined);
 		throw error;
@@ -686,7 +680,6 @@ async function invokeWorkflowAttachedUnlocked(opts: InvokeWorkflowAttachedOption
 		runRegistry: opts.runRegistry,
 	});
 	const { ctx } = lifecycle;
-	const runHandler = opts.runHandler ?? defaultRunHandler;
 	let didEmitIdle = false;
 	if (opts.onEvent || opts.emitIdleOnComplete) {
 		ctx.setEventCallback((event) => {
@@ -697,7 +690,7 @@ async function invokeWorkflowAttachedUnlocked(opts: InvokeWorkflowAttachedOption
 	try {
 		const result = await withWorkflowRunLifecycle(lifecycle, async () => {
 			try {
-				return await runHandler(ctx, opts.handler);
+				return await opts.handler(ctx);
 			} finally {
 				if (opts.emitIdleOnComplete && !didEmitIdle) ctx.emitEvent({ type: 'idle' });
 			}
@@ -978,8 +971,7 @@ function getEventIndex(data: unknown): number | undefined {
 const defaultStartWorkflowAdmission: StartWorkflowAdmissionFn = (_runId, run) => Promise.resolve().then(run);
 
 /**
- * Default foreground handler runner: invoke directly. Used by the Node
- * target. The Cloudflare target overrides this with a `keepAliveWhile`
- * wrapper.
+ * Default direct-agent foreground handler runner: invoke directly. Used by the
+ * Node target. The Cloudflare target overrides this with a `runFiber` wrapper.
  */
 const defaultRunHandler: RunHandlerFn = (ctx, handler) => handler(ctx);

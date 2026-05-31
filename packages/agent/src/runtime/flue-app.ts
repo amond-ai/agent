@@ -73,7 +73,7 @@ export interface FlueRuntime {
 	/** Optional Node HTTP workflow admitted execution wrapper. Defaults to direct invocation. */
 	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 
-	/** Optional Node foreground handler wrapper. Defaults to direct invocation. */
+	/** Optional Node direct-agent foreground handler wrapper. Defaults to direct invocation. */
 	runHandler?: RunHandlerFn;
 
 	/** Node workflow-run history store. */
