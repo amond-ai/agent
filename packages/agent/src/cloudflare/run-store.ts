@@ -41,7 +41,7 @@ class DurableRunStore implements RunStore {
 		this.sql.exec(
 			`INSERT OR REPLACE INTO flue_runs
 			 (run_id, owner_kind, instance_id, agent_name, workflow_name, status, started_at, payload, ended_at, is_error, duration_ms, result, error)
-			 VALUES (?, 'workflow', ?, NULL, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)`,
+			 VALUES (?, 'workflow', ?, '', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)`,
 			input.runId,
 			input.owner.instanceId,
 			input.owner.workflowName,
@@ -125,12 +125,9 @@ function ensureRunTables(sql: SqlStorage): void {
 		 instance_id TEXT,
 		 agent_name TEXT,
 		 workflow_name TEXT,
-			 owner_run_id TEXT,
 			 status TEXT NOT NULL,
 			 started_at TEXT NOT NULL,
 			 payload TEXT,
-			 restarted_from_run_id TEXT,
-			 restarted_as_run_id TEXT,
 			 ended_at TEXT,
 			 is_error INTEGER,
 			 duration_ms INTEGER,
@@ -140,20 +137,7 @@ function ensureRunTables(sql: SqlStorage): void {
 	);
 	ensureColumn(sql, 'flue_runs', 'owner_kind', "TEXT NOT NULL DEFAULT 'agent'");
 	ensureColumn(sql, 'flue_runs', 'workflow_name', 'TEXT');
-	// Legacy column from 0.8 when workflow runs lived under a shared
-	// `WorkflowRunOwner` DO. Workflows are now per-class DOs keyed by
-	// `instance_id`, but old rows may still have the runId in `owner_run_id`.
-	ensureColumn(sql, 'flue_runs', 'owner_run_id', 'TEXT');
 	ensureColumn(sql, 'flue_runs', 'payload', 'TEXT');
-	ensureColumn(sql, 'flue_runs', 'restarted_from_run_id', 'TEXT');
-	ensureColumn(sql, 'flue_runs', 'restarted_as_run_id', 'TEXT');
-	sql.exec(
-		`UPDATE flue_runs
-		 SET instance_id = owner_run_id
-		 WHERE owner_kind = 'workflow'
-		   AND (instance_id IS NULL OR instance_id = '')
-		   AND owner_run_id IS NOT NULL`,
-	);
 	sql.exec(
 		`CREATE TABLE IF NOT EXISTS flue_run_events (
 		 run_id TEXT NOT NULL,
@@ -191,7 +175,7 @@ function rowToRunRecord(row: SqlRow): RunRecord {
 	const owner = {
 		kind: 'workflow' as const,
 		workflowName: String(row.workflow_name),
-		instanceId: String(row.instance_id ?? (row as { owner_run_id?: unknown }).owner_run_id ?? runId),
+		instanceId: String(row.instance_id ?? runId),
 	};
 	return {
 		runId,

@@ -80,7 +80,7 @@ class SqlRegistryOps implements RegistryOps {
 		this.sql.exec(
 			`INSERT OR IGNORE INTO flue_registry_runs
 			 (run_id, owner_kind, agent_name, instance_id, workflow_name, status, started_at, ended_at, duration_ms, is_error)
-			 VALUES (?, 'workflow', NULL, ?, ?, 'active', ?, NULL, NULL, NULL)`,
+			 VALUES (?, 'workflow', '', ?, ?, 'active', ?, NULL, NULL, NULL)`,
 			input.runId,
 			input.owner.instanceId,
 			input.owner.workflowName,
@@ -144,7 +144,6 @@ function ensureRegistryTables(sql: SqlStorage): void {
 		 agent_name TEXT,
 		 instance_id TEXT,
 		 workflow_name TEXT,
-		 owner_run_id TEXT,
 		 status TEXT NOT NULL,
 		 started_at TEXT NOT NULL,
 		 ended_at TEXT,
@@ -154,14 +153,6 @@ function ensureRegistryTables(sql: SqlStorage): void {
 	);
 	ensureColumn(sql, 'flue_registry_runs', 'owner_kind', "TEXT NOT NULL DEFAULT 'agent'");
 	ensureColumn(sql, 'flue_registry_runs', 'workflow_name', 'TEXT');
-	ensureColumn(sql, 'flue_registry_runs', 'owner_run_id', 'TEXT');
-	sql.exec(
-		`UPDATE flue_registry_runs
-		 SET instance_id = owner_run_id
-		 WHERE owner_kind = 'workflow'
-		   AND (instance_id IS NULL OR instance_id = '')
-		   AND owner_run_id IS NOT NULL`,
-	);
 	sql.exec('CREATE INDEX IF NOT EXISTS flue_registry_status_started_idx ON flue_registry_runs (status, started_at DESC)');
 	sql.exec('CREATE INDEX IF NOT EXISTS flue_registry_workflow_started_idx ON flue_registry_runs (owner_kind, workflow_name, started_at DESC)');
 }
@@ -173,7 +164,7 @@ function rowToRunPointer(row: SqlRow): RunPointer {
 		owner: {
 			kind: 'workflow',
 			workflowName: String(row.workflow_name),
-			instanceId: String(row.instance_id ?? row.owner_run_id ?? runId),
+			instanceId: String(row.instance_id ?? runId),
 		},
 		status: String(row.status) as RunStatus,
 		startedAt: String(row.started_at),

@@ -102,7 +102,7 @@ describe('createRegistryOps (SQL paths)', () => {
 		expect(ops.listRuns({}).runs).toEqual([]);
 	});
 
-	it('keeps rows from the pre-owner schema out of workflow run lookup', () => {
+	it('keeps rows from the pre-owner schema out of workflow run lookup while admitting new workflows', () => {
 		const sql = makeFakeSql();
 		sql.exec(`CREATE TABLE flue_registry_runs (
 			run_id TEXT PRIMARY KEY,
@@ -116,8 +116,11 @@ describe('createRegistryOps (SQL paths)', () => {
 		)`);
 		sql.exec(`INSERT INTO flue_registry_runs (run_id, agent_name, instance_id, status, started_at) VALUES (?, ?, ?, ?, ?)`, 'pre-owner-agent', 'hello', 'inst_a', 'active', STARTED_AT_1);
 		const ops = createRegistryOps(sql);
+		const runId = 'workflow:hello:after-upgrade';
+		ops.recordRunStart({ runId, owner: owner('hello', runId), startedAt: STARTED_AT_2 });
 		expect(ops.lookupRun('pre-owner-agent')).toBeNull();
-		expect(ops.listRuns({}).runs).toEqual([]);
+		expect(ops.lookupRun(runId)).toEqual({ runId, owner: owner('hello', runId), status: 'active', startedAt: STARTED_AT_2, endedAt: undefined, durationMs: undefined, isError: undefined });
+		expect(ops.listRuns({}).runs.map((run) => run.runId)).toEqual([runId]);
 	});
 
 	it('falls back to page 1 on a malformed cursor', () => {
