@@ -91,6 +91,7 @@ export type {
 	ToolParameters,
 	WebSocketErrorMessage,
 	WebSocketServerMessage,
+	WorkflowRunWebSocketErrorMessage,
 	WorkflowRouteHandler,
 	WorkflowWebSocketClientMessage,
 	WorkflowWebSocketHandler,

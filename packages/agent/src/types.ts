@@ -98,6 +98,11 @@ export type WebSocketErrorMessage = {
 	error: FluePublicError;
 };
 
+/** Workflow-run-scoped WebSocket failure after a run id has been allocated. */
+export type WorkflowRunWebSocketErrorMessage = WebSocketErrorMessage & {
+	runId: string;
+};
+
 /** Protocol version 1 messages emitted by an attached-agent WebSocket. */
 export type AgentWebSocketServerMessage =
 	| {
@@ -163,14 +168,7 @@ export type WorkflowWebSocketServerMessage =
 			result: unknown;
 	  }
 	| WebSocketErrorMessage
-	// TODO: Decide whether the run-scoped workflow error envelope should be a named public export.
-	| {
-			version: 1;
-			type: 'error';
-			requestId?: string;
-			runId: string;
-			error: FluePublicError;
-	  };
+	| WorkflowRunWebSocketErrorMessage;
 
 /** Any protocol version 1 message emitted by a Flue WebSocket. */
 export type WebSocketServerMessage = AgentWebSocketServerMessage | WorkflowWebSocketServerMessage;

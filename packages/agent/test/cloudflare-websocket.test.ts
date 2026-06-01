@@ -213,7 +213,11 @@ describe('Cloudflare WebSocket transport', () => {
 
 		expect(connection.messages.some((message) => message.type === 'started')).toBe(false);
 		expect(connection.messages).toContainEqual(
-			expect.objectContaining({ type: 'error', requestId: 'work-admission-error' }),
+			expect.objectContaining({
+				type: 'error',
+				requestId: 'work-admission-error',
+				runId: 'workflow:job:admission-error',
+			}),
 		);
 		expect(connection.closed).toEqual({ code: 1011, reason: 'Workflow failed' });
 	});

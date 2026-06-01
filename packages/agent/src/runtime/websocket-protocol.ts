@@ -2,8 +2,8 @@ import { InvalidRequestError, toPublicError } from '../errors.ts';
 import type {
 	AgentWebSocketClientMessage,
 	WebSocketErrorMessage,
+	WorkflowRunWebSocketErrorMessage,
 	WorkflowWebSocketClientMessage,
-	WorkflowWebSocketServerMessage,
 } from '../types.ts';
 
 export function parseAgentWebSocketMessage(raw: string): AgentWebSocketClientMessage {
@@ -72,7 +72,7 @@ export function createWebSocketErrorMessage(
 	error: unknown,
 	requestId?: string,
 	runId?: string,
-): WebSocketErrorMessage | Extract<WorkflowWebSocketServerMessage, { type: 'error' }> {
+): WebSocketErrorMessage | WorkflowRunWebSocketErrorMessage {
 	return runId === undefined
 		? { version: 1, type: 'error', requestId, error: toPublicError(error) }
 		: { version: 1, type: 'error', requestId, runId, error: toPublicError(error) };
