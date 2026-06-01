@@ -43,6 +43,7 @@ export type {
 	RunRecord,
 	WebSocketErrorMessage,
 	WebSocketServerMessage,
+	WorkflowRunWebSocketErrorMessage,
 	WorkflowWebSocketClientMessage,
 	WorkflowWebSocketServerMessage,
 } from './types.ts';

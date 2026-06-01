@@ -172,6 +172,11 @@ export type WebSocketErrorMessage = {
 	error: FluePublicError;
 };
 
+/** Workflow-run-scoped WebSocket failure after a run id has been allocated. */
+export type WorkflowRunWebSocketErrorMessage = WebSocketErrorMessage & {
+	runId: string;
+};
+
 /** Low-level protocol messages received from an agent WebSocket. */
 export type AgentWebSocketServerMessage =
 	| {
@@ -234,13 +239,7 @@ export type WorkflowWebSocketServerMessage =
 			result: unknown;
 	  }
 	| WebSocketErrorMessage
-	| {
-			version: 1;
-			type: 'error';
-			requestId?: string;
-			runId: string;
-			error: FluePublicError;
-	  };
+	| WorkflowRunWebSocketErrorMessage;
 
 /** Low-level protocol message received from an agent or workflow WebSocket. */
 export type WebSocketServerMessage = AgentWebSocketServerMessage | WorkflowWebSocketServerMessage;

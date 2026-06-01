@@ -335,6 +335,26 @@ describe('WebSocket clients', () => {
 		await expect(workflow.invoke({ issue: 456 })).rejects.toThrow('only one invocation');
 	});
 
+	it('preserves workflow run identity on run-scoped socket errors', async () => {
+		const { client, sockets } = socketClient();
+		const workflow = client.workflows.connect('triage');
+		const socket = sockets[0]?.socket;
+		socket?.message({ version: 1, type: 'ready', target: 'workflow', name: 'triage' });
+		const pending = workflow.invoke({ issue: 123 });
+		await Promise.resolve();
+		const request = JSON.parse(socket?.sent[0] ?? '{}') as { requestId: string };
+		socket?.message({
+			version: 1,
+			type: 'error',
+			requestId: request.requestId,
+			runId: 'run_workflow',
+			error: { type: 'TEST', message: 'failed', details: 'failed' },
+		});
+		const error = await pending.catch((error: unknown) => error);
+		expect(error).toBeInstanceOf(FlueSocketError);
+		expect(error).toMatchObject({ requestId: request.requestId, runId: 'run_workflow' });
+	});
+
 	it('rejects workflow frames that omit required run identity', async () => {
 		const { client, sockets } = socketClient();
 		const workflow = client.workflows.connect('triage');
