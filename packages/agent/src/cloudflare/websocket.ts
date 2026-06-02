@@ -74,7 +74,7 @@ export function connectCloudflareAgentWebSocket(
 		target: 'agent',
 		name: options.name,
 		id: options.id,
-		requestUrl: options.requestUrl,
+		requestUrl: operationRequestUrl(options.requestUrl),
 	});
 	send(connection, {
 		version: 1,
@@ -94,7 +94,7 @@ export function connectCloudflareWorkflowWebSocket(
 		target: 'workflow',
 		name: options.name,
 		runId: options.runId,
-		requestUrl: options.requestUrl,
+		requestUrl: operationRequestUrl(options.requestUrl),
 		invoked: false,
 	});
 	send(connection, { version: 1, type: 'ready', target: 'workflow', name: options.name });
@@ -285,6 +285,13 @@ async function invokeWorkflow(
 
 function messageBytes(message: string): number {
 	return new TextEncoder().encode(message).byteLength;
+}
+
+function operationRequestUrl(requestUrl: string): string {
+	const url = new URL(requestUrl);
+	url.search = '';
+	url.hash = '';
+	return url.toString();
 }
 
 function sendError(

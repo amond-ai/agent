@@ -14,13 +14,13 @@ import { InMemorySessionStore } from '../src/session.ts';
 import type { WebSocketServerMessage } from '../src/types.ts';
 
 describe('Cloudflare agent WebSockets', () => {
-	it('persists agent routing identity when a Cloudflare agent socket connects', () => {
+	it('persists only the agent operation URL when a Cloudflare agent socket connects', () => {
 		const connection = new TestConnection();
 
 		connectCloudflareAgentWebSocket(connection, {
 			name: 'assistant',
 			id: 'agent-instance-1',
-			requestUrl: 'https://example.com/flue/agents/assistant/agent-instance-1?token=secret',
+			requestUrl: 'https://example.com/flue/agents/assistant/agent-instance-1?token=secret#section',
 		});
 
 		expect(connection.attachment).toEqual({
@@ -28,7 +28,7 @@ describe('Cloudflare agent WebSockets', () => {
 			target: 'agent',
 			name: 'assistant',
 			id: 'agent-instance-1',
-			requestUrl: 'https://example.com/flue/agents/assistant/agent-instance-1?token=secret',
+			requestUrl: 'https://example.com/flue/agents/assistant/agent-instance-1',
 		});
 	});
 
@@ -219,6 +219,25 @@ describe('Cloudflare agent WebSockets', () => {
 });
 
 describe('Cloudflare workflow WebSockets', () => {
+	it('persists only the workflow operation URL when a Cloudflare workflow socket connects', () => {
+		const connection = new TestConnection();
+
+		connectCloudflareWorkflowWebSocket(connection, {
+			name: 'summarize',
+			runId: 'workflow:summarize:run-1',
+			requestUrl: 'https://example.com/flue/workflows/summarize?token=secret#section',
+		});
+
+		expect(connection.attachment).toEqual({
+			version: 1,
+			target: 'workflow',
+			name: 'summarize',
+			runId: 'workflow:summarize:run-1',
+			requestUrl: 'https://example.com/flue/workflows/summarize',
+			invoked: false,
+		});
+	});
+
 	it('accepts the first workflow invocation when a restored socket has not previously invoked', async () => {
 		const connection = new TestConnection();
 		connection.attachment = {
