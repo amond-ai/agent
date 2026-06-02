@@ -5,7 +5,7 @@ import {
 	fauxToolCall,
 	registerFauxProvider,
 } from '@earendil-works/pi-ai';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAgent, defineAgentProfile } from '../src/index.ts';
 import { createFlueContext, InMemorySessionStore } from '../src/internal.ts';
 import type { SessionData, SessionEnv, SessionStore } from '../src/types.ts';
@@ -96,6 +96,129 @@ describe('session.prompt()', () => {
 				response.usage.cacheRead +
 				response.usage.cacheWrite,
 		);
+	});
+
+	it('returns the recovered response when a model turn fails transiently', async () => {
+		vi.useFakeTimers();
+		try {
+			const provider = createProvider([{ id: 'reviewer' }]);
+			const requests: unknown[][] = [];
+			provider.setResponses([
+				fauxAssistantMessage('partial response', {
+					stopReason: 'error',
+					errorMessage: 'overloaded_error',
+				}),
+				(context) => {
+					requests.push(context.messages);
+					return fauxAssistantMessage('Recovered response.');
+				},
+			]);
+			const store = new RecordingSessionStore();
+			const events: unknown[] = [];
+			const ctx = createContext(provider, { store });
+			ctx.subscribeEvent((event) => {
+				events.push(event);
+			});
+			const harness = await ctx.init(
+				createAgent(() => ({ model: `${provider.getModel().provider}/reviewer`, persist: store })),
+			);
+			const session = await harness.session();
+
+			const response = session.prompt('Review this workspace.');
+			await vi.advanceTimersByTimeAsync(2_000);
+
+			await expect(response).resolves.toMatchObject({ text: 'Recovered response.' });
+			expect(provider.state.callCount).toBe(2);
+			expect(requests[0]).toEqual([
+				expect.objectContaining({ role: 'user' }),
+			]);
+			expect(
+				events.filter(
+					(event) =>
+						typeof event === 'object' &&
+						event !== null &&
+						'type' in event &&
+						event.type === 'log' &&
+						'message' in event &&
+						event.message === '[flue:model-retry] Retrying transient model error',
+				),
+			).toHaveLength(1);
+			const data = [...store.records.values()][0];
+			expect(
+				data?.entries.filter((entry) => entry.type === 'message' && entry.message.role === 'assistant'),
+			).toHaveLength(2);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('rejects when transient model failures exhaust the retry budget', async () => {
+		vi.useFakeTimers();
+		try {
+			const provider = createProvider([{ id: 'reviewer' }]);
+			provider.setResponses(
+				Array.from({ length: 4 }, () =>
+					fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'overloaded_error' }),
+				),
+			);
+			const ctx = createContext(provider);
+			const harness = await ctx.init(
+				createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
+			);
+			const session = await harness.session();
+
+			const response = session.prompt('Review this workspace.');
+			const rejected = expect(response).rejects.toThrow('overloaded_error');
+			await vi.runAllTimersAsync();
+
+			await rejected;
+			expect(provider.state.callCount).toBe(4);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('does not retry a permanent model error', async () => {
+		const provider = createProvider([{ id: 'reviewer' }]);
+		provider.setResponses([
+			fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'invalid_api_key' }),
+		]);
+		const ctx = createContext(provider);
+		const harness = await ctx.init(
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
+		);
+		const session = await harness.session();
+
+		await expect(session.prompt('Review this workspace.')).rejects.toThrow('invalid_api_key');
+
+		expect(provider.state.callCount).toBe(1);
+	});
+
+	it('excludes a terminal failed turn from the next prompt on the same session', async () => {
+		const provider = createProvider([{ id: 'reviewer' }]);
+		let retryContext: unknown[] = [];
+		provider.setResponses([
+			fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'invalid_api_key' }),
+			(context) => {
+				retryContext = context.messages;
+				return fauxAssistantMessage('Recovered after configuration update.');
+			},
+		]);
+		const ctx = createContext(provider);
+		const harness = await ctx.init(
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
+		);
+		const session = await harness.session();
+		await expect(session.prompt('First attempt.')).rejects.toThrow('invalid_api_key');
+
+		await expect(session.prompt('Try after configuration update.')).resolves.toMatchObject({
+			text: 'Recovered after configuration update.',
+		});
+
+		expect(retryContext).toEqual([
+			expect.objectContaining({ role: 'user' }),
+			expect.objectContaining({ role: 'user' }),
+		]);
 	});
 
 	it('uses a call-level model when a prompt overrides the agent model', async () => {
@@ -423,6 +546,38 @@ describe('CallHandle', () => {
 		operation.abort('stop review');
 
 		await expect(operation).rejects.toMatchObject({ name: 'AbortError', message: 'stop review' });
+	});
+
+	it('does not issue another model call when abort() interrupts retry backoff', async () => {
+		vi.useFakeTimers();
+		try {
+			const provider = createProvider([{ id: 'reviewer' }]);
+			provider.setResponses([
+				fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'overloaded_error' }),
+				fauxAssistantMessage('Should not be requested.'),
+			]);
+			const ctx = createContext(provider);
+			const harness = await ctx.init(
+				createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
+			);
+			const session = await harness.session();
+
+			const operation = session.prompt('Begin a cancellable review.');
+			const rejected = expect(operation).rejects.toMatchObject({
+				name: 'AbortError',
+				message: 'stop retrying',
+			});
+			await vi.waitFor(() => {
+				expect(provider.state.callCount).toBe(1);
+			});
+			operation.abort('stop retrying');
+			await vi.runAllTimersAsync();
+
+			await rejected;
+			expect(provider.state.callCount).toBe(1);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('rejects with AbortError when an external signal cancels an active operation', async () => {

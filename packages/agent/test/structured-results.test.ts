@@ -6,7 +6,7 @@ import {
 	registerFauxProvider,
 } from '@earendil-works/pi-ai';
 import * as v from 'valibot';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAgent, ResultUnavailableError } from '../src/index.ts';
 import { createFlueContext, InMemorySessionStore } from '../src/internal.ts';
 import type { FlueEvent, FlueSession, Skill } from '../src/types.ts';
@@ -73,6 +73,30 @@ describe('structured operation results', () => {
 			provider: provider.getModel().provider,
 			id: provider.getModel().id,
 		});
+	});
+
+	it('returns validated data when the first structured model turn fails transiently', async () => {
+		vi.useFakeTimers();
+		try {
+			const provider = createProvider();
+			provider.setResponses([
+				fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'overloaded_error' }),
+				fauxAssistantMessage(fauxToolCall('finish', { answer: 'Paris' }), {
+					stopReason: 'toolUse',
+				}),
+			]);
+			const session = await createSession(provider);
+
+			const response = session.prompt('Name the capital of France.', {
+				result: v.object({ answer: v.string() }),
+			});
+			await vi.advanceTimersByTimeAsync(2_000);
+
+			await expect(response).resolves.toMatchObject({ data: { answer: 'Paris' } });
+			expect(provider.state.callCount).toBe(2);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('returns validated scalar data when a structured result schema is not an object', async () => {

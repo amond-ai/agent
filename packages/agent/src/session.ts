@@ -85,6 +85,8 @@ import type {
 import { addUsage, emptyUsage, fromProviderUsage } from './usage.ts';
 
 const MAX_TASK_DEPTH = 4;
+const MAX_TRANSIENT_MODEL_RETRIES = 3;
+const TRANSIENT_MODEL_RETRY_BASE_DELAY_MS = 2_000;
 
 type TurnInputMessage = Extract<FlueEvent, { type: 'turn_request' }>['input']['messages'][number];
 type TurnInputTool = NonNullable<
@@ -383,18 +385,8 @@ export class SessionHistory {
 		);
 	}
 
-	appendMessages(
-		messages: AgentMessage[],
-		source?: MessageSource,
-		dispatch?: DispatchMessageMetadata,
-	): string[] {
-		let dispatchAttached = false;
-		return messages.map((message) => {
-			const messageDispatch =
-				dispatch && !dispatchAttached && message.role === 'user' ? dispatch : undefined;
-			if (messageDispatch) dispatchAttached = true;
-			return this.appendMessage(message, source, messageDispatch);
-		});
+	appendMessages(messages: AgentMessage[], source?: MessageSource): string[] {
+		return messages.map((message) => this.appendMessage(message, source));
 	}
 
 	appendCompaction(input: CompactionAppendInput): string {
@@ -430,16 +422,6 @@ export class SessionHistory {
 		return entry.id;
 	}
 
-	removeLeafMessage(message: AgentMessage): boolean {
-		if (!this.leafId) return false;
-		const leaf = this.byId.get(this.leafId);
-		if (!leaf || leaf.type !== 'message' || leaf.message !== message) return false;
-		this.byId.delete(leaf.id);
-		this.entries = this.entries.filter((entry) => entry.id !== leaf.id);
-		this.leafId = leaf.parentId;
-		return true;
-	}
-
 	toData(
 		affinityKey: string,
 		metadata: Record<string, any>,
@@ -468,6 +450,12 @@ function pathToContextEntries(path: SessionEntry[]): ContextEntry[] {
 	const context: ContextEntry[] = [];
 	for (const entry of path) {
 		if (entry.type === 'message') {
+			if (
+				entry.message.role === 'assistant' &&
+				(entry.message.stopReason === 'error' || entry.message.stopReason === 'aborted')
+			) {
+				continue;
+			}
 			context.push({ message: entry.message, entry });
 		} else if (entry.type === 'branch_summary') {
 			context.push({
@@ -550,6 +538,45 @@ function generateEntryId(byId: Map<string, SessionEntry>): string {
 	return crypto.randomUUID();
 }
 
+function isRetryableModelError(message: AssistantMessage): boolean {
+	if (message.stopReason !== 'error' || !message.errorMessage) return false;
+	return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost)|socket hang up|fetch failed|timed? out|timeout|terminated/i.test(
+		message.errorMessage,
+	);
+}
+
+function modelRetryDelayMs(attempt: number): number {
+	const baseDelay = TRANSIENT_MODEL_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+	return Math.round(baseDelay * (0.75 + Math.random() * 0.25));
+}
+
+function countConsecutiveRetryableModelErrors(entries: SessionEntry[]): number {
+	let count = 0;
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i];
+		if (entry?.type !== 'message' || entry.message.role !== 'assistant') continue;
+		if (!isRetryableModelError(entry.message as AssistantMessage)) return count;
+		count += 1;
+	}
+	return count;
+}
+
+function sleepUntilRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+	if (signal.aborted) return Promise.reject(abortErrorFor(signal));
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, delayMs);
+		const onAbort = () => {
+			clearTimeout(timer);
+			signal.removeEventListener('abort', onAbort);
+			reject(abortErrorFor(signal));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+	});
+}
+
 export class Session implements FlueSession {
 	readonly name: string;
 	readonly fs: FlueFs;
@@ -563,8 +590,8 @@ export class Session implements FlueSession {
 	private store: SessionStore;
 	private history: SessionHistory;
 	private createdAt: string | undefined;
-	private overflowRecoveryAttempted = false;
 	private compactionAbortController: AbortController | undefined;
+	private modelRetryAbortController: AbortController | undefined;
 	private eventCallback: FlueEventCallback | undefined;
 	private agentTools: ToolDefinition[];
 	private toolFactory: SessionToolFactory | undefined;
@@ -850,7 +877,7 @@ export class Session implements FlueSession {
 
 	processDispatchInput(input: DispatchInput): CallHandle<PromptResponse> {
 		return createCallHandle(undefined, (signal) =>
-			this.runOperation('prompt', signal, () => this.runPersistedDispatchInput(input)),
+			this.runOperation('prompt', signal, () => this.runPersistedDispatchInput(input, signal)),
 		);
 	}
 
@@ -995,13 +1022,14 @@ export class Session implements FlueSession {
 
 	async compact(): Promise<void> {
 		await this.runOperation('compact', undefined, async () => {
-			await this.runCompaction('manual', false);
+			await this.runCompaction('manual');
 		});
 	}
 
 	abort(): void {
 		this.harness.abort();
 		this.compactionAbortController?.abort();
+		this.modelRetryAbortController?.abort();
 		for (const task of this.activeTasks) task.abort();
 	}
 
@@ -1470,6 +1498,7 @@ export class Session implements FlueSession {
 			const onAbort = () => {
 				this.harness.abort();
 				this.compactionAbortController?.abort(signal?.reason);
+				this.modelRetryAbortController?.abort(signal?.reason);
 				for (const task of this.activeTasks) task.abort();
 			};
 			signal?.addEventListener('abort', onAbort, { once: true });
@@ -1597,14 +1626,10 @@ export class Session implements FlueSession {
 		await this.save();
 	}
 
-	private async syncHarnessMessagesSince(
-		index: number,
-		source: MessageSource,
-		firstDispatch?: DispatchMessageMetadata,
-	): Promise<void> {
+	private async syncHarnessMessagesSince(index: number, source: MessageSource): Promise<void> {
 		const messages = this.harness.state.messages.slice(index) as AgentMessage[];
 		if (messages.length === 0) return;
-		this.history.appendMessages(messages, source, firstDispatch);
+		this.history.appendMessages(messages, source);
 		await this.save();
 	}
 
@@ -1630,48 +1655,100 @@ export class Session implements FlueSession {
 		}
 	}
 
-	// ─── Compaction ───────────────────────────────────────────────────────────
+	// ─── Model-turn recovery and compaction ───────────────────────────────────
 
-	private async checkLatestAssistantForCompaction(): Promise<void> {
-		const messages = this.harness.state.messages;
-		const lastMsg = messages[messages.length - 1];
-		if (lastMsg?.role === 'assistant') {
-			await this.checkCompaction(lastMsg as AssistantMessage);
-		}
-	}
+	private async runModelTurnWithRecovery(options: {
+		start: () => Promise<void>;
+		source: MessageSource;
+		signal: AbortSignal;
+		transientRetries?: number;
+		overflowRecoveryAttempted?: boolean;
+	}): Promise<void> {
+		let start = options.start;
+		let source = options.source;
+		let transientRetries = options.transientRetries ?? 0;
+		let overflowRecoveryAttempted = options.overflowRecoveryAttempted ?? false;
 
-	private async checkCompaction(assistantMessage: AssistantMessage): Promise<void> {
-		if (assistantMessage.stopReason === 'aborted') return;
-
-		const model = this.harness.state.model;
-		const settings = this.resolveCompactionSettings(model);
-		const contextWindow = model.contextWindow ?? 0;
-		const overflow = isContextOverflow(assistantMessage, contextWindow);
-
-		if (overflow) {
-			if (this.overflowRecoveryAttempted) return;
-			this.overflowRecoveryAttempted = true;
-
-			this.internalLog('info', '[flue:compaction] Overflow detected, compacting and retrying...');
+		while (true) {
+			if (options.signal.aborted) throw abortErrorFor(options.signal);
+			const beforeLength = this.harness.state.messages.length;
+			await start();
+			await this.harness.waitForIdle();
+			await this.syncHarnessMessagesSince(beforeLength, source);
 
 			const messages = this.harness.state.messages;
-			const lastMsg = messages[messages.length - 1];
-			if (lastMsg && lastMsg.role === 'assistant') {
-				this.harness.state.messages = messages.slice(0, -1);
-				this.history.removeLeafMessage(lastMsg as AgentMessage);
-				await this.save();
+			const latest = messages[messages.length - 1];
+			if (latest?.role !== 'assistant') return;
+			const assistant = latest as AssistantMessage;
+			const model = this.harness.state.model;
+
+			if (isContextOverflow(assistant, model.contextWindow ?? 0)) {
+				if (overflowRecoveryAttempted) {
+					this.harness.state.messages = this.history.buildContext();
+					return;
+				}
+				overflowRecoveryAttempted = true;
+				this.internalLog('info', '[flue:compaction] Overflow detected, compacting and retrying...');
+				this.harness.state.messages = this.history.buildContext();
+				if (!(await this.runCompaction('overflow'))) return;
+				this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...');
+				start = () => this.harness.continue();
+				source = 'retry';
+				continue;
 			}
 
-			try {
-				await this.runCompaction('overflow', true);
-			} finally {
-				this.overflowRecoveryAttempted = false;
+			if (isRetryableModelError(assistant)) {
+				transientRetries += 1;
+				if (!(await this.waitForTransientModelRetry(assistant, transientRetries))) return;
+				start = () => this.harness.continue();
+				source = 'retry';
+				continue;
+			}
+
+			await this.checkCompaction(assistant);
+			if (assistant.stopReason === 'error' || assistant.stopReason === 'aborted') {
+				this.harness.state.messages = this.history.buildContext();
 			}
 			return;
 		}
-		if (!settings.enabled) return;
-		if (assistantMessage.stopReason === 'error') return;
+	}
 
+	private async waitForTransientModelRetry(
+		assistant: AssistantMessage,
+		attempt: number,
+	): Promise<boolean> {
+		if (attempt > MAX_TRANSIENT_MODEL_RETRIES) {
+			this.internalLog('warn', '[flue:model-retry] Transient model error retries exhausted', {
+				attempts: attempt - 1,
+				error: assistant.errorMessage,
+			});
+			this.harness.state.messages = this.history.buildContext();
+			return false;
+		}
+		const delayMs = modelRetryDelayMs(attempt);
+		this.harness.state.messages = this.history.buildContext();
+		this.modelRetryAbortController = new AbortController();
+		this.internalLog('warn', '[flue:model-retry] Retrying transient model error', {
+			attempt,
+			maxRetries: MAX_TRANSIENT_MODEL_RETRIES,
+			delayMs,
+			error: assistant.errorMessage,
+		});
+		try {
+			await sleepUntilRetry(delayMs, this.modelRetryAbortController.signal);
+		} finally {
+			this.modelRetryAbortController = undefined;
+		}
+		return true;
+	}
+
+	private async checkCompaction(assistantMessage: AssistantMessage): Promise<void> {
+		if (assistantMessage.stopReason === 'aborted' || assistantMessage.stopReason === 'error') return;
+
+		const model = this.harness.state.model;
+		const settings = this.resolveCompactionSettings(model);
+		if (!settings.enabled) return;
+		const contextWindow = model.contextWindow ?? 0;
 		const contextTokens = calculateContextTokens(assistantMessage.usage);
 
 		if (shouldCompact(contextTokens, contextWindow, settings)) {
@@ -1679,9 +1756,9 @@ export class Session implements FlueSession {
 				'info',
 				`[flue:compaction] Threshold reached — ${contextTokens} tokens used, ` +
 					`window ${contextWindow}, reserve ${settings.reserveTokens}, ` +
-					`triggering compaction`,
+					'triggering compaction',
 			);
-			await this.runCompaction('threshold', false);
+			await this.runCompaction('threshold');
 		}
 	}
 
@@ -1692,10 +1769,7 @@ export class Session implements FlueSession {
 	 * `response.usage` — so users see the true cost of the call that
 	 * triggered compaction.
 	 */
-	private async runCompaction(
-		reason: 'threshold' | 'overflow' | 'manual',
-		willRetry: boolean,
-	): Promise<void> {
+	private async runCompaction(reason: 'threshold' | 'overflow' | 'manual'): Promise<boolean> {
 		this.compactionAbortController = new AbortController();
 		const messagesBefore = this.harness.state.messages.length;
 		const compactionStartMs = Date.now();
@@ -1728,7 +1802,7 @@ export class Session implements FlueSession {
 			);
 			if (!preparation) {
 				this.internalLog('info', '[flue:compaction] Nothing to compact (no valid cut point found)');
-				return;
+				return false;
 			}
 			const firstKeptEntry = contextEntries[preparation.firstKeptIndex]?.entry;
 			if (!firstKeptEntry || firstKeptEntry.type !== 'message') {
@@ -1736,7 +1810,7 @@ export class Session implements FlueSession {
 					'info',
 					'[flue:compaction] Nothing to compact (first kept message has no entry)',
 				);
-				return;
+				return false;
 			}
 
 			this.internalLog(
@@ -1785,7 +1859,7 @@ export class Session implements FlueSession {
 				},
 			);
 
-			if (this.compactionAbortController.signal.aborted) return;
+			if (this.compactionAbortController.signal.aborted) return false;
 
 			this.history.appendCompaction({
 				summary: result.summary,
@@ -1812,22 +1886,11 @@ export class Session implements FlueSession {
 			});
 
 			await this.save();
-
-			if (willRetry) {
-				const msgs = this.harness.state.messages;
-				const lastMsg = msgs[msgs.length - 1];
-				if (lastMsg?.role === 'assistant' && (lastMsg as AssistantMessage).stopReason === 'error') {
-					this.harness.state.messages = msgs.slice(0, -1);
-				}
-				this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...');
-				const beforeRetry = this.harness.state.messages.length;
-				await this.harness.continue();
-				await this.harness.waitForIdle();
-				await this.syncHarnessMessagesSince(beforeRetry, 'retry');
-			}
+			return true;
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			this.internalLog('error', `[flue:compaction] Failed: ${errorMessage}`, { error });
+			return false;
 		} finally {
 			this.compactionAbortController = undefined;
 		}
@@ -1904,7 +1967,10 @@ export class Session implements FlueSession {
 		return undefined;
 	}
 
-	private async runPersistedDispatchInput(input: DispatchInput): Promise<PromptResponse> {
+	private async runPersistedDispatchInput(
+		input: DispatchInput,
+		signal: AbortSignal,
+	): Promise<PromptResponse> {
 		return this.runPersistedContextInput({
 			findInput: () => this.history.findDispatchInput(input.dispatchId),
 			persistInput: () =>
@@ -1918,6 +1984,7 @@ export class Session implements FlueSession {
 			callSite: 'this dispatched input',
 			persistenceError: '[flue] Failed to persist dispatched input.',
 			recoveryError: '[flue] Cannot recover dispatched input after the session has advanced.',
+			signal,
 		});
 	}
 
@@ -1929,6 +1996,7 @@ export class Session implements FlueSession {
 		callSite: string;
 		persistenceError: string;
 		recoveryError: string;
+		signal: AbortSignal;
 	}): Promise<PromptResponse> {
 		return this.withCallOverrides(
 			{
@@ -1950,26 +2018,44 @@ export class Session implements FlueSession {
 				if (following.some((entry) => entry.type === 'message' && entry.message.role === 'user')) {
 					throw new Error(options.recoveryError);
 				}
-				const persistedAssistant = [...following]
-					.reverse()
-					.find(
-						(entry): entry is MessageEntry =>
-							entry.type === 'message' && entry.message.role === 'assistant',
-					);
-				if (!persistedAssistant) {
-					const beforeLength = this.harness.state.messages.length;
-					await this.harness.continue();
-					await this.harness.waitForIdle();
-					await this.syncHarnessMessagesSince(beforeLength, options.outputSource);
-					await this.checkLatestAssistantForCompaction();
-					this.throwIfError(options.errorLabel);
-				} else {
-					const assistant = persistedAssistant.message as AssistantMessage;
-					if (assistant.stopReason === 'error' || assistant.stopReason === 'aborted') {
-						throw new Error(
-							`[flue] ${options.errorLabel} failed: ${assistant.errorMessage ?? assistant.stopReason}`,
-						);
+				const persistedAssistants = following.filter(
+					(entry): entry is MessageEntry =>
+						entry.type === 'message' && entry.message.role === 'assistant',
+				);
+				const persistedAssistant = persistedAssistants.at(-1);
+				const assistant = persistedAssistant?.message as AssistantMessage | undefined;
+				const model = this.harness.state.model;
+				const overflow = assistant ? isContextOverflow(assistant, model.contextWindow ?? 0) : false;
+				if (!assistant || overflow || isRetryableModelError(assistant)) {
+					const transientRetries = countConsecutiveRetryableModelErrors(following);
+					if (assistant && overflow) {
+						this.harness.state.messages = this.history.buildContext();
+						this.internalLog('info', '[flue:compaction] Overflow detected, compacting and retrying...');
+						if (!(await this.runCompaction('overflow'))) {
+							throw new Error(
+								`[flue] ${options.errorLabel} failed: ${assistant.errorMessage ?? assistant.stopReason}`,
+							);
+						}
+						this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...');
+					} else if (assistant && isRetryableModelError(assistant)) {
+						if (!(await this.waitForTransientModelRetry(assistant, transientRetries))) {
+							throw new Error(
+								`[flue] ${options.errorLabel} failed: ${assistant.errorMessage ?? assistant.stopReason}`,
+							);
+						}
 					}
+					await this.runModelTurnWithRecovery({
+						start: () => this.harness.continue(),
+						source: assistant ? 'retry' : options.outputSource,
+						signal: options.signal,
+						transientRetries,
+						overflowRecoveryAttempted: overflow,
+					});
+					this.throwIfError(options.errorLabel);
+				} else if (assistant.stopReason === 'error' || assistant.stopReason === 'aborted') {
+					throw new Error(
+						`[flue] ${options.errorLabel} failed: ${assistant.errorMessage ?? assistant.stopReason}`,
+					);
 				}
 				return {
 					text: this.getAssistantText(),
@@ -1994,7 +2080,6 @@ export class Session implements FlueSession {
 		thinkingLevel: ThinkingLevel | undefined;
 		images: ImageContent[] | undefined;
 		source: MessageSource;
-		dispatch?: DispatchMessageMetadata;
 		errorLabel: string;
 		callSite: string;
 		activePackagedSkills?: Record<string, PackagedSkillDirectory>;
@@ -2012,7 +2097,6 @@ export class Session implements FlueSession {
 				activePackagedSkills: args.activePackagedSkills,
 			},
 			async ({ resolvedModel }) => {
-				const beforeLength = this.harness.state.messages.length;
 				const beforeLeafId = this.history.getLeafId();
 				const model: PromptModel = { provider: resolvedModel.provider, id: resolvedModel.id };
 
@@ -2020,7 +2104,6 @@ export class Session implements FlueSession {
 					const result = await this.runWithResultTools(
 						args.promptText,
 						resultBundle,
-						beforeLength,
 						args.source,
 						args.errorLabel,
 						args.signal,
@@ -2033,10 +2116,11 @@ export class Session implements FlueSession {
 					};
 				}
 
-				await this.harness.prompt(args.promptText, args.images);
-				await this.harness.waitForIdle();
-				await this.syncHarnessMessagesSince(beforeLength, args.source, args.dispatch);
-				await this.checkLatestAssistantForCompaction();
+				await this.runModelTurnWithRecovery({
+					start: () => this.harness.prompt(args.promptText, args.images),
+					source: args.source,
+					signal: args.signal,
+				});
 				this.throwIfError(args.errorLabel);
 
 				return {
@@ -2058,31 +2142,26 @@ export class Session implements FlueSession {
 	 * and pi-agent-core has its own iteration limits as the final ceiling.
 	 * `MAX_FOLLOWUPS` is a defense-in-depth ceiling against pathological loops.
 	 *
-	 * `beforeLength` is the harness-message-array length sampled by the caller
-	 * *before* the very first prompt; we keep advancing it across iterations so
-	 * `syncHarnessMessagesSince` only copies newly-produced messages each turn.
 	 */
 	private async runWithResultTools<T>(
 		initialPrompt: string,
 		bundle: ResultToolBundle<T>,
-		beforeLength: number,
 		source: MessageSource,
 		errorLabel: string,
 		signal: AbortSignal,
 		initialImages?: ImageContent[],
 	): Promise<T> {
 		let nextPrompt: string = initialPrompt;
-		let cursor = beforeLength;
 		const MAX_FOLLOWUPS = 32;
 		for (let attempt = 0; attempt <= MAX_FOLLOWUPS; attempt++) {
 			if (signal.aborted) throw abortErrorFor(signal);
 			// Images attach only on the first turn — retry follow-ups carry text
 			// only, so we don't re-bill image bytes on every result-tool retry.
-			await this.harness.prompt(nextPrompt, attempt === 0 ? initialImages : undefined);
-			await this.harness.waitForIdle();
-			await this.syncHarnessMessagesSince(cursor, source);
-			cursor = this.harness.state.messages.length;
-			await this.checkLatestAssistantForCompaction();
+			await this.runModelTurnWithRecovery({
+				start: () => this.harness.prompt(nextPrompt, attempt === 0 ? initialImages : undefined),
+				source,
+				signal,
+			});
 			this.throwIfError(errorLabel);
 
 			const outcome = bundle.getOutcome();

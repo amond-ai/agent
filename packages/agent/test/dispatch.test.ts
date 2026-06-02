@@ -475,6 +475,87 @@ describe('dispatched session processing', () => {
 		});
 	});
 
+	it('continues a persisted transient failure when the same dispatch id is replayed', async () => {
+		vi.useFakeTimers();
+		try {
+			const provider = createProvider();
+			provider.setResponses([fauxAssistantMessage('recovered dispatch')]);
+			const store = new InMemorySessionStore();
+			const processor = createAgentDispatchProcessor({
+				agents: {
+					moderator: createAgent(() => ({
+						model: `${provider.getModel().provider}/${provider.getModel().id}`,
+					})),
+				},
+				createContext: (id, runId, payload, req, initialEventIndex, dispatchId) =>
+					createFlueContext({
+						id,
+						runId,
+						dispatchId,
+						payload,
+						env: {},
+						req,
+						initialEventIndex,
+						agentConfig: {
+							systemPrompt: '',
+							skills: {},
+							subagents: {},
+							model: undefined,
+							resolveModel: () => provider.getModel(),
+						},
+						createDefaultEnv: async () => createNoopSessionEnv({ cwd: '/' }),
+						defaultStore: store,
+					}),
+			});
+			const input: DispatchInput = {
+				dispatchId: 'dispatch:retry-transient',
+				agent: 'moderator',
+				id: 'guild:retry-transient',
+				session: 'case:retry-transient',
+				input: { type: 'flagged', reportId: 'report:retry-transient' },
+				acceptedAt: '2026-06-01T00:00:00.000Z',
+			};
+			const timestamp = '2026-06-01T00:00:00.000Z';
+			await store.save(`agent-session:${JSON.stringify([input.id, 'default', input.session])}`, {
+				version: 4,
+				entries: [
+					{
+						type: 'message',
+						id: 'dispatch-input',
+						parentId: null,
+						timestamp,
+						message: { role: 'user', content: [{ type: 'text', text: 'persisted dispatch' }], timestamp: 0 },
+						source: 'dispatch',
+						dispatch: input,
+					},
+					{
+						type: 'message',
+						id: 'transient-error',
+						parentId: 'dispatch-input',
+						timestamp,
+						message: fauxAssistantMessage('', {
+							stopReason: 'error',
+							errorMessage: 'overloaded_error',
+						}),
+						source: 'dispatch',
+					},
+				],
+				leafId: 'transient-error',
+				metadata: {},
+				createdAt: timestamp,
+				updatedAt: timestamp,
+			});
+
+			const recovered = processor.process(input);
+			await vi.runAllTimersAsync();
+
+			await expect(recovered).resolves.toBeUndefined();
+			expect(provider.state.callCount).toBe(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('rejects a retried dispatch when later user input has already advanced the session', async () => {
 		const provider = createProvider();
 		provider.setResponses([
