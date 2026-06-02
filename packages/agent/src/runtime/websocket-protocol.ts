@@ -14,26 +14,19 @@ export function parseAgentWebSocketMessage(raw: string): AgentWebSocketClientMes
 		});
 	}
 	if (value.type === 'ping') {
-		if (value.requestId !== undefined && typeof value.requestId !== 'string') {
+		if (value.requestId !== undefined && !isNonBlankString(value.requestId)) {
 			throw new InvalidRequestError({
 				reason: 'Agent WebSocket ping requestId must be a string when provided.',
 			});
 		}
 		return { version: 1, type: 'ping', requestId: value.requestId as string | undefined };
 	}
-	if (
-		typeof value.requestId !== 'string' ||
-		value.requestId === '' ||
-		typeof value.message !== 'string'
-	) {
+	if (!isNonBlankString(value.requestId) || typeof value.message !== 'string') {
 		throw new InvalidRequestError({
 			reason: 'Agent WebSocket prompt messages require string requestId and message values.',
 		});
 	}
-	if (
-		value.session !== undefined &&
-		(typeof value.session !== 'string' || value.session.trim() === '')
-	) {
+	if (value.session !== undefined && !isNonBlankString(value.session)) {
 		throw new InvalidRequestError({
 			reason: 'Agent WebSocket prompt session must be a non-empty string when provided.',
 		});
@@ -52,8 +45,7 @@ export function parseWorkflowWebSocketMessage(raw: string): WorkflowWebSocketCli
 	if (
 		value.version !== 1 ||
 		value.type !== 'invoke' ||
-		typeof value.requestId !== 'string' ||
-		value.requestId === ''
+		!isNonBlankString(value.requestId)
 	) {
 		throw new InvalidRequestError({
 			reason:
@@ -76,6 +68,10 @@ export function createWebSocketErrorMessage(
 	return runId === undefined
 		? { version: 1, type: 'error', requestId, error: toPublicError(error) }
 		: { version: 1, type: 'error', requestId, runId, error: toPublicError(error) };
+}
+
+function isNonBlankString(value: unknown): value is string {
+	return typeof value === 'string' && value.trim() !== '';
 }
 
 function parseObject(raw: string): Record<string, unknown> {

@@ -134,6 +134,24 @@ describe('agent WebSocket protocol', () => {
 		});
 	});
 
+	it('rejects a whitespace-only request id when an agent WebSocket prompt supplies a blank correlation id', () => {
+		let thrown: unknown;
+		try {
+			parseAgentWebSocketMessage(
+				JSON.stringify({ version: 1, type: 'prompt', requestId: '   ', message: 'Hello' }),
+			);
+		} catch (error) {
+			thrown = error;
+		}
+
+		expect(thrown).toMatchObject({
+			type: 'invalid_request',
+			message: 'Request is malformed.',
+			details: 'Agent WebSocket prompt messages require string requestId and message values.',
+			status: 400,
+		});
+	});
+
 	it('rejects an empty session when an agent WebSocket prompt supplies a blank session', () => {
 		let thrown: unknown;
 		try {
@@ -154,6 +172,22 @@ describe('agent WebSocket protocol', () => {
 			type: 'invalid_request',
 			message: 'Request is malformed.',
 			details: 'Agent WebSocket prompt session must be a non-empty string when provided.',
+			status: 400,
+		});
+	});
+
+	it('rejects a whitespace-only request id when an agent WebSocket ping supplies a blank correlation id', () => {
+		let thrown: unknown;
+		try {
+			parseAgentWebSocketMessage(JSON.stringify({ version: 1, type: 'ping', requestId: '   ' }));
+		} catch (error) {
+			thrown = error;
+		}
+
+		expect(thrown).toMatchObject({
+			type: 'invalid_request',
+			message: 'Request is malformed.',
+			details: 'Agent WebSocket ping requestId must be a string when provided.',
 			status: 400,
 		});
 	});
@@ -200,6 +234,25 @@ describe('workflow WebSocket protocol', () => {
 				JSON.stringify({ version: 1, type: 'invoke', requestId: 'request-1' }),
 			),
 		).toEqual({ version: 1, type: 'invoke', requestId: 'request-1', payload: {} });
+	});
+
+	it('rejects a whitespace-only request id when a workflow WebSocket invocation supplies a blank correlation id', () => {
+		let thrown: unknown;
+		try {
+			parseWorkflowWebSocketMessage(
+				JSON.stringify({ version: 1, type: 'invoke', requestId: '   ' }),
+			);
+		} catch (error) {
+			thrown = error;
+		}
+
+		expect(thrown).toMatchObject({
+			type: 'invalid_request',
+			message: 'Request is malformed.',
+			details:
+				'Workflow WebSocket messages require protocol version 1, type "invoke", and a string requestId.',
+			status: 400,
+		});
 	});
 
 	it('rejects malformed invocation messages when required workflow fields are absent', () => {
