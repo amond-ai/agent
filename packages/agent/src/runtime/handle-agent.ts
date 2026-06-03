@@ -26,7 +26,7 @@ import {
 import { streamActiveRunEvents } from './handle-run-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
 import type { RunOwner, RunRegistry } from './run-registry.ts';
-import type { RunStore } from './run-store.ts';
+import { assertPersistedWorkflowEvent, type RunStore } from './run-store.ts';
 import type { RunSubscriberRegistry } from './run-subscribers.ts';
 
 /** Direct agent handler signature used by attached HTTP and WebSocket prompts. */
@@ -553,7 +553,7 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 				startedAt: run.startedAt,
 			}),
 		);
-	const initialEventIndex = nextEventIndex(events);
+	const initialEventIndex = nextEventIndex(opts.runId, events);
 	const startedAt = run?.startedAt ?? new Date().toISOString();
 	const startedAtMs = Date.parse(startedAt);
 	const startEvent = events.find((event) => event.type === 'run_start');
@@ -593,7 +593,7 @@ async function reconcileTerminalRun(
 				isError,
 				error,
 				durationMs,
-				eventIndex: nextEventIndex(events),
+				eventIndex: nextEventIndex(opts.runId, events),
 				timestamp: endedAt,
 			});
 		} catch (eventError) {
@@ -636,8 +636,15 @@ function findTerminalRunEvent(
 		.find((event): event is Extract<FlueEvent, { type: 'run_end' }> => event.type === 'run_end');
 }
 
-function nextEventIndex(events: FlueEvent[]): number {
-	return events.reduce((next, event) => Math.max(next, (event.eventIndex ?? -1) + 1), 0);
+function nextEventIndex(runId: string, events: FlueEvent[]): number {
+	const next = events.reduce(
+		(index, event) => Math.max(index, assertPersistedWorkflowEvent(runId, event) + 1),
+		0,
+	);
+	if (!Number.isSafeInteger(next)) {
+		throw new Error('[flue:run-store] persisted workflow event index exhausted the safe integer range.');
+	}
+	return next;
 }
 
 const SSE_HEARTBEAT_MS = 15_000;

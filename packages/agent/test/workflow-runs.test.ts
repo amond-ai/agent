@@ -483,6 +483,44 @@ describe('workflow run lifecycle', () => {
 		});
 	});
 
+	it('continues recovery event indexes after the maximum persisted workflow index', async () => {
+		const runStore = new InMemoryRunStore();
+		const runId = 'workflow:daily-report:recovery-index';
+		const owner = { kind: 'workflow' as const, workflowName: 'daily-report', instanceId: runId };
+		await runStore.createRun({
+			runId,
+			owner,
+			startedAt: '2026-06-02T00:00:00.000Z',
+			payload: undefined,
+		});
+		await runStore.appendEvent(runId, {
+			type: 'run_start',
+			runId,
+			owner,
+			instanceId: runId,
+			workflowName: 'daily-report',
+			startedAt: '2026-06-02T00:00:00.000Z',
+			payload: {},
+			eventIndex: 4,
+		});
+
+		await failRecoveredRun({
+			owner,
+			id: runId,
+			runId,
+			request: new Request('http://localhost/flue/workflows/daily-report'),
+			createContext,
+			error: new Error('interrupted'),
+			runStore,
+		});
+
+		expect((await runStore.getEvents(runId)).map((event) => [event.type, event.eventIndex])).toEqual([
+			['run_start', 4],
+			['run_resume', 5],
+			['run_end', 6],
+		]);
+	});
+
 	it('delivers run_end before closing an active workflow event stream when execution completes', async () => {
 		let release!: () => void;
 		const completionGate = new Promise<void>((resolve) => {

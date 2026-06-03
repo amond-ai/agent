@@ -1,6 +1,7 @@
 import {
 	type CreateRunInput,
 	type EndRunInput,
+	parsePersistedWorkflowEvent,
 	type RunRecord,
 	type RunStore,
 	serializedEventForPersistence,
@@ -13,7 +14,7 @@ interface InstanceRuns {
 }
 
 interface StoredRunEvent {
-	eventIndex?: number;
+	eventIndex: number;
 	payload: string;
 }
 
@@ -53,11 +54,16 @@ export class InMemoryRunStore implements RunStore {
 	}
 
 	async appendEvent(runId: string, event: FlueEvent): Promise<void> {
+		const payload = serializedEventForPersistence(runId, event);
 		const run = await this.getRun(runId);
 		if (!run) return;
 		const instance = this.getInstance(ownerKey(run.owner));
 		const events = instance.events.get(runId) ?? [];
-		events.push({ eventIndex: event.eventIndex, payload: serializedEventForPersistence(event) });
+		const eventIndex = event.eventIndex as number;
+		if (events.some((stored) => stored.eventIndex === eventIndex)) {
+			throw new Error('[flue:run-store] duplicate persisted workflow event index.');
+		}
+		events.push({ eventIndex, payload });
 		instance.events.set(runId, events);
 	}
 
@@ -66,12 +72,9 @@ export class InMemoryRunStore implements RunStore {
 		if (!run) return [];
 		const events = this.getInstance(ownerKey(run.owner)).events.get(runId) ?? [];
 		return events
-			.filter(
-				(event) =>
-					fromIndex === undefined ||
-					(typeof event.eventIndex === 'number' && event.eventIndex >= fromIndex),
-			)
-			.map((event) => JSON.parse(event.payload) as FlueEvent);
+			.filter((event) => fromIndex === undefined || event.eventIndex >= fromIndex)
+			.toSorted((left, right) => left.eventIndex - right.eventIndex)
+			.map((event) => parsePersistedWorkflowEvent(runId, event.payload, event.eventIndex));
 	}
 
 	async getRun(runId: string): Promise<RunRecord | null> {

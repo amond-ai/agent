@@ -233,6 +233,103 @@ describe('workflow run store', () => {
 		]);
 	});
 
+	it('returns workflow events in index order when appends arrive out of order', async () => {
+		const store: RunStore = new InMemoryRunStore();
+		await store.createRun({
+			runId: 'workflow:daily-report:01',
+			owner: {
+				kind: 'workflow',
+				workflowName: 'daily-report',
+				instanceId: 'workflow:daily-report:01',
+			},
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
+		});
+		await store.appendEvent('workflow:daily-report:01', {
+			type: 'log',
+			level: 'info',
+			message: 'second',
+			runId: 'workflow:daily-report:01',
+			eventIndex: 1,
+		});
+		await store.appendEvent('workflow:daily-report:01', {
+			type: 'log',
+			level: 'info',
+			message: 'first',
+			runId: 'workflow:daily-report:01',
+			eventIndex: 0,
+		});
+
+		expect((await store.getEvents('workflow:daily-report:01')).map((event) => event.eventIndex)).toEqual([
+			0,
+			1,
+		]);
+	});
+
+	it('rejects duplicate workflow event indexes when events are appended', async () => {
+		const store: RunStore = new InMemoryRunStore();
+		await store.createRun({
+			runId: 'workflow:daily-report:01',
+			owner: {
+				kind: 'workflow',
+				workflowName: 'daily-report',
+				instanceId: 'workflow:daily-report:01',
+			},
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
+		});
+		await store.appendEvent('workflow:daily-report:01', {
+			type: 'log',
+			level: 'info',
+			message: 'first',
+			runId: 'workflow:daily-report:01',
+			eventIndex: 0,
+		});
+
+		await expect(
+			store.appendEvent('workflow:daily-report:01', {
+				type: 'log',
+				level: 'info',
+				message: 'replacement',
+				runId: 'workflow:daily-report:01',
+				eventIndex: 0,
+			}),
+		).rejects.toThrow('duplicate persisted workflow event index');
+		expect(await store.getEvents('workflow:daily-report:01')).toMatchObject([{ message: 'first' }]);
+	});
+
+	it('rejects malformed workflow events when persistence identity is missing or mismatched', async () => {
+		const store: RunStore = new InMemoryRunStore();
+		await store.createRun({
+			runId: 'workflow:daily-report:01',
+			owner: {
+				kind: 'workflow',
+				workflowName: 'daily-report',
+				instanceId: 'workflow:daily-report:01',
+			},
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
+		});
+
+		await expect(
+			store.appendEvent('workflow:daily-report:01', {
+				type: 'log',
+				level: 'info',
+				message: 'missing index',
+				runId: 'workflow:daily-report:01',
+			}),
+		).rejects.toThrow('index must be a non-negative integer');
+		await expect(
+			store.appendEvent('workflow:daily-report:01', {
+				type: 'log',
+				level: 'info',
+				message: 'wrong run',
+				runId: 'workflow:daily-report:02',
+				eventIndex: 0,
+			}),
+		).rejects.toThrow('runId does not match its run');
+	});
+
 	it('returns events from a requested index when run events are paged', async () => {
 		const store: RunStore = new InMemoryRunStore();
 		await store.createRun({
@@ -972,6 +1069,82 @@ describe('workflow run routes', () => {
 				eventIndex: 2,
 			},
 		]);
+	});
+
+	it('closes an active stream with an error when a malformed live workflow event is published', async () => {
+		const store: RunStore = new InMemoryRunStore();
+		const registry: RunRegistry = new InMemoryRunRegistry();
+		const subscribers = createRunSubscriberRegistry();
+		await store.createRun({
+			runId: 'workflow:daily-report:01',
+			owner: {
+				kind: 'workflow',
+				workflowName: 'daily-report',
+				instanceId: 'workflow:daily-report:01',
+			},
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
+		});
+		await registry.recordRunStart({
+			runId: 'workflow:daily-report:01',
+			owner: {
+				kind: 'workflow',
+				workflowName: 'daily-report',
+				instanceId: 'workflow:daily-report:01',
+			},
+			startedAt: '2026-06-01T10:00:00.000Z',
+		});
+		const app = createRunApp(store, registry, subscribers);
+		const response = await app.fetch(
+			new Request('http://localhost/runs/workflow%3Adaily-report%3A01/stream'),
+		);
+		await Promise.resolve();
+
+		subscribers.publish('workflow:daily-report:01', {
+			type: 'log',
+			level: 'info',
+			message: 'missing index',
+			runId: 'workflow:daily-report:01',
+		});
+		const body = await response.text();
+
+		expect(body).toContain('event: error\n');
+		expect(body).not.toContain('id: 0\n');
+	});
+
+	it('omits a fabricated cursor when replay fails before an active stream sends an event', async () => {
+		const store: RunStore = new InMemoryRunStore();
+		const registry: RunRegistry = new InMemoryRunRegistry();
+		const subscribers = createRunSubscriberRegistry();
+		await store.createRun({
+			runId: 'workflow:daily-report:01',
+			owner: {
+				kind: 'workflow',
+				workflowName: 'daily-report',
+				instanceId: 'workflow:daily-report:01',
+			},
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
+		});
+		await registry.recordRunStart({
+			runId: 'workflow:daily-report:01',
+			owner: {
+				kind: 'workflow',
+				workflowName: 'daily-report',
+				instanceId: 'workflow:daily-report:01',
+			},
+			startedAt: '2026-06-01T10:00:00.000Z',
+		});
+		vi.spyOn(store, 'getEvents').mockRejectedValueOnce(new Error('replay failed'));
+		const app = createRunApp(store, registry, subscribers);
+
+		const response = await app.fetch(
+			new Request('http://localhost/runs/workflow%3Adaily-report%3A01/stream'),
+		);
+		const body = await response.text();
+
+		expect(body).toContain('event: error\n');
+		expect(body).not.toContain('id: 0\n');
 	});
 
 	it('rejects active run streaming when the runtime has no subscriber registry', async () => {

@@ -8,7 +8,7 @@ import {
 } from '../errors.ts';
 import type { FlueEvent } from '../types.ts';
 import type { RunOwner } from './run-registry.ts';
-import type { RunRecord, RunStore } from './run-store.ts';
+import { assertPersistedWorkflowEvent, type RunRecord, type RunStore } from './run-store.ts';
 import type { RunSubscriberRegistry } from './run-subscribers.ts';
 
 export interface HandleRunRouteOptions {
@@ -87,7 +87,7 @@ async function streamRunEvents(
 
 	if (isTerminal(run)) {
 		const events = await store.getEvents(runId, fromIndex);
-		return sseResponse(encodeSseEvents(events));
+		return sseResponse(encodeSseEvents(runId, events));
 	}
 
 	// Active streams need the in-process registry; replay alone would close early.
@@ -170,24 +170,21 @@ function streamReplayThenTail(opts: ReplayThenTailOptions): Response {
 
 			const write = (event: FlueEvent) => {
 				if (closed) return;
-				if (
-					typeof event.eventIndex === 'number' &&
-					lastSentIndex !== undefined &&
-					event.eventIndex <= lastSentIndex
-				) {
-					if (event.type === 'run_end') close();
-					return;
-				}
 				try {
-					controller.enqueue(encoder.encode(encodeSseEvent(event)));
-				} catch {
+					const eventIndex = assertPersistedWorkflowEvent(runId, event);
+					if (lastSentIndex !== undefined && eventIndex <= lastSentIndex) {
+						if (event.type === 'run_end') close();
+						return;
+					}
+					controller.enqueue(encoder.encode(encodeSseEvent(runId, event)));
+					lastSentIndex = eventIndex;
+					if (event.type === 'run_end') close();
+				} catch (error) {
+					try {
+						controller.enqueue(encoder.encode(encodeSseError(error, lastSentIndex)));
+					} catch {}
 					close();
-					return;
 				}
-				if (typeof event.eventIndex === 'number') {
-					lastSentIndex = event.eventIndex;
-				}
-				if (event.type === 'run_end') close();
 			};
 
 			onLiveEvent = write;
@@ -297,19 +294,24 @@ function isTerminal(run: RunRecord): boolean {
 	return run.status === 'completed' || run.status === 'errored';
 }
 
-function encodeSseEvents(events: FlueEvent[]): string {
-	return events.map(encodeSseEvent).join('');
+function encodeSseEvents(runId: string, events: FlueEvent[]): string {
+	return events.map((event) => encodeSseEvent(runId, event)).join('');
 }
 
-function encodeSseEvent(event: FlueEvent): string {
-	const id = typeof event.eventIndex === 'number' ? event.eventIndex : 0;
+function encodeSseEvent(runId: string, event: FlueEvent): string {
+	const id = assertPersistedWorkflowEvent(runId, event);
 	return [`event: ${event.type}`, `id: ${id}`, `data: ${JSON.stringify(event)}`, '', ''].join('\n');
 }
 
 function encodeSseError(error: unknown, lastSentIndex: number | undefined): string {
 	const data = { error: toPublicError(error) };
-	const id = lastSentIndex ?? 0;
-	return [`event: error`, `id: ${id}`, `data: ${JSON.stringify(data)}`, '', ''].join('\n');
+	return [
+		`event: error`,
+		...(lastSentIndex === undefined ? [] : [`id: ${lastSentIndex}`]),
+		`data: ${JSON.stringify(data)}`,
+		'',
+		'',
+	].join('\n');
 }
 
 function sseResponse(body: string | ReadableStream<Uint8Array>): Response {

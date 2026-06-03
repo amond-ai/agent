@@ -1011,9 +1011,10 @@ export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
  * sessions add their names where applicable; operations, turns, tasks, and tool
  * calls use generated ids.
  *
- * Workflow history persists this union where run-store persistence succeeds.
- * Attached-agent streams and `observe()` from `@flue/runtime` deliver live
- * activity; they are not durable workflow history.
+ * Persisted workflow events always carry `runId` and `eventIndex`; together they
+ * form the immutable persisted identity and SSE resume cursor for one workflow
+ * event. Attached-agent streams and `observe()` from `@flue/runtime` deliver
+ * live activity; their indexes are per-context ordering, not durable identity.
  */
 export type FlueEvent = (
 	| {

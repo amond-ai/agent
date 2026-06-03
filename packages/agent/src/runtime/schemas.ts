@@ -340,8 +340,16 @@ type _EventSchemaAssignableToRuntime =
 const _eventSchemaTypeCheck: _EventSchemaAssignableToRuntime = true;
 void _eventSchemaTypeCheck;
 
+const PersistedWorkflowEventSchema = v.intersect([
+	FlueEventSchema,
+	v.object({
+		runId: v.string(),
+		eventIndex: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+	}),
+]);
+
 export const RunEventListResponseSchema = v.object({
-	events: v.array(FlueEventSchema),
+	events: v.array(PersistedWorkflowEventSchema),
 });
 
 export const AgentInvocationResponseSchema = v.object({
