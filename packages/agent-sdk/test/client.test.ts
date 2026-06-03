@@ -375,8 +375,8 @@ describe('createFlueClient', () => {
 			},
 		});
 
+		// Exhaust the iterator so the stream reconnects; this test only inspects the resumed request header.
 		for await (const _event of client.runs.stream('run_1', { maxRetries: 1, initialRetryMs: 1 })) {
-			continue;
 		}
 
 		expect(requests).toHaveLength(2);
