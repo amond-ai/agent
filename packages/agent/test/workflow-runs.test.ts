@@ -483,6 +483,35 @@ describe('workflow run lifecycle', () => {
 		});
 	});
 
+	it('emits recovery handling before terminalizing an admitted workflow without a persisted start event', async () => {
+		const runStore = new InMemoryRunStore();
+		const runId = 'workflow:daily-report:recovery-before-start';
+		const owner = { kind: 'workflow' as const, workflowName: 'daily-report', instanceId: runId };
+		await runStore.createRun({
+			runId,
+			owner,
+			startedAt: '2026-06-02T00:00:00.000Z',
+			payload: {},
+		});
+
+		await failRecoveredRun({
+			owner,
+			id: runId,
+			runId,
+			request: new Request('http://localhost/flue/workflows/daily-report'),
+			createContext,
+			error: new Error('interrupted'),
+			runStore,
+		});
+
+		expect(
+			(await runStore.getEvents(runId)).map((event) => [event.type, event.eventIndex]),
+		).toEqual([
+			['run_resume', 0],
+			['run_end', 1],
+		]);
+	});
+
 	it('continues recovery event indexes after the maximum persisted workflow index', async () => {
 		const runStore = new InMemoryRunStore();
 		const runId = 'workflow:daily-report:recovery-index';

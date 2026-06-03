@@ -577,11 +577,9 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 		startedAt,
 		startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
 	};
-	if (startEvent) {
-		const flushFanout = subscribeRunFanout(lifecycle);
-		emitRunResume(lifecycle);
-		await flushFanout();
-	}
+	const flushFanout = subscribeRunFanout(lifecycle);
+	emitRunResume(lifecycle);
+	await flushFanout();
 	await emitRunEnd(lifecycle, { isError: true, error: opts.error });
 }
 
