@@ -221,10 +221,14 @@ export function mergeFlueAdditions(
 				if (typeof b !== 'object' || b === null) return false;
 				return (b as Record<string, unknown>).name === binding.name;
 			});
-			if (existing?.class_name !== binding.class_name) {
+			if (
+				existing?.class_name !== binding.class_name ||
+				existing.script_name !== undefined ||
+				existing.environment !== undefined
+			) {
 				throw new Error(
 					`[flue] wrangler.jsonc durable object binding "${binding.name}" is reserved by Flue. ` +
-						`Expected class_name "${binding.class_name}", received "${String(existing?.class_name)}".`,
+						`Expected a local class_name "${binding.class_name}" binding without script_name or environment.`,
 				);
 			}
 		}
