@@ -580,8 +580,8 @@ async function reconcileTerminalRun(
 	events: FlueEvent[],
 ): Promise<void> {
 	const isError = terminalEvent?.isError ?? run?.isError ?? false;
-	const result = terminalEvent?.result ?? run?.result;
-	const error = terminalEvent?.error ?? run?.error;
+	const result = terminalEvent?.result !== undefined ? terminalEvent.result : run?.result;
+	const error = terminalEvent?.error !== undefined ? terminalEvent.error : run?.error;
 	const endedAt = terminalEvent?.timestamp ?? run?.endedAt ?? new Date().toISOString();
 	const durationMs = terminalEvent?.durationMs ?? run?.durationMs ?? 0;
 	if (!terminalEvent && run && run.status !== 'active') {

@@ -40,7 +40,7 @@ class DurableRunStore implements RunStore {
 			input.owner.workflowName,
 			'active',
 			input.startedAt,
-			JSON.stringify(input.payload ?? null),
+			serializeSqlJson(input.payload),
 		);
 	}
 
@@ -53,8 +53,8 @@ class DurableRunStore implements RunStore {
 			input.endedAt,
 			input.isError ? 1 : 0,
 			input.durationMs,
-			JSON.stringify(input.result ?? null),
-			JSON.stringify(input.error ?? null),
+			serializeSqlJson(input.result),
+			serializeSqlJson(input.error),
 			input.runId,
 		);
 	}
@@ -64,12 +64,18 @@ class DurableRunStore implements RunStore {
 		this.sql.exec(
 			`INSERT OR REPLACE INTO flue_run_events
 			 (run_id, event_index, type, payload, timestamp)
-			 VALUES (?, ?, ?, ?, ?)`,
+			 SELECT ?, ?, ?, ?, ?
+			 WHERE EXISTS (
+			  SELECT 1
+			  FROM flue_runs
+			  WHERE run_id = ? AND owner_kind = 'workflow'
+			 )`,
 			runId,
 			event.eventIndex ?? 0,
 			event.type,
 			payload,
 			event.timestamp ?? new Date().toISOString(),
+			runId,
 		);
 	}
 
@@ -125,6 +131,13 @@ function ensureRunTables(sql: SqlStorage): void {
 		)`,
 	);
 	sql.exec(
+		`CREATE TRIGGER IF NOT EXISTS flue_runs_reset_events
+		 BEFORE INSERT ON flue_runs
+		 BEGIN
+		  DELETE FROM flue_run_events WHERE run_id = NEW.run_id;
+		 END`,
+	);
+	sql.exec(
 		'CREATE INDEX IF NOT EXISTS flue_runs_instance_started_idx ON flue_runs (owner_kind, instance_id, started_at DESC)',
 	);
 	sql.exec(
@@ -133,6 +146,10 @@ function ensureRunTables(sql: SqlStorage): void {
 	sql.exec(
 		'CREATE INDEX IF NOT EXISTS flue_run_events_run_idx ON flue_run_events (run_id, event_index ASC)',
 	);
+}
+
+function serializeSqlJson(value: unknown): string | null {
+	return JSON.stringify(value) ?? null;
 }
 
 function rowToRunRecord(row: SqlRow): RunRecord {

@@ -6,6 +6,7 @@ import {
 	configureFlueRuntime,
 	createFlueContext,
 	createRunSubscriberRegistry,
+	failRecoveredRun,
 	InMemoryRunRegistry,
 	InMemoryRunStore,
 	InMemorySessionStore,
@@ -442,6 +443,44 @@ describe('workflow run lifecycle', () => {
 		} finally {
 			consoleError.mockRestore();
 		}
+	});
+
+	it('preserves an explicit null terminal result when recovery finalizes an active workflow run', async () => {
+		const runStore = new InMemoryRunStore();
+		const runRegistry = new InMemoryRunRegistry();
+		const runId = 'workflow:daily-report:recovered';
+		const owner = { kind: 'workflow' as const, workflowName: 'daily-report', instanceId: runId };
+		await runStore.createRun({
+			runId,
+			owner,
+			startedAt: '2026-06-02T00:00:00.000Z',
+			payload: {},
+		});
+		await runStore.appendEvent(runId, {
+			type: 'run_end',
+			runId,
+			result: null,
+			isError: false,
+			durationMs: 1000,
+			eventIndex: 0,
+			timestamp: '2026-06-02T00:00:01.000Z',
+		});
+
+		await failRecoveredRun({
+			owner,
+			id: runId,
+			runId,
+			request: new Request('http://localhost/flue/workflows/daily-report'),
+			createContext,
+			error: new Error('interrupted'),
+			runStore,
+			runRegistry,
+		});
+
+		expect(await runStore.getRun(runId)).toMatchObject({
+			status: 'completed',
+			result: null,
+		});
 	});
 
 	it('delivers run_end before closing an active workflow event stream when execution completes', async () => {
