@@ -354,6 +354,35 @@ describe('createFlueClient', () => {
 		}
 	});
 
+	it('ignores malformed SSE ids when reconnecting workflow-run streams', async () => {
+		const requests: Request[] = [];
+		const client = createFlueClient({
+			baseUrl: 'https://flue.test',
+			fetch: async (input, init) => {
+				const request = new Request(input, init);
+				requests.push(request);
+				if (requests.length === 1) {
+					return new Response(sse('event: run_start\nid: 1junk\ndata: {"type":"run_start"}\n\n'), {
+						headers: { 'content-type': 'text/event-stream' },
+					});
+				}
+				return new Response(
+					sse('event: run_end\nid: 2\ndata: {"type":"run_end","isError":false,"durationMs":1}\n\n'),
+					{
+						headers: { 'content-type': 'text/event-stream' },
+					},
+				);
+			},
+		});
+
+		for await (const _event of client.runs.stream('run_1', { maxRetries: 1, initialRetryMs: 1 })) {
+			continue;
+		}
+
+		expect(requests).toHaveLength(2);
+		expect(requests[1]?.headers.get('last-event-id')).toBeNull();
+	});
+
 	it('cancels the workflow-run SSE response when iteration stops before run_end', async () => {
 		let cancellations = 0;
 		const client = createFlueClient({

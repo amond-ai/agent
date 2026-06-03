@@ -46,9 +46,9 @@ export async function* streamRunEvents(
 			if (!response.body) throw new Error('Stream response has no body.');
 
 			for await (const frame of readSse(response.body)) {
-				if (frame.id !== undefined) {
-					const parsed = Number.parseInt(frame.id, 10);
-					if (Number.isFinite(parsed)) lastEventId = parsed;
+				if (frame.id !== undefined && /^\d+$/.test(frame.id)) {
+					const parsed = Number(frame.id);
+					if (Number.isSafeInteger(parsed)) lastEventId = parsed;
 				}
 				if (frame.event === 'error') throw new Error(parseSseErrorMessage(frame.data));
 				const event = JSON.parse(frame.data) as FlueEvent;
