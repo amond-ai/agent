@@ -635,8 +635,7 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
  *
  * Path/id validation is light: we reject empty or whitespace-only segments
  * but otherwise let the URL parser's segment splitting be the source of
- * truth. The Cloudflare partyserver layer additionally enforces shape via
- * `routeAgentRequest`; the Node Hono layer via route patterns.
+ * truth. The Hono route pattern enforces the public path shape.
  */
 export interface ValidateAgentRequestOptions {
 	method: string;

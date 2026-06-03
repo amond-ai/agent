@@ -20,9 +20,9 @@ export interface CloudflareContext {
 }
 
 export interface FlueDurableObjectIdentity {
-	/** Wrangler binding name, e.g. "FLUE_WORKFLOW_DRAFT". */
+	/** Wrangler binding name, e.g. "FLUE_DRAFT_WORKFLOW". */
 	bindingName: string;
-	/** Durable Object class name, e.g. "DraftWorkflow". */
+	/** Durable Object class name, e.g. "FlueDraftWorkflow". */
 	className: string;
 	/** Instance name passed to idFromName/getAgentByName. */
 	name: string;

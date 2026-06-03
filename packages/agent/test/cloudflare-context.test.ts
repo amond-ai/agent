@@ -59,8 +59,8 @@ describe('Cloudflare context', () => {
 
 	it('returns Durable Object identity when the current context supplies identity', () => {
 		const durableObjectIdentity = {
-			bindingName: 'FLUE_AGENT_ASSISTANT',
-			className: 'AssistantAgent',
+			bindingName: 'FLUE_ASSISTANT_AGENT',
+			className: 'FlueAssistantAgent',
 			name: 'customer-123',
 			id: 'durable-object-id',
 		};

@@ -94,15 +94,12 @@ export interface FlueRuntime {
 
 	// ─── Cloudflare-only ────────────────────────────────────────────────────
 
-	/**
-	 * Forward an incoming request to the per-agent Durable Object via
-	 * Cloudflare's Agents SDK. Required when {@link target} is `'cloudflare'`.
-	 *
-	 * Returning `null` means "no DO matched" — the caller renders a
-	 * `RouteNotFoundError` envelope so the response shape stays
-	 * consistent with every other miss.
-	 */
-	routeAgentRequest?: (request: Request, env: unknown) => Promise<Response | null>;
+	/** Forward an incoming request to the per-agent Durable Object. Required when {@link target} is `'cloudflare'`. */
+	routeAgentRequest?: (
+		request: Request,
+		env: unknown,
+		target: { agentName: string; instanceId: string },
+	) => Promise<Response | null>;
 	/**
 	 * Forward a new workflow run to its per-workflow Durable Object instance.
 	 * The `instanceId` is the freshly generated run id — workflows have one
@@ -572,6 +569,7 @@ const agentSocketRouteHandler: MiddlewareHandler = async (c, next) => {
 				`/agents/${encodeURIComponent(name)}/${encodeURIComponent(id)}`,
 			),
 			c.env,
+			{ agentName: name, instanceId: id },
 		);
 		if (response) return response;
 		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
@@ -622,10 +620,14 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 		// One workflow run = one workflow DO instance. The instanceId IS the
 		// runId; the DO it lands on then re-uses that value to seed its run
 		// record via handleWorkflowRequest({ runId: instanceId, ... }).
-		const response = await rt.routeWorkflowRequest(request, c.env, {
-			workflowName: name,
-			instanceId: generateWorkflowRunId(name),
-		});
+		const response = await rt.routeWorkflowRequest(
+			normalizeAttachedRequest(request, `/workflows/${encodeURIComponent(name)}`),
+			c.env,
+			{
+				workflowName: name,
+				instanceId: generateWorkflowRunId(name),
+			},
+		);
 		if (response) return response;
 		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
 	});
@@ -671,7 +673,7 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 		if (!rt.routeAgentRequest) {
 			throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
 		}
-		const response = await rt.routeAgentRequest(request, c.env);
+		const response = await rt.routeAgentRequest(request, c.env, { agentName: name, instanceId: id });
 		if (response) return response;
 
 		throw new RouteNotFoundError({

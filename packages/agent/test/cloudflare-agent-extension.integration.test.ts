@@ -29,6 +29,23 @@ describe('Cloudflare agent extension', () => {
 		}
 	}, 90000);
 
+	it('routes mounted agent requests without deriving paths from Durable Object binding names', async () => {
+		const root = await createGeneratedFixture(defaultAgentSource, '/api');
+		let server: Awaited<ReturnType<typeof startServer>> | undefined;
+		try {
+			server = await startServer(root);
+			const response = await fetch(new URL('/api/agents/assistant/mounted', server.url), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ prompt: 'Hello' }),
+			});
+			expect(response.status).not.toBe(404);
+		} finally {
+			await server?.close();
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	}, 90000);
+
 	it('wraps the final generated class without bypassing Flue-owned fetch handling', async () => {
 		const root = await createGeneratedFixture();
 		let server: Awaited<ReturnType<typeof startServer>> | undefined;
@@ -50,7 +67,7 @@ describe('Cloudflare agent extension', () => {
 
 });
 
-async function createGeneratedFixture(agentSource = defaultAgentSource): Promise<string> {
+async function createGeneratedFixture(agentSource = defaultAgentSource, mount = ''): Promise<string> {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'flue-cloudflare-agent-extension-'));
 	const output = path.join(root, 'generated');
 	fs.mkdirSync(path.join(root, 'node_modules', '@earendil-works'), { recursive: true });
@@ -73,13 +90,13 @@ async function createGeneratedFixture(agentSource = defaultAgentSource): Promise
 			name: 'cloudflare-agent-extension',
 			compatibility_date: '2026-04-01',
 			compatibility_flags: ['nodejs_compat'],
-			migrations: [{ tag: 'v1', new_sqlite_classes: ['Assistant', 'FlueRegistry'] }],
+			migrations: [{ tag: 'v1', new_sqlite_classes: ['FlueAssistantAgent', 'FlueRegistry'] }],
 		}),
 	);
 	fs.writeFileSync(path.join(root, 'src', 'agents', 'assistant.ts'), agentSource);
 	fs.writeFileSync(
 		path.join(root, 'src', 'app.ts'),
-		`import { getAgentByName, routeAgentRequest } from 'agents';\nlet started = false;\nexport default {\n  async fetch(request, env) {\n    const agentResponse = await routeAgentRequest(request, env);\n    if (agentResponse) return agentResponse;\n    const agent = await getAgentByName(env.Assistant, 'scheduled');\n    if (!started) { await agent.startHeartbeat(); started = true; }\n    return Response.json({ count: await agent.getHeartbeatCount() });\n  },\n};\n`,
+		`import { Hono } from 'hono';\nimport { getAgentByName } from 'agents';\nimport { flue } from '@flue/runtime/routing';\nlet started = false;\nconst app = new Hono();\napp.route('${mount}', flue());\napp.get('${mount}/heartbeat', async (c) => {\n  const agent = await getAgentByName(c.env.FLUE_ASSISTANT_AGENT, 'scheduled');\n  if (!started) { await agent.startHeartbeat(); started = true; }\n  return c.json({ count: await agent.getHeartbeatCount() });\n});\nexport default app;\n`,
 	);
 	try {
 		await build({
@@ -134,6 +151,7 @@ async function waitFor(
 const defaultAgentSource = `import { createAgent } from '@flue/runtime';
 import { extend } from '@flue/runtime/cloudflare';
 export default createAgent(() => ({ model: false }));
+export const route = async (_c, next) => next();
 export const cloudflare = extend({
   base: (Base) => class extends Base {
     async startHeartbeat() { return this.scheduleEvery(1, 'heartbeat'); }
@@ -142,7 +160,7 @@ export const cloudflare = extend({
   },
   wrap: (Final) => new Proxy(Final, {
     construct(target, args) {
-      if (target.name !== 'Assistant') throw new Error('wrapper did not receive stable agent class identity');
+      if (target.name !== 'FlueAssistantAgent') throw new Error('wrapper did not receive stable agent class identity');
       for (const method of ['onRequest', 'fetch', 'webSocketMessage', 'webSocketClose', 'webSocketError', 'onFiberRecovered']) {
         if (!Object.prototype.hasOwnProperty.call(target.prototype, method)) {
           throw new Error('wrapper did not receive generated Flue class');

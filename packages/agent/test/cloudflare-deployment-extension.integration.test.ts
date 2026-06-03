@@ -67,8 +67,8 @@ export default {
 
 	it('rejects authored exports that conflict with generated Worker exports', async () => {
 		await expectRuntimeFailure(
-			`export class Assistant {}\n`,
-			'cloudflare.ts export "Assistant" conflicts with a Flue-generated Worker export.',
+			`export class FlueAssistantAgent {}\n`,
+			'cloudflare.ts export "FlueAssistantAgent" conflicts with a Flue-generated Worker export.',
 		);
 	}, 90000);
 
@@ -76,7 +76,7 @@ export default {
 		const root = await createGeneratedFixture(`export const marker = true;\n`, {
 			durable_objects: { bindings: [{ name: 'Sandbox', class_name: 'Sandbox' }] },
 			migrations: [
-				{ tag: 'v1', new_sqlite_classes: ['Assistant', 'FlueRegistry'] },
+				{ tag: 'v1', new_sqlite_classes: ['FlueAssistantAgent', 'FlueRegistry'] },
 				{ tag: 'v2', new_sqlite_classes: ['Sandbox'] },
 			],
 		});
@@ -91,10 +91,28 @@ export default {
 	it('rejects authored bindings that shadow generated Durable Object bindings', async () => {
 		await expect(
 			createGeneratedFixture(`export class Counter {}\n`, {
-				durable_objects: { bindings: [{ name: 'Assistant', class_name: 'Counter' }] },
+				durable_objects: { bindings: [{ name: 'FLUE_ASSISTANT_AGENT', class_name: 'Counter' }] },
 			}),
 		).rejects.toThrow(
-			'wrangler.jsonc durable object binding "Assistant" is reserved by Flue. Expected class_name "Assistant", received "Counter".',
+			'wrangler.jsonc durable object binding "FLUE_ASSISTANT_AGENT" is reserved by Flue. Expected a local class_name "FlueAssistantAgent" binding without script_name or environment.',
+		);
+	}, 90000);
+
+	it('rejects authored bindings that redirect generated Durable Object bindings externally', async () => {
+		await expect(
+			createGeneratedFixture(`export class Counter {}\n`, {
+				durable_objects: {
+					bindings: [
+						{
+							name: 'FLUE_ASSISTANT_AGENT',
+							class_name: 'FlueAssistantAgent',
+							script_name: 'other-worker',
+						},
+					],
+				},
+			}),
+		).rejects.toThrow(
+			'wrangler.jsonc durable object binding "FLUE_ASSISTANT_AGENT" is reserved by Flue. Expected a local class_name "FlueAssistantAgent" binding without script_name or environment.',
 		);
 	}, 90000);
 
@@ -112,7 +130,7 @@ export default {
 				JSON.stringify({
 					compatibility_date: '2026-04-01',
 					compatibility_flags: ['nodejs_compat'],
-					durable_objects: { bindings: [{ name: 'Assistant', class_name: 'Counter' }] },
+					durable_objects: { bindings: [{ name: 'FLUE_ASSISTANT_AGENT', class_name: 'Counter' }] },
 				}),
 			);
 			await expect(
@@ -123,7 +141,7 @@ export default {
 					target: 'cloudflare',
 					mode: 'development',
 				}),
-			).rejects.toThrow('durable object binding "Assistant" is reserved by Flue');
+			).rejects.toThrow('durable object binding "FLUE_ASSISTANT_AGENT" is reserved by Flue');
 			expect(fs.readFileSync(entryPath, 'utf8')).toBe(entry);
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
@@ -168,7 +186,7 @@ async function createGeneratedFixture(
 			compatibility_flags: ['nodejs_compat'],
 			durable_objects: { bindings: [{ name: 'Counter', class_name: 'Counter' }] },
 			migrations: [
-				{ tag: 'v1', new_sqlite_classes: ['Assistant', 'FlueRegistry'] },
+				{ tag: 'v1', new_sqlite_classes: ['FlueAssistantAgent', 'FlueRegistry'] },
 				{ tag: 'v2', new_sqlite_classes: ['Counter'] },
 			],
 			...wranglerOverrides,

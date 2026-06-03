@@ -162,15 +162,15 @@ function createPackedExample(name: string, keepCustomBash: boolean): string {
 	if (keepCustomBash) {
 		fs.rmSync(path.join(root, 'src', 'workflows', 'with-imported-skill.ts'));
 		wranglerConfig.migrations.push({
-			tag: 'fixture-delete-WithImportedSkillWorkflow',
-			deleted_classes: ['WithImportedSkillWorkflow'],
+			tag: 'fixture-delete-FlueWithImportedSkillWorkflow',
+			deleted_classes: ['FlueWithImportedSkillWorkflow'],
 		});
 	} else {
 		delete packageJson.dependencies['just-bash'];
 		fs.rmSync(path.join(root, 'src', 'workflows', 'with-custom-bash.ts'));
 		wranglerConfig.migrations.push({
-			tag: 'fixture-delete-WithCustomBashWorkflow',
-			deleted_classes: ['WithCustomBashWorkflow'],
+			tag: 'fixture-delete-FlueWithCustomBashWorkflow',
+			deleted_classes: ['FlueWithCustomBashWorkflow'],
 		});
 	}
 	fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, '\t')}\n`);

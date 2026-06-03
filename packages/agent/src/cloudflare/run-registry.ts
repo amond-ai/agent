@@ -7,10 +7,11 @@ import type {
 	RunPointer,
 	RunRegistry,
 } from '../runtime/run-registry.ts';
+import { fetchCloudflareDurableObject } from './durable-object.ts';
 
 interface FlueRegistryNamespace {
-	idFromName(name: string): { toString(): string } & object;
-	get(id: { toString(): string } & object): { fetch(input: Request | string): Promise<Response> };
+	idFromName(name: string): object;
+	get(id: object): { fetch(input: Request): Promise<Response> };
 }
 
 export function createCloudflareRunRegistry(
@@ -37,7 +38,7 @@ class CloudflareRunRegistry implements RunRegistry {
 	}
 
 	async lookupRun(runId: string): Promise<RunPointer | null> {
-		const response = await this.stub().fetch(
+		const response = await this.fetch(
 			new Request(`${SYNTHETIC_BASE}/pointers/${encodeURIComponent(runId)}`, { method: 'GET' }),
 		);
 		if (response.status === 404) return null;
@@ -56,7 +57,7 @@ class CloudflareRunRegistry implements RunRegistry {
 		if (opts.limit !== undefined) params.set('limit', String(opts.limit));
 		if (opts.cursor) params.set('cursor', opts.cursor);
 		const qs = params.toString();
-		const response = await this.stub().fetch(
+		const response = await this.fetch(
 			new Request(`${SYNTHETIC_BASE}/pointers${qs ? `?${qs}` : ''}`, { method: 'GET' }),
 		);
 		if (!response.ok) {
@@ -67,8 +68,10 @@ class CloudflareRunRegistry implements RunRegistry {
 		return (await response.json()) as ListRunsResponse;
 	}
 
-	private stub() {
-		return this.namespace.get(this.namespace.idFromName(FLUE_REGISTRY_INSTANCE_NAME));
+	private fetch(request: Request): Promise<Response> {
+		return fetchCloudflareDurableObject(this.namespace, FLUE_REGISTRY_INSTANCE_NAME, request, {
+			retry: true,
+		});
 	}
 
 	private async callExpectingNoContent(
@@ -76,7 +79,7 @@ class CloudflareRunRegistry implements RunRegistry {
 		method: 'POST' | 'GET',
 		body: unknown,
 	): Promise<void> {
-		const response = await this.stub().fetch(
+		const response = await this.fetch(
 			new Request(`${SYNTHETIC_BASE}${path}`, {
 				method,
 				headers: { 'content-type': 'application/json' },

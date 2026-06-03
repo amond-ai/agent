@@ -14,10 +14,10 @@ const AUTHORED_MIGRATIONS = [
 	{
 		tag: 'v1',
 		new_sqlite_classes: [
-			'Assistant',
-			'SmokeWorkflow',
-			'UseSkillWorkflow',
-			'UseNamedSkillWorkflow',
+			'FlueAssistantAgent',
+			'FlueSmokeWorkflow',
+			'FlueUseSkillWorkflow',
+			'FlueUseNamedSkillWorkflow',
 			'FlueRegistry',
 		],
 	},
@@ -33,7 +33,7 @@ describe('Cloudflare Vite production Worker', () => {
 		};
 		expect(inputConfig.main).toBe('.flue-vite/_entry.ts');
 		expect(inputConfig.durable_objects?.bindings?.map((binding) => binding.class_name)).toEqual(
-			expect.arrayContaining(['Assistant', 'SmokeWorkflow', 'FlueRegistry']),
+			expect.arrayContaining(['FlueAssistantAgent', 'FlueSmokeWorkflow', 'FlueRegistry']),
 		);
 		expect(inputConfig.migrations).toEqual(AUTHORED_MIGRATIONS);
 		const outputConfigs = fs
@@ -121,7 +121,7 @@ describe('Cloudflare Vite production Worker', () => {
 			expect(inputConfig.env.staging).not.toHaveProperty('migrations');
 			expect(
 				inputConfig.env.staging.durable_objects.bindings.map((binding) => binding.class_name),
-			).toEqual(expect.arrayContaining(['Assistant', 'SmokeWorkflow', 'FlueRegistry']));
+			).toEqual(expect.arrayContaining(['FlueAssistantAgent', 'FlueSmokeWorkflow', 'FlueRegistry']));
 			const stagingConfigPath = path.join(staging.output, 'support_seal_flue', 'wrangler.json');
 			const stagingConfig = JSON.parse(fs.readFileSync(stagingConfigPath, 'utf8')) as {
 				name: string;
