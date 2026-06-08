@@ -26,7 +26,7 @@ try {
 	const envContent = readFileSync(envPath, 'utf8');
 	for (const line of envContent.split('\n')) {
 		const match = line.match(/^([A-Z_]+)=(.+)$/);
-		if (match && match[1] && match[2]) process.env[match[1]] = match[2].trim();
+		if (match?.[1] && match[2]) process.env[match[1]] = match[2].trim();
 	}
 } catch {}
 
@@ -38,7 +38,7 @@ const hasApiKey = !!process.env.ANTHROPIC_API_KEY;
 // ---------------------------------------------------------------------------
 
 const providers: FauxProviderRegistration[] = [];
-let tempDirs: string[] = [];
+const tempDirs: string[] = [];
 
 afterEach(() => {
 	for (const provider of providers.splice(0)) provider.unregister();
@@ -273,11 +273,12 @@ leaseExpiresAt: 1,
 			leaseExpiresAt: 1,
 		});
 		expect(claimed).toBeTruthy();
+		if (!claimed) throw new Error('Expected claimed submission.');
 
 			// Create a journal so replaceTurnJournalAttempt can work.
 			await store.submissions.beginTurnJournal({
 				submissionId: input.dispatchId,
-				sessionKey: claimed!.sessionKey,
+				sessionKey: claimed.sessionKey,
 				kind: 'dispatch',
 				attemptId: 'attempt-0',
 				operationId: 'op-1',
@@ -299,7 +300,7 @@ leaseExpiresAt: 1,
 				if (i < 10) {
 					await store.submissions.beginTurnJournal({
 						submissionId: input.dispatchId,
-						sessionKey: claimed!.sessionKey,
+						sessionKey: claimed.sessionKey,
 						kind: 'dispatch',
 						attemptId: currentAttemptId,
 						operationId: 'op-1',
@@ -385,13 +386,14 @@ leaseExpiresAt: 1,
 			leaseExpiresAt: 1,
 		});
 		expect(claimed).toBeTruthy();
+		if (!claimed) throw new Error('Expected claimed submission.');
 		await store.submissions.markSubmissionInputApplied({
 			submissionId: input.dispatchId,
 			attemptId: 'attempt-tool-result',
 		});
 			await store.submissions.beginTurnJournal({
 				submissionId: input.dispatchId,
-				sessionKey: claimed!.sessionKey,
+				sessionKey: claimed.sessionKey,
 				kind: 'dispatch',
 				attemptId: 'attempt-tool-result',
 				operationId: 'op-1',
@@ -500,6 +502,7 @@ leaseExpiresAt: 1,
 			leaseExpiresAt: 1,
 		});
 		expect(claimed).toBeTruthy();
+		if (!claimed) throw new Error('Expected claimed submission.');
 
 		// Mark input applied (the submission got past input application).
 			await store.submissions.markSubmissionInputApplied({
@@ -510,7 +513,7 @@ leaseExpiresAt: 1,
 			// Create a journal at tool_request_recorded phase (interrupted during tool execution).
 			await store.submissions.beginTurnJournal({
 				submissionId: input.dispatchId,
-				sessionKey: claimed!.sessionKey,
+				sessionKey: claimed.sessionKey,
 				kind: 'dispatch',
 				attemptId: 'attempt-tool-repair',
 				operationId: 'op-1',

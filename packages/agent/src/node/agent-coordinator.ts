@@ -477,11 +477,11 @@ export function createNodeAgentCoordinator(options: {
 			// coordinator from reclaiming submissions that are still active.
 			if (activeSubmissions.size > 0) {
 				const settlement = Promise.allSettled([...activeSubmissions.values()].map((s) => s.task));
-				let timer: ReturnType<typeof setTimeout>;
 				const timeout = new Promise<void>((resolve) => {
-					timer = setTimeout(resolve, timeoutMs);
+					const timer = setTimeout(resolve, timeoutMs);
+					settlement.finally(() => clearTimeout(timer));
 				});
-				await Promise.race([settlement.finally(() => clearTimeout(timer!)), timeout]);
+				await Promise.race([settlement, timeout]);
 			}
 
 			// Stop the heartbeat and lease-scan timer after settlement (or

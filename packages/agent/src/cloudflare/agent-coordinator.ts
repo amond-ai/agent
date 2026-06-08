@@ -2,7 +2,7 @@ import type { AgentExecutionStore, AgentSubmission, AgentSubmissionStore } from 
 import type { FlueContextInternal } from '../client.ts';
 import {
 	createAgentSubmissionObserverRegistry,
-	createAgentSubmissionSessionHandler,
+	type createAgentSubmissionSessionHandler,
 	createDirectAgentSubmissionInput,
 	processSubmission,
 	reconcileInterruptedSubmission,

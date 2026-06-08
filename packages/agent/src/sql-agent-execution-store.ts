@@ -40,7 +40,6 @@ import {
 	type AgentSubmissionInput,
 	createDispatchAgentSubmissionInput,
 	type DirectAgentSubmissionInput,
-	type DispatchAgentSubmissionInput,
 } from './runtime/agent-submissions.ts';
 import type { DispatchInput } from './runtime/dispatch-queue.ts';
 import { createSessionStorageKey } from './session-identity.ts';

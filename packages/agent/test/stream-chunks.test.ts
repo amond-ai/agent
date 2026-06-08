@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { AssistantMessage, AssistantMessageEvent } from '@earendil-works/pi-ai';
 import { reconstructInterruptedStream, StreamChunkWriter } from '../src/runtime/stream-chunks.ts';
 
@@ -50,10 +50,11 @@ describe('reconstructInterruptedStream()', () => {
 			'key-1',
 		);
 		expect(result).not.toBeNull();
-		expect(result!.partial.content).toEqual([{ type: 'text', text: 'Hello world' }]);
-		expect(result!.partial.stopReason).toBe('aborted');
-		expect(result!.interrupted.type).toBe('stream_interrupted');
-		expect(result!.continued.type).toBe('stream_continued');
+		if (!result) throw new Error('Expected interrupted stream result.');
+		expect(result.partial.content).toEqual([{ type: 'text', text: 'Hello world' }]);
+		expect(result.partial.stopReason).toBe('aborted');
+		expect(result.interrupted.type).toBe('stream_interrupted');
+		expect(result.continued.type).toBe('stream_continued');
 	});
 
 	it('reconstructs thinking blocks', () => {
@@ -62,7 +63,8 @@ describe('reconstructInterruptedStream()', () => {
 			'key-2',
 		);
 		expect(result).not.toBeNull();
-		expect(result!.partial.content).toEqual([{ type: 'thinking', thinking: 'Let me think' }]);
+		if (!result) throw new Error('Expected interrupted stream result.');
+		expect(result.partial.content).toEqual([{ type: 'thinking', thinking: 'Let me think' }]);
 	});
 
 	it('returns null when tool calls are present', () => {
@@ -93,7 +95,8 @@ describe('reconstructInterruptedStream()', () => {
 			'key-6',
 		);
 		expect(result).not.toBeNull();
-		expect(result!.partial.content).toEqual([{ type: 'text', text: 'First second' }]);
+		if (!result) throw new Error('Expected interrupted stream result.');
+		expect(result.partial.content).toEqual([{ type: 'text', text: 'First second' }]);
 	});
 
 	it('skips malformed segment bodies', () => {
@@ -105,7 +108,8 @@ describe('reconstructInterruptedStream()', () => {
 			'key-7',
 		);
 		expect(result).not.toBeNull();
-		expect(result!.partial.content).toEqual([{ type: 'text', text: 'ok' }]);
+		if (!result) throw new Error('Expected interrupted stream result.');
+		expect(result.partial.content).toEqual([{ type: 'text', text: 'ok' }]);
 	});
 
 	it('filters out empty content blocks', () => {
@@ -114,7 +118,8 @@ describe('reconstructInterruptedStream()', () => {
 			'key-8',
 		);
 		expect(result).not.toBeNull();
-		expect(result!.partial.content).toEqual([{ type: 'text', text: 'real content' }]);
+		if (!result) throw new Error('Expected interrupted stream result.');
+		expect(result.partial.content).toEqual([{ type: 'text', text: 'real content' }]);
 	});
 });
 
@@ -135,9 +140,11 @@ describe('StreamChunkWriter', () => {
 		await writer.flush();
 
 		expect(stored).toHaveLength(1);
-		expect(stored[0]!.streamKey).toBe('test-key');
-		expect(stored[0]!.segmentIndex).toBe(0);
-		const parsed = JSON.parse(stored[0]!.body);
+		const storedSegment = stored[0];
+		if (!storedSegment) throw new Error('Expected one stored segment.');
+		expect(storedSegment.streamKey).toBe('test-key');
+		expect(storedSegment.segmentIndex).toBe(0);
+		const parsed = JSON.parse(storedSegment.body);
 		expect(parsed).toHaveLength(2);
 	});
 

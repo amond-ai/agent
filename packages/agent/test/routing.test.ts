@@ -213,7 +213,7 @@ describe('flue()', () => {
 	});
 
 	it('returns an authored middleware response without invoking the handler when middleware short-circuits', async () => {
-		let handlerCalls = 0;
+		const handlerCalls = 0;
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {

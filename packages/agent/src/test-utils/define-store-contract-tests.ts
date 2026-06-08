@@ -301,7 +301,8 @@ export function defineStoreContractTests(
 				await store.submissions.admitDispatch(dispatchInput());
 				const before = Date.now();
 				await store.submissions.claimSubmission(claim('dispatch-1', 'attempt-1'));
-				const claimed = (await store.submissions.getSubmission('dispatch-1'))!;
+				const claimed = await store.submissions.getSubmission('dispatch-1');
+				if (!claimed) throw new Error('Expected claimed submission to exist.');
 				expect(claimed.attemptCount).toBe(1);
 				expect(claimed.maxRetry).toBe(10);
 				expect(claimed.timeoutAt).toBeGreaterThanOrEqual(before + 60 * 60_000);
@@ -632,11 +633,10 @@ export function defineStoreContractTests(
 					ownerId: 'owner-a',
 					leaseExpiresAt: expiry,
 				});
-				const newExpiry = Date.now() + 60_000;
 				await store.submissions.renewLeases('owner-a', ['dispatch-1']);
 				const submission = await store.submissions.getSubmission('dispatch-1');
-				expect(submission).not.toBeNull();
-				expect(submission!.leaseExpiresAt).toBeGreaterThan(expiry);
+				if (!submission) throw new Error('Expected renewed submission to exist.');
+				expect(submission.leaseExpiresAt).toBeGreaterThan(expiry);
 			});
 
 			it('ignores submissions owned by a different coordinator', async () => {
@@ -651,8 +651,8 @@ export function defineStoreContractTests(
 				});
 				await store.submissions.renewLeases('owner-b', ['dispatch-1']);
 				const submission = await store.submissions.getSubmission('dispatch-1');
-				expect(submission).not.toBeNull();
-				expect(submission!.leaseExpiresAt).toBe(expiry);
+				if (!submission) throw new Error('Expected submission to exist.');
+				expect(submission.leaseExpiresAt).toBe(expiry);
 			});
 
 			it('ignores settled submissions', async () => {
@@ -677,7 +677,9 @@ export function defineStoreContractTests(
 				});
 				const expired = await store.submissions.listExpiredSubmissions();
 				expect(expired).toHaveLength(1);
-				expect(expired[0]!.submissionId).toBe('dispatch-1');
+				const submission = expired[0];
+				if (!submission) throw new Error('Expected one expired submission.');
+				expect(submission.submissionId).toBe('dispatch-1');
 			});
 
 			it('excludes submissions with future lease expiry', async () => {

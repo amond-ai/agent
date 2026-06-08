@@ -4,7 +4,7 @@ import {
 	fauxToolCall,
 	registerFauxProvider,
 } from '@earendil-works/pi-ai';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Type } from '@earendil-works/pi-ai';
 import { createAgent } from '../src/agent-definition.ts';
 import { defineTool } from '../src/tool.ts';
@@ -801,10 +801,11 @@ describe('repairInterruptedToolCalls()', () => {
 
 		// Walk the active path to find tool results in order.
 		const sessionData = await store.sessions.load(storageKey);
+		if (!sessionData) throw new Error('Expected repaired session data.');
 		const activeResults: Array<{ toolCallId: string; isError: boolean; text: string }> = [];
-		let currentId = sessionData!.leafId;
+		let currentId = sessionData.leafId;
 		while (currentId) {
-			const entry = sessionData!.entries.find((e) => e.id === currentId);
+			const entry = sessionData.entries.find((e) => e.id === currentId);
 			if (!entry) break;
 			if (entry.type === 'message' && (entry as any).message.role === 'toolResult') {
 				activeResults.unshift({
@@ -868,10 +869,11 @@ describe('repairInterruptedToolCalls()', () => {
 
 		// Walk the active path to find tool results in order.
 		const sessionData = await store.sessions.load(storageKey);
+		if (!sessionData) throw new Error('Expected repaired session data.');
 		const activeResults: Array<{ toolCallId: string; isError: boolean }> = [];
-		let currentId = sessionData!.leafId;
+		let currentId = sessionData.leafId;
 		while (currentId) {
-			const entry = sessionData!.entries.find((e) => e.id === currentId);
+			const entry = sessionData.entries.find((e) => e.id === currentId);
 			if (!entry) break;
 			if (entry.type === 'message' && (entry as any).message.role === 'toolResult') {
 				activeResults.unshift({
@@ -936,10 +938,11 @@ describe('repairInterruptedToolCalls()', () => {
 		expect(repairedLeafId).toBeTruthy();
 
 		const sessionData = await store.sessions.load(storageKey);
-		const path = sessionData!.entries;
+		if (!sessionData) throw new Error('Expected repaired session data.');
+		const path = sessionData.entries;
 		// Walk from the leaf backwards to find the tool results in the active path.
 		const resultEntries: Array<{ toolCallId: string; isError: boolean }> = [];
-		let currentId = sessionData!.leafId;
+		let currentId = sessionData.leafId;
 		while (currentId) {
 			const entry = path.find((e) => e.id === currentId);
 			if (!entry) break;

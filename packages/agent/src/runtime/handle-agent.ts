@@ -11,7 +11,6 @@ import {
 } from '../errors.ts';
 import { isTaskSessionName } from '../session-identity.ts';
 import type {
-	AttachedAgentEvent,
 	AttachedAgentEventCallback,
 	CreatedAgent,
 	DirectAgentPayload,

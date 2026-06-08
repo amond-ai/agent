@@ -134,7 +134,7 @@ describe('Cloudflare agent WebSockets', () => {
 
 	it('rejects oversized messages when a Cloudflare agent socket exceeds the byte limit', async () => {
 		const connection = new TestConnection();
-		let invocations = 0;
+		const invocations = 0;
 
 		await messageCloudflareAgentWebSocket(
 			connection,
@@ -170,7 +170,7 @@ describe('Cloudflare agent WebSockets', () => {
 
 	it('rejects binary messages when a Cloudflare agent socket receives non-text input', async () => {
 		const connection = new TestConnection();
-		let invocations = 0;
+		const invocations = 0;
 
 		await messageCloudflareAgentWebSocket(connection, new Uint8Array([1, 2, 3]), {
 			name: 'assistant',

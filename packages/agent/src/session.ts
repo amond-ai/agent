@@ -74,7 +74,6 @@ import type {
 	AgentConfig,
 	AgentProfile,
 	CallHandle,
-	CompactionEntry,
 	DispatchMessageMetadata,
 	FlueEvent,
 	FlueEventCallback,
@@ -103,8 +102,8 @@ import type {
 } from './types.ts';
 import { addUsage, emptyUsage, fromProviderUsage } from './usage.ts';
 
-export { SessionHistory, createUserContextMessage, renderSignalMessage } from './session-history.ts';
-export type { MessageSource, ContextEntry, CompactionAppendInput } from './session-history.ts';
+export { SessionHistory } from './session-history.ts';
+export type { MessageSource } from './session-history.ts';
 
 const MAX_TASK_DEPTH = 4;
 const MAX_TRANSIENT_MODEL_RETRIES = 3;

@@ -11,7 +11,7 @@ import type { AgentSubmissionInput, DirectAgentSubmissionInput } from './runtime
 import type { DispatchInput } from './runtime/dispatch-queue.ts';
 import type { RunRegistry } from './runtime/run-registry.ts';
 import type { RunStore } from './runtime/run-store.ts';
-import type { SessionData, SessionStore } from './types.ts';
+import type { SessionStore } from './types.ts';
 
 // ─── Durability defaults ────────────────────────────────────────────────────
 

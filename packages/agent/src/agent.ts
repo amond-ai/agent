@@ -322,9 +322,13 @@ export function createActivateSkillTool(
 	activate: (name: string, signal?: AbortSignal) => Promise<string>,
 ): AgentTool<any> {
 	const sortedNames = [...skillNames].sort();
+	const [firstName] = sortedNames;
+	if (!firstName) {
+		throw new Error('[flue] Cannot create activate_skill tool without available skills.');
+	}
 	const NameSchema =
 		sortedNames.length === 1
-			? Type.Literal(sortedNames[0]!)
+			? Type.Literal(firstName)
 			: Type.Union(sortedNames.map((name) => Type.Literal(name)));
 	const ActivateSkillParams = Type.Object({
 		name: NameSchema,

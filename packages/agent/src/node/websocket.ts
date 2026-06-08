@@ -188,7 +188,7 @@ function receiveAgentMessage(
 
 async function invokeAgentPrompt(
 	socket: RoutedSocket,
-	request: Request,
+	_request: Request,
 	target: Extract<SocketTarget, { kind: 'agent' }>,
 	message: Extract<AgentWebSocketClientMessage, { type: 'prompt' }>,
 	options: NodeWebSocketTransportOptions,

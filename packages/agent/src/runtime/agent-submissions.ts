@@ -151,7 +151,7 @@ export function createAgentSubmissionSessionHandler(
 }
 
 /** Payload for processing and terminal contexts: the user's direct payload or the dispatch input. */
-export function agentSubmissionProcessingPayload(input: AgentSubmissionInput): unknown {
+function agentSubmissionProcessingPayload(input: AgentSubmissionInput): unknown {
 	return input.kind === 'dispatch' ? agentSubmissionDispatchInput(input) : input.payload;
 }
 
@@ -160,7 +160,7 @@ function agentSubmissionReadPayload(input: AgentSubmissionInput): unknown {
 	return input.kind === 'dispatch' ? agentSubmissionDispatchInput(input) : input;
 }
 
-export function agentSubmissionDispatchId(input: AgentSubmissionInput): string | undefined {
+function agentSubmissionDispatchId(input: AgentSubmissionInput): string | undefined {
 	return input.kind === 'dispatch' ? input.dispatchId : undefined;
 }
 
@@ -217,7 +217,7 @@ export function createAgentSubmissionObserverRegistry(): AgentSubmissionObserver
  * Cloudflare coordinator and the Node dispatch processor use the same
  * journal phase lifecycle; this factory eliminates the duplication.
  */
-export function createSubmissionJournalCallbacks(
+function createSubmissionJournalCallbacks(
 	submissions: Pick<
 		AgentSubmissionStore,
 		'beginTurnJournal' | 'updateTurnJournalPhase' | 'commitTurnJournal'
@@ -444,7 +444,7 @@ export async function reconcileInterruptedSubmission(
  * `instanceId`. Used by both Node and Cloudflare coordinators for direct
  * submissions.
  */
-export function createSubmissionEventCallback(
+function createSubmissionEventCallback(
 	submissionId: string,
 	instanceId: string,
 	publish: (submissionId: string, event: AttachedAgentEvent) => Promise<void>,
@@ -553,11 +553,12 @@ export async function processSubmission(opts: ProcessSubmissionOptions): Promise
 			// Wire the coordinator's abort signal so shutdown can cancel
 			// in-flight work at the turn boundary.
 			if (opts.signal && !opts.signal.aborted) {
-				const onAbort = () => handle.abort(opts.signal!.reason);
-				opts.signal.addEventListener('abort', onAbort, { once: true });
+				const signal = opts.signal;
+				const onAbort = () => handle.abort(signal.reason);
+				signal.addEventListener('abort', onAbort, { once: true });
 				handle.then(
-					() => opts.signal!.removeEventListener('abort', onAbort),
-					() => opts.signal!.removeEventListener('abort', onAbort),
+					() => signal.removeEventListener('abort', onAbort),
+					() => signal.removeEventListener('abort', onAbort),
 				);
 			} else if (opts.signal?.aborted) {
 				handle.abort(opts.signal.reason);
