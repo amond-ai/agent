@@ -1,6 +1,6 @@
 {
 	"name": "@flue/runtime",
-	"version": "0.10.0",
+	"version": "0.10.1",
 	"type": "module",
 	"license": "Apache-2.0",
 	"exports": {
@@ -51,8 +51,8 @@
 		"prepublishOnly": "cp ../../README.md ."
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "^0.78.1",
-		"@earendil-works/pi-ai": "^0.78.1",
+		"@earendil-works/pi-agent-core": "^0.79.0",
+		"@earendil-works/pi-ai": "^0.79.0",
 		"@hono/node-server": "^2.0.3",
 		"@hono/standard-validator": "^0.2.0",
 		"@modelcontextprotocol/sdk": "^1.29.0",
