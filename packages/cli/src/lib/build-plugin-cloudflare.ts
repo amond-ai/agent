@@ -643,7 +643,7 @@ if (!flueApp || typeof flueApp.fetch !== 'function') {
 // stays \`hono\`-free (users only need hono in their node_modules when
 // they author their own app.ts). The default mounts \`flue()\` at root
 // and renders canonical Flue envelopes for unmatched paths.
-const app = createDefaultFlueApp();`
+const flueApp = createDefaultFlueApp();`
 }
 
 export default {
