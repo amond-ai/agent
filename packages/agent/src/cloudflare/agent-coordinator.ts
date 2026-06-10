@@ -1,8 +1,4 @@
-import type {
-	AgentExecutionStore,
-	AgentSubmission,
-	AgentSubmissionStore,
-} from '../agent-execution-store.ts';
+import type { AgentExecutionStore, AgentSubmission, AgentSubmissionStore } from '../agent-execution-store.ts';
 import type { FlueContextInternal } from '../client.ts';
 import {
 	createAgentSubmissionObserverRegistry,
@@ -77,9 +73,7 @@ interface CloudflareAgentRuntimeOptions {
 		agentName: string,
 		callback: () => T,
 	) => T;
-	readonly createEventStreamStore: (
-		instance: CloudflareAgentInstance,
-	) => import('../runtime/event-stream-store.ts').EventStreamStore;
+	readonly createEventStreamStore: (instance: CloudflareAgentInstance) => import('../runtime/event-stream-store.ts').EventStreamStore;
 }
 
 export interface CloudflareAgentRuntime {
@@ -102,9 +96,7 @@ export interface CloudflareAgentRuntime {
 	): Promise<unknown>;
 }
 
-export function createCloudflareAgentRuntime(
-	options: CloudflareAgentRuntimeOptions,
-): CloudflareAgentRuntime {
+export function createCloudflareAgentRuntime(options: CloudflareAgentRuntimeOptions): CloudflareAgentRuntime {
 	const coordinators = new WeakMap<CloudflareAgentInstance, CloudflareAgentCoordinator>();
 	const observers = createAgentSubmissionObserverRegistry();
 	const activeAttempts = new Set<string>();
@@ -192,8 +184,7 @@ class CloudflareAgentCoordinator {
 				id: this.instance.name,
 				agentName: this.agentName,
 				eventStreamStore: this.eventStreamStore,
-				admitAttachedSubmission: (payload, onEvent, waitForResult) =>
-					this.admitAttachedSubmission(payload, onEvent, waitForResult),
+				admitAttachedSubmission: (payload, onEvent, waitForResult) => this.admitAttachedSubmission(payload, onEvent, waitForResult),
 			}),
 		);
 	}
@@ -251,9 +242,7 @@ class CloudflareAgentCoordinator {
 		}
 	}
 
-	private armSubmissionWake(
-		options: { delaySeconds?: number; idempotent?: boolean } = {},
-	): Promise<unknown> {
+	private armSubmissionWake(options: { delaySeconds?: number; idempotent?: boolean } = {}): Promise<unknown> {
 		this.assertAgentsDurabilityApi('schedule');
 		return this.instance.schedule(
 			options.delaySeconds ?? FLUE_AGENT_SUBMISSION_WAKE_SECONDS,
@@ -269,9 +258,7 @@ class CloudflareAgentCoordinator {
 		return true;
 	}
 
-	private async reconcileSubmissions(
-		options: { driverAlreadyArmed?: boolean } = {},
-	): Promise<boolean> {
+	private async reconcileSubmissions(options: { driverAlreadyArmed?: boolean } = {}): Promise<boolean> {
 		if (!(await this.submissions.hasUnsettledSubmissions())) return false;
 		if (!options.driverAlreadyArmed) await this.restoreSubmissionWake();
 		try {
@@ -290,16 +277,16 @@ class CloudflareAgentCoordinator {
 				}
 			}
 			for (const submission of await this.submissions.listRunnableSubmissions()) {
-				// Cloudflare DOs are single-threaded per instance — leases are
-				// advisory-only. Set to 0 so reconciliation never misidentifies
-				// an active submission as expired. The Node coordinator uses real
-				// lease expiry with heartbeat renewal for multi-process safety.
-				const claimed = await this.submissions.claimSubmission({
-					submissionId: submission.submissionId,
-					attemptId: crypto.randomUUID(),
-					ownerId: this.instance.ctx.id.toString(),
-					leaseExpiresAt: 0,
-				});
+			// Cloudflare DOs are single-threaded per instance — leases are
+			// advisory-only. Set to 0 so reconciliation never misidentifies
+			// an active submission as expired. The Node coordinator uses real
+			// lease expiry with heartbeat renewal for multi-process safety.
+			const claimed = await this.submissions.claimSubmission({
+				submissionId: submission.submissionId,
+				attemptId: crypto.randomUUID(),
+				ownerId: this.instance.ctx.id.toString(),
+				leaseExpiresAt: 0,
+			});
 				if (!claimed) continue;
 				try {
 					this.startSubmissionAttempt(claimed);
@@ -352,12 +339,7 @@ class CloudflareAgentCoordinator {
 				submission,
 				agent,
 				(payload, dispatchId) =>
-					this.createContext(
-						payload,
-						submissionSyntheticRequest(submission.input),
-						undefined,
-						dispatchId,
-					),
+					this.createContext(payload, submissionSyntheticRequest(submission.input), undefined, dispatchId),
 				{ ownerId: this.instance.ctx.id.toString(), leaseExpiresAt: 0 },
 			),
 		);
@@ -418,32 +400,24 @@ class CloudflareAgentCoordinator {
 		if (!rows) throw new Error('[flue] Cloudflare durable agent SQL storage is unavailable.');
 		for (const row of rows) {
 			if (typeof row.created_at !== 'number') {
-				console.warn(
-					'[flue:submission-reconciliation] Skipping attempt marker with non-numeric created_at.',
-				);
+				console.warn('[flue:submission-reconciliation] Skipping attempt marker with non-numeric created_at.');
 				continue;
 			}
 			if (Date.now() - row.created_at > FLUE_AGENT_SUBMISSION_ATTEMPT_STALE_MS) continue;
 			if (row.snapshot === null) continue;
 			if (typeof row.snapshot !== 'string') {
-				console.warn(
-					'[flue:submission-reconciliation] Skipping attempt marker with non-string snapshot.',
-				);
+				console.warn('[flue:submission-reconciliation] Skipping attempt marker with non-string snapshot.');
 				continue;
 			}
 			let snapshot: unknown;
 			try {
 				snapshot = JSON.parse(row.snapshot);
 			} catch {
-				console.warn(
-					'[flue:submission-reconciliation] Skipping attempt marker with unparseable snapshot.',
-				);
+				console.warn('[flue:submission-reconciliation] Skipping attempt marker with unparseable snapshot.');
 				continue;
 			}
 			if (!isAttemptMarkerSnapshot(snapshot)) {
-				console.warn(
-					'[flue:submission-reconciliation] Skipping attempt marker with invalid snapshot shape.',
-				);
+				console.warn('[flue:submission-reconciliation] Skipping attempt marker with invalid snapshot shape.');
 				continue;
 			}
 			keys.add(`${snapshot.submissionId}:${snapshot.attemptId}`);
@@ -465,12 +439,7 @@ class CloudflareAgentCoordinator {
 				return agent;
 			},
 			createContext: (payload, dispatchId) => {
-				const ctx = this.createContext(
-					payload,
-					submissionSyntheticRequest(submission.input),
-					undefined,
-					dispatchId,
-				);
+				const ctx = this.createContext(payload, submissionSyntheticRequest(submission.input), undefined, dispatchId);
 				const streamPath = agentStreamPath(this.agentName, this.instance.name);
 				ctx.subscribeEvent((event) => {
 					eventStreamStore.appendEvent(streamPath, event).catch((error) => {
@@ -503,11 +472,7 @@ class CloudflareAgentCoordinator {
 		onEvent?: (event: AttachedAgentEvent) => Promise<void> | void,
 		waitForResult = true,
 	): Promise<unknown> {
-		const input = createDirectAgentSubmissionInput({
-			agent: this.agentName,
-			id: this.instance.name,
-			payload,
-		});
+		const input = createDirectAgentSubmissionInput({ agent: this.agentName, id: this.instance.name, payload });
 		const attachment = this.observers.attach(input.submissionId, { onEvent });
 		try {
 			await this.armSubmissionWake();
@@ -547,16 +512,12 @@ class CloudflareAgentCoordinator {
 			return new Response('Conflicting internal dispatch replay.', { status: 409 });
 		}
 		await this.reconcileSubmissions({ driverAlreadyArmed: true });
-		return Response.json({
-			dispatchId: admission.submission.submissionId,
-			acceptedAt: input.acceptedAt,
-		});
+		return Response.json({ dispatchId: admission.submission.submissionId, acceptedAt: input.acceptedAt });
 	}
+
 }
 
-function isAttemptMarkerSnapshot(
-	value: unknown,
-): value is { submissionId: string; attemptId: string } {
+function isAttemptMarkerSnapshot(value: unknown): value is { submissionId: string; attemptId: string } {
 	if (!value || typeof value !== 'object') return false;
 	const snapshot = value as Record<string, unknown>;
 	return typeof snapshot.submissionId === 'string' && typeof snapshot.attemptId === 'string';
@@ -567,8 +528,7 @@ function submissionAttemptMarkerKey(submission: AgentSubmission): string {
 }
 
 function isInternalDispatchRequest(request: Request): boolean {
-	return (
-		request.method === 'POST' &&
-		new URL(request.url).pathname === CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH
-	);
+	return request.method === 'POST' && new URL(request.url).pathname === CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH;
 }
+
+

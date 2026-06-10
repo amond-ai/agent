@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vite-plus/test';
+import { describe, expect, it } from 'vitest';
 import { SqliteEventStreamStore } from '../src/runtime/event-stream-store.ts';
 import { handleStreamHead, handleStreamRead } from '../src/runtime/handle-stream-routes.ts';
 
@@ -47,9 +47,7 @@ describe('handleStreamRead()', () => {
 		});
 
 		expect(response.status).toBe(400);
-		expect(((await response.json()) as { error: { type: string } }).error.type).toBe(
-			'invalid_request',
-		);
+		expect((await response.json() as { error: { type: string } }).error.type).toBe('invalid_request');
 	});
 
 	it('rejects duplicate offset parameters', async () => {
@@ -63,9 +61,7 @@ describe('handleStreamRead()', () => {
 		});
 
 		expect(response.status).toBe(400);
-		expect(((await response.json()) as { error: { type: string } }).error.type).toBe(
-			'invalid_request',
-		);
+		expect((await response.json() as { error: { type: string } }).error.type).toBe('invalid_request');
 	});
 
 	it('omits ETag for offset=now catch-up reads', async () => {
@@ -149,13 +145,9 @@ describe('handleStreamRead()', () => {
 		});
 
 		expect(runResponse.status).toBe(404);
-		expect(((await runResponse.json()) as { error: { type: string } }).error.type).toBe(
-			'run_not_found',
-		);
+		expect((await runResponse.json() as { error: { type: string } }).error.type).toBe('run_not_found');
 		expect(agentResponse.status).toBe(404);
-		expect(((await agentResponse.json()) as { error: { type: string } }).error.type).toBe(
-			'stream_not_found',
-		);
+		expect((await agentResponse.json() as { error: { type: string } }).error.type).toBe('stream_not_found');
 	});
 
 	it('replays a catch-up read as a 304 when If-None-Match matches the ETag', async () => {
@@ -272,9 +264,7 @@ describe('handleStreamRead()', () => {
 		});
 
 		expect(response.status).toBe(400);
-		expect(((await response.json()) as { error: { type: string } }).error.type).toBe(
-			'invalid_request',
-		);
+		expect((await response.json() as { error: { type: string } }).error.type).toBe('invalid_request');
 	});
 
 	it('returns 404 for SSE reads on a missing stream', async () => {
@@ -287,9 +277,7 @@ describe('handleStreamRead()', () => {
 		});
 
 		expect(response.status).toBe(404);
-		expect(((await response.json()) as { error: { type: string } }).error.type).toBe(
-			'run_not_found',
-		);
+		expect((await response.json() as { error: { type: string } }).error.type).toBe('run_not_found');
 	});
 
 	it('includes browser security headers on read responses', async () => {

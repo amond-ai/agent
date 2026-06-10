@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryRunRegistry } from '../src/node/run-registry.ts';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
@@ -8,11 +8,15 @@ import { configureFlueRuntime, resetFlueRuntimeForTests } from '../src/runtime/f
 import type { RunRegistry } from '../src/runtime/run-registry.ts';
 import type { RunStore } from '../src/runtime/run-store.ts';
 
+
 afterEach(() => {
 	resetFlueRuntimeForTests();
 });
 
-function createRunApp(runStore: RunStore, runRegistry: RunRegistry) {
+function createRunApp(
+	runStore: RunStore,
+	runRegistry: RunRegistry,
+) {
 	configureFlueRuntime({
 		target: 'node',
 		manifest: { agents: [] },
@@ -23,6 +27,7 @@ function createRunApp(runStore: RunStore, runRegistry: RunRegistry) {
 	app.route('/', flue());
 	return app;
 }
+
 
 describe('workflow run store', () => {
 	it('creates an active workflow run record when workflow admission is persisted', async () => {
@@ -371,4 +376,5 @@ describe('workflow run routes', () => {
 
 		expect(response.status).toBe(404);
 	});
+
 });

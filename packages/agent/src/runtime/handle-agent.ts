@@ -15,16 +15,12 @@ import type {
 } from '../types.ts';
 import type { AttachedAgentSubmissionAdmission } from './agent-submissions.ts';
 import type { DispatchInput } from './dispatch-queue.ts';
-import {
-	agentStreamPath,
-	parseOffset,
-	runStreamPath,
-	type EventStreamStore,
-} from './event-stream-store.ts';
+import { agentStreamPath, parseOffset, runStreamPath, type EventStreamStore } from './event-stream-store.ts';
 
 import { generateWorkflowRunId } from './ids.ts';
 import type { RunOwner, RunRegistry } from './run-registry.ts';
 import { isEphemeralRunEvent, type RunStore } from './run-store.ts';
+
 
 export type WorkflowHandler = (ctx: FlueContextInternal) => unknown | Promise<unknown>;
 
@@ -120,9 +116,9 @@ export interface HandleWorkflowOptions {
 /**
  * Handle one attached `/agents/:name/:id` prompt interaction.
  *
- * Returns accepted stream coordinates by default, or a synchronous JSON
- * result when `?wait=result` is requested. Events are available via the DS
- * stream read endpoint (GET on the same URL).
+	 * Returns accepted stream coordinates by default, or a synchronous JSON
+	 * result when `?wait=result` is requested. Events are available via the DS
+	 * stream read endpoint (GET on the same URL).
  */
 export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Response> {
 	const { request, id } = opts;
@@ -141,7 +137,7 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 		const streamPath = opts.agentName ? agentStreamPath(opts.agentName, id) : undefined;
 		if (streamPath) await opts.eventStreamStore.createStream(streamPath);
 		const offset = streamPath
-			? ((await opts.eventStreamStore.getStreamMeta(streamPath))?.nextOffset ?? '-1')
+			? (await opts.eventStreamStore.getStreamMeta(streamPath))?.nextOffset ?? '-1'
 			: '-1';
 		if (new URL(request.url).searchParams.get('wait') === 'result') {
 			return runDirectSyncMode(directOptions, streamUrl, offset);
@@ -157,8 +153,15 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 }
 
 export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promise<Response> {
-	const { request, workflowName, handler, createContext, runStore, runRegistry, eventStreamStore } =
-		opts;
+	const {
+		request,
+		workflowName,
+		handler,
+		createContext,
+		runStore,
+		runRegistry,
+		eventStreamStore,
+	} = opts;
 	const startWorkflowAdmission = opts.startWorkflowAdmission ?? defaultStartWorkflowAdmission;
 	const runId = opts.runId ?? generateWorkflowRunId(workflowName);
 	const instanceId = runId;
@@ -463,18 +466,11 @@ function findTerminalRunEvent(
 		.find((event): event is Extract<FlueEvent, { type: 'run_end' }> => event.type === 'run_end');
 }
 
-async function runDirectSyncMode(
-	opts: DirectAttachedOptions,
-	streamUrl: string,
-	offset: string,
-): Promise<Response> {
+async function runDirectSyncMode(opts: DirectAttachedOptions, streamUrl: string, offset: string): Promise<Response> {
 	const result = await invokeDirectAttached(opts);
-	return new Response(
-		JSON.stringify({ result: result === undefined ? null : result, streamUrl, offset }),
-		{
-			headers: { 'content-type': 'application/json' },
-		},
-	);
+	return new Response(JSON.stringify({ result: result === undefined ? null : result, streamUrl, offset }), {
+		headers: { 'content-type': 'application/json' },
+	});
 }
 
 export async function invokeDirectAttached(opts: DirectAttachedOptions): Promise<unknown> {
@@ -705,16 +701,10 @@ async function emitRunEnd(
 	// Append run_end to the durable event stream, then close it.
 	// Each operation is individually guarded so a store failure cannot
 	// prevent RunStore/RunRegistry finalization below.
-	try {
-		await eventStreamStore.appendEvent(runStreamPath(runId), decorated);
-	} catch (e) {
-		console.error('[flue:event-stream] appendEvent(run_end) failed:', e);
-	}
-	try {
-		await eventStreamStore.closeStream(runStreamPath(runId));
-	} catch (e) {
-		console.error('[flue:event-stream] closeStream failed:', e);
-	}
+	try { await eventStreamStore.appendEvent(runStreamPath(runId), decorated); }
+	catch (e) { console.error('[flue:event-stream] appendEvent(run_end) failed:', e); }
+	try { await eventStreamStore.closeStream(runStreamPath(runId)); }
+	catch (e) { console.error('[flue:event-stream] closeStream failed:', e); }
 
 	const didEndRun = runStore
 		? await safeRunStore('endRun', () =>
@@ -738,6 +728,7 @@ async function emitRunEnd(
 				isError: input.isError,
 			}),
 		);
+
 }
 
 const EPHEMERAL_FLUSH_INTERVAL_MS = 3_000;
@@ -773,9 +764,7 @@ function subscribeRunFanout(lifecycle: WorkflowRunLifecycle): () => Promise<void
 			pending.push(
 				eventStreamStore.appendEvent(streamPath, event).then(
 					() => {},
-					(error) => {
-						console.error('[flue:event-stream] appendEvent failed:', error);
-					},
+					(error) => { console.error('[flue:event-stream] appendEvent failed:', error); },
 				),
 			);
 		}
@@ -803,9 +792,7 @@ function subscribeRunFanout(lifecycle: WorkflowRunLifecycle): () => Promise<void
 		pending.push(
 			eventStreamStore.appendEvent(streamPath, event).then(
 				() => {},
-				(error) => {
-					console.error('[flue:event-stream] appendEvent failed:', error);
-				},
+				(error) => { console.error('[flue:event-stream] appendEvent failed:', error); },
 			),
 		);
 	});
@@ -865,3 +852,5 @@ function serializeError(error: unknown): unknown {
  */
 const defaultStartWorkflowAdmission: StartWorkflowAdmissionFn = (_runId, run) =>
 	Promise.resolve().then(run);
+
+

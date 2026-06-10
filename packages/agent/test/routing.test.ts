@@ -1,16 +1,11 @@
 import { Hono } from 'hono';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFlueContext } from '../src/client.ts';
 import { InMemoryRunRegistry } from '../src/node/run-registry.ts';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
 import { agentStreamPath } from '../src/runtime/event-stream-store.ts';
-import {
-	configureFlueRuntime,
-	createDefaultFlueApp,
-	flue,
-	resetFlueRuntimeForTests,
-} from '../src/runtime/flue-app.ts';
+import { configureFlueRuntime, createDefaultFlueApp, flue, resetFlueRuntimeForTests } from '../src/runtime/flue-app.ts';
 import { InMemorySessionStore } from '../src/session.ts';
 import { createTestEventStreamStore } from './helpers/test-event-stream-store.ts';
 
@@ -109,7 +104,7 @@ describe('flue()', () => {
 		});
 	});
 
-	it("captures the prompt tail offset and serves exactly that prompt's events from it", async () => {
+	it('captures the prompt tail offset and serves exactly that prompt\'s events from it', async () => {
 		const store = createTestEventStreamStore();
 		configureFlueRuntime({
 			target: 'node',
@@ -314,11 +309,7 @@ describe('flue()', () => {
 		const runRegistry = new InMemoryRunRegistry();
 		await runRegistry.recordRunStart({
 			runId: 'workflow:daily-report:01',
-			owner: {
-				kind: 'workflow',
-				workflowName: 'daily-report',
-				instanceId: 'workflow:daily-report:01',
-			},
+			owner: { kind: 'workflow', workflowName: 'daily-report', instanceId: 'workflow:daily-report:01' },
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
 		const store = createTestEventStreamStore();
@@ -335,9 +326,7 @@ describe('flue()', () => {
 		const app = new Hono();
 		app.route('/api', flue());
 
-		const response = await app.fetch(
-			new Request('http://localhost/api/runs/workflow%3Adaily-report%3A01'),
-		);
+		const response = await app.fetch(new Request('http://localhost/api/runs/workflow%3Adaily-report%3A01'));
 
 		expect(response.status).toBe(401);
 		expect(await response.json()).toEqual({ blocked: true });
@@ -536,7 +525,8 @@ describe('flue()', () => {
 			error: {
 				type: 'invalid_request',
 				message: 'Request is malformed.',
-				details: 'Direct agent requests must use JSON object body { "message": string }.',
+				details:
+					'Direct agent requests must use JSON object body { "message": string }.',
 			},
 		});
 	});
