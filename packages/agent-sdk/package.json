@@ -24,6 +24,9 @@
 		"node": ">=22.18.0"
 	},
 	"scripts": {
+		"build": "tsdown",
+		"check:types": "tsc --noEmit",
+		"test": "vitest run",
 		"prepublishOnly": "cp ../../README.md ."
 	},
 	"dependencies": {
@@ -31,8 +34,8 @@
 	},
 	"devDependencies": {
 		"@flue/runtime": "workspace:*",
+		"tsdown": "^0.22.0",
 		"typescript": "^6.0.3",
-		"vitest": "catalog:",
-		"vite-plus": "catalog:"
+		"vitest": "^4.1.6"
 	}
 }
