@@ -43,6 +43,7 @@
 	"types": "./types/index.d.ts",
 	"files": [
 		"dist",
+		"docs",
 		"types"
 	],
 	"engines": {
@@ -53,8 +54,7 @@
 		"check:types": "tsc --noEmit",
 		"test": "vitest run",
 		"test:integration:cloudflare": "vitest run --config vitest.integration.cloudflare.config.ts --no-file-parallelism",
-		"test:watch": "vitest",
-		"prepublishOnly": "cp ../../README.md ."
+		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"@earendil-works/pi-agent-core": "^0.79.0",
