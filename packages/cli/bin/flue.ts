@@ -3,7 +3,9 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { determineAgent } from '@vercel/detect-agent';
+import MiniSearch from 'minisearch';
 import { build } from '../src/lib/build.ts';
 import {
 	type FlueConfig,
@@ -95,6 +97,7 @@ function printUsage() {
 			'  flue build   [--target <node|cloudflare>] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
 			'  flue init  --target <node|cloudflare> [--root <path>] [--force]\n' +
 			'  flue add   [<name>|<url>] [--category <category>] [--print]\n' +
+			'  flue docs  [read <path> | search <query>]\n' +
 			"  flue logs  <workflowRunId> [--server <url>] [--header 'Name: value'] [--follow|-f|--no-follow] [--since <offset>] [--types a,b,c] [--limit <n>] [--format pretty|json|ndjson]\n" +
 			'\n' +
 			'Commands:\n' +
@@ -104,6 +107,7 @@ function printUsage() {
 			'  build    Build a deployable artifact to ./dist (production deploys).\n' +
 			'  init   Scaffold a starter flue.config.ts in the target directory.\n' +
 			'  add    Install a connector. Pipes installation instructions for an AI coding agent to follow.\n' +
+			'  docs   Browse the Flue docs. No args lists pages; `read` prints a page as markdown; `search` prints JSON results.\n' +
 			'  logs   Tail or replay workflow run events from a running Flue server. Read-only — does not invoke work.\n' +
 			'\n' +
 			'Flags:\n' +
@@ -134,6 +138,9 @@ function printUsage() {
 			'  flue add\n' +
 			'  flue add daytona | claude\n' +
 			'  flue add https://e2b.dev --category sandbox | claude\n' +
+			'  flue docs\n' +
+			'  flue docs read guide/sandboxes\n' +
+			'  flue docs search "durable execution"\n' +
 			'  flue logs run_01H...                              # tail a workflow run\n' +
 			'  flue logs run_01H... --no-follow                  # replay a workflow run\n' +
 			'  flue logs run_01H... --types tool_call,log,run_end --format json\n' +
@@ -207,6 +214,13 @@ interface AddArgs {
 	print: boolean;
 }
 
+interface DocsArgs {
+	command: 'docs';
+	action: 'list' | 'read' | 'search';
+	/** Page path for `read`, query for `search`, empty for `list`. */
+	value: string;
+}
+
 interface InitArgs {
 	command: 'init';
 	target: 'node' | 'cloudflare';
@@ -237,7 +251,15 @@ interface LogsArgs {
 	format: 'pretty' | 'json' | 'ndjson';
 }
 
-type ParsedArgs = RunArgs | ConnectArgs | BuildArgs | DevArgs | AddArgs | InitArgs | LogsArgs;
+type ParsedArgs =
+	| RunArgs
+	| ConnectArgs
+	| BuildArgs
+	| DevArgs
+	| AddArgs
+	| DocsArgs
+	| InitArgs
+	| LogsArgs;
 
 function parseFlags(flags: string[]): {
 	target?: 'node' | 'cloudflare';
@@ -401,6 +423,47 @@ function parseAddArgs(rest: string[]): AddArgs {
 	}
 
 	return { command: 'add', name, category, print };
+}
+
+function parseDocsArgs(rest: string[]): DocsArgs {
+	const [action, ...values] = rest;
+
+	if (action === undefined) {
+		return { command: 'docs', action: 'list', value: '' };
+	}
+
+	if (action === 'read') {
+		const value = values[0];
+		if (!value) {
+			console.error('Missing docs page path.\n\nUsage:\n  flue docs read <path>');
+			process.exit(1);
+		}
+		const extra = values[1];
+		if (extra !== undefined) {
+			console.error(`Unexpected extra argument for \`flue docs read\`: ${extra}`);
+			process.exit(1);
+		}
+		return { command: 'docs', action: 'read', value };
+	}
+
+	if (action === 'search') {
+		const value = values.join(' ').trim();
+		if (!value) {
+			console.error('Missing search query.\n\nUsage:\n  flue docs search <query>');
+			process.exit(1);
+		}
+		return { command: 'docs', action: 'search', value };
+	}
+
+	console.error(
+		`Unknown \`flue docs\` subcommand: ${action}\n\n` +
+			'Usage:\n' +
+			'  flue docs                  List all documentation pages\n' +
+			'  flue docs read <path>      Print a documentation page as markdown\n' +
+			'  flue docs search <query>   Search the documentation (JSON results)\n' +
+			(action.includes('/') ? `\nDid you mean \`flue docs read ${action}\`?\n` : ''),
+	);
+	process.exit(1);
 }
 
 function parseLogsHeader(value: string | undefined, headers: Headers): void {
@@ -584,6 +647,10 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 	if (command === 'add') {
 		return parseAddArgs(rest);
+	}
+
+	if (command === 'docs') {
+		return parseDocsArgs(rest);
 	}
 
 	if (command === 'init') {
@@ -1663,6 +1730,228 @@ async function fetchConnectorMarkdown(
 	return { body: await res.text() };
 }
 
+// ─── flue docs ───────────────────────────────────────────────────────────────
+
+interface DocsPage {
+	/** Page path without extension, e.g. `guide/sandboxes`. */
+	path: string;
+	title: string;
+	description: string;
+	/** Markdown body without frontmatter. */
+	body: string;
+}
+
+/**
+ * Locate the documentation markdown tree.
+ *
+ * For users of the published package this is always `<package root>/docs`,
+ * placed there by `scripts/prepare-publish.mjs` at release time. Both `bin/`
+ * (dev via tsx) and `dist/` (built) sit directly under the package root, so
+ * the relative hop is identical in both contexts.
+ *
+ * The `apps/docs` candidate exists only for development inside the Flue
+ * monorepo itself and can never resolve in a user's `node_modules`. It is
+ * checked first because in a repo checkout the docs site content is the
+ * source of truth, and a stale `<package root>/docs` snapshot left behind by
+ * a local release (gitignored, only refreshed at the next release) must not
+ * shadow it.
+ */
+function resolveDocsRoot(): string | undefined {
+	const here = path.dirname(fileURLToPath(import.meta.url));
+	const candidates = [
+		path.join(here, '../../../apps/docs/src/content/docs'),
+		path.join(here, '../docs'),
+	];
+	return candidates.find((candidate) => fs.existsSync(candidate));
+}
+
+function parseDocsFrontmatter(source: string): { data: Record<string, string>; body: string } {
+	if (!source.startsWith('---\n')) return { data: {}, body: source };
+	const end = source.indexOf('\n---\n', 4);
+	if (end === -1) return { data: {}, body: source };
+
+	const data: Record<string, string> = {};
+	for (const line of source.slice(4, end).split('\n')) {
+		const match = line.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+		const key = match?.[1];
+		let value = match?.[2]?.trim();
+		if (!key || value === undefined) continue;
+		if (
+			(value.startsWith('"') && value.endsWith('"')) ||
+			(value.startsWith("'") && value.endsWith("'"))
+		) {
+			value = value.slice(1, -1);
+		}
+		data[key] = value;
+	}
+	return { data, body: source.slice(end + '\n---\n'.length) };
+}
+
+function loadDocsPages(root: string): DocsPage[] {
+	const pages: DocsPage[] = [];
+	for (const entry of fs.readdirSync(root, { recursive: true, withFileTypes: true })) {
+		if (!entry.isFile() || !/\.(md|mdx)$/.test(entry.name)) continue;
+		const filePath = path.join(entry.parentPath, entry.name);
+		const relative = path.relative(root, filePath).split(path.sep).join('/');
+		const { data, body } = parseDocsFrontmatter(fs.readFileSync(filePath, 'utf8'));
+		// `foo/index.md` is addressed as `foo`, matching the website's URLs.
+		const pagePath = relative.replace(/\.(md|mdx)$/, '').replace(/\/index$/, '');
+		pages.push({
+			path: pagePath,
+			title: data.title ?? relative,
+			description: data.description ?? '',
+			body,
+		});
+	}
+	return pages.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
+ * Reduces markdown/MDX source to plain text for search indexing. Mirrors the
+ * docs website's search index generation in
+ * `apps/docs/src/pages/search-index.json.ts` so `flue docs search` ranks
+ * like the website's `/docs/search` endpoint.
+ */
+function docsMarkdownToPlainText(source: string): string {
+	return source
+		.replace(/^(?:import|export)\s.*$/gm, '')
+		.replace(/^```.*$/gm, '')
+		.replace(/`([^`]*)`/g, '$1')
+		.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+		.replace(/<\/?[A-Za-z][^>]*>/g, ' ')
+		.replace(/^#{1,6}\s+/gm, '')
+		.replace(/^>\s?/gm, '')
+		.replace(/^\s*[-*+]\s+/gm, '')
+		.replace(/^\s*\d+\.\s+/gm, '')
+		.replace(/^\s*---+\s*$/gm, '')
+		.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+		.replace(/(^|\s)_{1,3}([^_]+)_{1,3}(?=[\s.,;:!?)]|$)/g, '$1$2')
+		.replace(/\|/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+function extractDocsHeadings(source: string): string {
+	const matches = [...source.matchAll(/^#{2,4}\s+(.+)$/gm)];
+	return matches.map((match) => docsMarkdownToPlainText(match[1] ?? '')).join(' ');
+}
+
+const DOCS_EXCERPT_RADIUS = 120;
+
+function buildDocsExcerpt(content: string, terms: string[]): string {
+	const lowered = content.toLowerCase();
+	let position = -1;
+	for (const term of terms) {
+		const index = lowered.indexOf(term.toLowerCase());
+		if (index !== -1 && (position === -1 || index < position)) {
+			position = index;
+		}
+	}
+	if (position === -1) position = 0;
+
+	const start = Math.max(0, position - DOCS_EXCERPT_RADIUS);
+	const end = Math.min(content.length, position + DOCS_EXCERPT_RADIUS);
+	const prefix = start > 0 ? '…' : '';
+	const suffix = end < content.length ? '…' : '';
+	return `${prefix}${content.slice(start, end).trim()}${suffix}`;
+}
+
+/** Accepts `guide/sandboxes`, `/docs/guide/sandboxes/`, full website URLs, and `.md`/`.mdx` paths. */
+function normalizeDocsPath(input: string): string {
+	let value = input.trim();
+	if (/^https?:\/\//.test(value)) {
+		try {
+			value = new URL(value).pathname;
+		} catch {
+			// fall through with the raw value
+		}
+	}
+	return value
+		.replace(/^\.?\/+/, '')
+		.replace(/^docs\//, '')
+		.replace(/\/+$/, '')
+		.replace(/\.(md|mdx)$/, '')
+		.replace(/\/index$/, '');
+}
+
+function docsCommand(args: DocsArgs): void {
+	const root = resolveDocsRoot();
+	if (!root) {
+		console.error(
+			'[flue] Could not locate the bundled documentation. ' +
+				'Your @flue/cli installation may be incomplete — try reinstalling it.',
+		);
+		process.exit(1);
+	}
+	const pages = loadDocsPages(root);
+
+	if (args.action === 'list') {
+		process.stderr.write(
+			'Flue documentation\n\n' +
+				'  flue docs read <path>      Print a documentation page as markdown\n' +
+				'  flue docs search <query>   Search the documentation (JSON results)\n\n' +
+				`Pages (${pages.length}):\n\n`,
+		);
+		const width = Math.max(...pages.map((page) => page.path.length));
+		for (const page of pages) {
+			process.stdout.write(`${page.path.padEnd(width)}  ${page.title}\n`);
+		}
+		return;
+	}
+
+	if (args.action === 'read') {
+		const target = normalizeDocsPath(args.value);
+		const page = pages.find((candidate) => candidate.path === target);
+		if (!page) {
+			console.error(
+				`[flue] Unknown docs page: ${args.value}\n` +
+					'Run `flue docs` to list available pages, or `flue docs search <query>` to find one.',
+			);
+			process.exit(1);
+		}
+		let output = `# ${page.title}\n`;
+		if (page.description) output += `\n> ${page.description}\n`;
+		output += `\n${page.body.trim()}\n`;
+		process.stdout.write(output);
+		return;
+	}
+
+	const index = new MiniSearch({
+		idField: 'path',
+		fields: ['title', 'headings', 'description', 'content'],
+		storeFields: ['title', 'description', 'content'],
+		searchOptions: {
+			boost: { title: 4, headings: 3, description: 2 },
+			prefix: true,
+			fuzzy: 0.2,
+		},
+	});
+	index.addAll(
+		pages.map((page) => ({
+			path: page.path,
+			title: page.title,
+			description: page.description,
+			headings: extractDocsHeadings(page.body),
+			content: docsMarkdownToPlainText(page.body),
+		})),
+	);
+
+	const results = index
+		.search(args.value)
+		.slice(0, 8)
+		.map((result) => ({
+			path: result.id as string,
+			title: result.title as string,
+			description: (result.description as string) || undefined,
+			excerpt: buildDocsExcerpt((result.content as string) ?? '', result.terms),
+			score: Math.round(result.score * 100) / 100,
+		}));
+
+	process.stdout.write(`${JSON.stringify({ query: args.value, results }, null, 2)}\n`);
+	process.stderr.write('\nRead a page with: flue docs read <path>\n');
+}
+
 function printHumanInstructions(args: AddArgs) {
 	const cmd = args.category
 		? `flue add ${args.name} --category ${args.category}`
@@ -1767,6 +2056,8 @@ if (args.command === 'build') {
 	} else superviseDevCommand(args);
 } else if (args.command === 'add') {
 	addCommand(args);
+} else if (args.command === 'docs') {
+	docsCommand(args);
 } else if (args.command === 'init') {
 	initCommand(args);
 } else if (args.command === 'logs') {
