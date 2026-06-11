@@ -64,11 +64,44 @@ function sessionData(): SessionData {
 	return {
 		version: 5,
 		affinityKey: 'affinity-1',
-		entries: [],
-		leafId: null,
-		metadata: {},
+		entries: [
+			{
+				type: 'message',
+				id: 'entry-1',
+				parentId: null,
+				timestamp: '2026-06-03T00:00:00.000Z',
+				message: { role: 'user', content: 'Hello', timestamp: 0 },
+				source: 'prompt',
+			},
+			{
+				type: 'message',
+				id: 'entry-2',
+				parentId: 'entry-1',
+				timestamp: '2026-06-03T00:00:01.000Z',
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Hi' }],
+					api: 'openai-chat-completions' as never,
+					provider: 'test',
+					model: 'test-model',
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: 'stop',
+					timestamp: 1,
+				},
+				source: 'prompt',
+			},
+		],
+		leafId: 'entry-2',
+		metadata: { label: 'example' },
 		createdAt: '2026-06-03T00:00:00.000Z',
-		updatedAt: '2026-06-03T00:00:00.000Z',
+		updatedAt: '2026-06-03T00:00:01.000Z',
 	};
 }
 
@@ -116,10 +149,15 @@ export function defineStoreContractTests(
 				expect(await store.sessions.load('s1')).toEqual(sessionData());
 			});
 
-			it('overwrites existing session data', async () => {
+			it('replaces existing session entries when session data is overwritten', async () => {
 				const store = await create();
 				await store.sessions.save('s1', sessionData());
-				const updated = { ...sessionData(), updatedAt: '2026-06-04T00:00:00.000Z' };
+				const updated = {
+					...sessionData(),
+					entries: [sessionData().entries[0]!],
+					leafId: 'entry-1',
+					updatedAt: '2026-06-04T00:00:00.000Z',
+				};
 				await store.sessions.save('s1', updated);
 				expect(await store.sessions.load('s1')).toEqual(updated);
 			});

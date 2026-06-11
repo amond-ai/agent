@@ -41,7 +41,7 @@ describe('CloudflarePlugin', () => {
 		expect(entry).not.toContain('finishSessionDeletion');
 		expect(entry).toContain('const memoryWorkflowSessionStore = new InMemorySessionStore();');
 		expect(entry).toContain(
-			'const defaultStore = sql ? createSqlSessionStore(sql) : memoryWorkflowSessionStore;',
+			'const defaultStore = storage?.sql ? createSqlSessionStore(storage) : memoryWorkflowSessionStore;',
 		);
 		expect(entry).toContain('createDurableRunStore(doInstance.ctx.storage.sql)');
 		expect(entry).toContain(': memoryRunStore;');

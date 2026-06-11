@@ -13,9 +13,15 @@ interface DurableObjectStorage {
 	transactionSync?<T>(closure: () => T): T;
 }
 
-export function createSqlSessionStore(sql: SqlStorage): SessionStore {
+export function createSqlSessionStore(storage: DurableObjectStorage): SessionStore {
+	const sql = storage.sql;
+	const transactionSync = storage.transactionSync;
+	if (!sql || typeof transactionSync !== 'function') {
+		throw new Error('[flue] Cloudflare workflow session persistence requires Durable Object SQLite.');
+	}
 	ensureSessionTable(sql);
-	return new SqlSessionStore(sql);
+	const runTransaction = <T>(closure: () => T): T => transactionSync.call(storage, closure) as T;
+	return new SqlSessionStore(sql, runTransaction);
 }
 
 export function createSqlAgentExecutionStore(

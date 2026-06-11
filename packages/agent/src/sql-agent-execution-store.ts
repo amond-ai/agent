@@ -68,33 +68,94 @@ export function createSqlAgentExecutionStoreFromSql(
 	runTransaction: <T>(closure: () => T) => T,
 ): AgentExecutionStore {
 	return {
-		sessions: new SqlSessionStore(sql),
+		sessions: new SqlSessionStore(sql, runTransaction),
 		submissions: new AgentSubmissionStoreImpl(sql, runTransaction),
 	};
 }
 
 export class SqlSessionStore implements SessionStore {
-	constructor(private sql: SqlStorage) {}
+	constructor(
+		private sql: SqlStorage,
+		private transactionSync: <T>(closure: () => T) => T,
+	) {}
 
 	async save(id: string, data: SessionData): Promise<void> {
-		this.sql.exec(
-			'INSERT OR REPLACE INTO flue_sessions (id, data, updated_at) VALUES (?, ?, ?)',
-			id,
-			JSON.stringify(data),
-			Date.now(),
-		);
+		const { entries: sessionEntries, ...session } = data;
+		const entries = sessionEntries.map((entry, position) => ({
+			entry,
+			position,
+			data: JSON.stringify(entry),
+		}));
+		this.transactionSync(() => {
+			this.sql.exec(
+				`INSERT INTO flue_sessions (id, data) VALUES (?, ?)
+				 ON CONFLICT (id) DO UPDATE SET data = excluded.data`,
+				id,
+				JSON.stringify(session),
+			);
+			const existingRows = this.sql.exec(
+				'SELECT entry_id, position, data FROM flue_session_entries WHERE session_id = ?',
+				id,
+			).toArray();
+			const existing = new Map(existingRows.map((row) => [row.entry_id, row]));
+			const retained = new Set<string>();
+			for (const { entry, position, data: entryData } of entries) {
+				retained.add(entry.id);
+				const current = existing.get(entry.id);
+				if (current?.position === position && current.data === entryData) continue;
+				this.sql.exec(
+					`INSERT INTO flue_session_entries (session_id, entry_id, position, data)
+					 VALUES (?, ?, ?, ?)
+					 ON CONFLICT (session_id, entry_id) DO UPDATE SET
+					 position = excluded.position, data = excluded.data`,
+					id,
+					entry.id,
+					position,
+					entryData,
+				);
+			}
+			for (const row of existingRows) {
+				if (typeof row.entry_id === 'string' && !retained.has(row.entry_id)) {
+					this.sql.exec(
+						'DELETE FROM flue_session_entries WHERE session_id = ? AND entry_id = ?',
+						id,
+						row.entry_id,
+					);
+				}
+			}
+		});
 	}
 
 	async load(id: string): Promise<SessionData | null> {
-		const rows = this.sql.exec('SELECT data FROM flue_sessions WHERE id = ?', id).toArray();
-		const row = rows[0];
-		if (!row) return null;
-		if (typeof row.data !== 'string') throw new Error('[flue] Persisted session row is malformed.');
-		return JSON.parse(row.data) as SessionData;
+		return this.transactionSync(() => {
+			const rows = this.sql.exec('SELECT data FROM flue_sessions WHERE id = ?', id).toArray();
+			const row = rows[0];
+			if (!row) return null;
+			if (typeof row.data !== 'string') {
+				throw new Error('[flue] Persisted session row is malformed.');
+			}
+			const session = JSON.parse(row.data) as Omit<SessionData, 'entries'>;
+			const entryRows = this.sql.exec(
+				'SELECT data FROM flue_session_entries WHERE session_id = ? ORDER BY position ASC',
+				id,
+			).toArray();
+			return {
+				...session,
+				entries: entryRows.map((entryRow) => {
+					if (typeof entryRow.data !== 'string') {
+						throw new Error('[flue] Persisted session entry row is malformed.');
+					}
+					return JSON.parse(entryRow.data);
+				}),
+			};
+		});
 	}
 
 	async delete(id: string): Promise<void> {
-		this.sql.exec('DELETE FROM flue_sessions WHERE id = ?', id);
+		this.transactionSync(() => {
+			this.sql.exec('DELETE FROM flue_session_entries WHERE session_id = ?', id);
+			this.sql.exec('DELETE FROM flue_sessions WHERE id = ?', id);
+		});
 	}
 }
 
@@ -806,9 +867,21 @@ export function ensureSessionTable(sql: SqlStorage): void {
 	sql.exec(
 		`CREATE TABLE IF NOT EXISTS flue_sessions (
 		 id TEXT PRIMARY KEY,
-		 data TEXT NOT NULL,
-		 updated_at INTEGER NOT NULL
+		 data TEXT NOT NULL
 		)`,
+	);
+	sql.exec(
+		`CREATE TABLE IF NOT EXISTS flue_session_entries (
+		 session_id TEXT NOT NULL,
+		 entry_id TEXT NOT NULL,
+		 position INTEGER NOT NULL,
+		 data TEXT NOT NULL,
+		 PRIMARY KEY (session_id, entry_id)
+		)`,
+	);
+	sql.exec(
+		`CREATE INDEX IF NOT EXISTS flue_session_entries_session_position_idx
+		 ON flue_session_entries (session_id, position ASC)`,
 	);
 }
 

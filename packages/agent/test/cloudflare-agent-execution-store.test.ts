@@ -118,6 +118,7 @@ describe('createSqlAgentExecutionStore()', () => {
 			{ name: 'flue_agent_stream_chunks' },
 			{ name: 'flue_agent_submissions' },
 			{ name: 'flue_agent_turn_journals' },
+			{ name: 'flue_session_entries' },
 			{ name: 'flue_sessions' },
 			{ name: 'sqlite_sequence' },
 		]);
@@ -246,13 +247,24 @@ describe('createSqlAgentExecutionStore()', () => {
 });
 
 describe('createSqlSessionStore()', () => {
-	it('creates only flue_sessions when workflow-compatible snapshot persistence is initialized', () => {
-		const { db, sql } = makeFakeSql();
+	it('creates only normalized session tables when workflow persistence is initialized', () => {
+		const { db, sql, transactionSync } = makeFakeSql();
 
-		createSqlSessionStore(sql);
+		createSqlSessionStore({ sql, transactionSync });
 
 		expect(
 			db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name").all(),
-		).toEqual([{ name: 'flue_sessions' }]);
+		).toEqual([{ name: 'flue_session_entries' }, { name: 'flue_sessions' }]);
+		expect(
+			db.prepare("SELECT name FROM pragma_table_info('flue_sessions') ORDER BY cid").all(),
+		).toEqual([{ name: 'id' }, { name: 'data' }]);
+		expect(
+			db.prepare("SELECT name FROM pragma_table_info('flue_session_entries') ORDER BY cid").all(),
+		).toEqual([
+			{ name: 'session_id' },
+			{ name: 'entry_id' },
+			{ name: 'position' },
+			{ name: 'data' },
+		]);
 	});
 });
