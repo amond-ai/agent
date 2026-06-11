@@ -345,8 +345,8 @@ function createAgentContextForRequest(executionStore, id, payload, doInstance, r
 }
 
 function createWorkflowContextForRequest(id, runId, payload, doInstance, req, initialEventIndex, dispatchId) {
-  const sql = doInstance?.ctx?.storage?.sql;
-  const defaultStore = sql ? createSqlSessionStore(sql) : memoryWorkflowSessionStore;
+  const storage = doInstance?.ctx?.storage;
+  const defaultStore = storage?.sql ? createSqlSessionStore(storage) : memoryWorkflowSessionStore;
   return createContextForRequest(id, runId, payload, doInstance, req, defaultStore, initialEventIndex, dispatchId);
 }
 
