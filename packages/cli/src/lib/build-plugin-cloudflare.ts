@@ -357,8 +357,10 @@ function createRunStoreForRequest(doInstance) {
   return createCloudflareRunStore(records, doInstance?.env?.FLUE_REGISTRY);
 }
 
+// Falls back to the worker-level env so ambient callers (the listRuns()/
+// getRun() primitives, which have no request scope) reach the index too.
 function createRunIndexForRequest(reqEnv) {
-  return createCloudflareRunIndex(reqEnv?.FLUE_REGISTRY);
+  return createCloudflareRunIndex((reqEnv ?? env)?.FLUE_REGISTRY);
 }
 
 async function fetchAgent(binding, instanceId, request) {
@@ -543,7 +545,9 @@ configureFlueRuntime({
   },
   createRunIndexForRequest,
   routeRunRequest: async (request, reqEnv, target) => {
-    const binding = reqEnv?.[workflowIdentities[target.workflowName]?.bindingName];
+    // reqEnv is undefined for ambient callers (the getRun() primitive);
+    // fall back to the worker-level env.
+    const binding = (reqEnv ?? env)?.[workflowIdentities[target.workflowName]?.bindingName];
     if (!binding) return null;
     return fetchAgent(binding, target.runId, request);
   },
