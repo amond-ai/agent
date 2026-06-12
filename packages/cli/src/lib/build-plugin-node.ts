@@ -390,12 +390,22 @@ if (isLocalCliMode) {
     if (shuttingDown) return;
     shuttingDown = true;
     console.error('[flue] Received ' + signal + ', shutting down...');
+    // Backstop: force-exit if any shutdown step stalls past the coordinator's
+    // own drain timeout. unref() so the timer never keeps the process alive.
+    setTimeout(() => {
+      console.error('[flue] Shutdown timed out, exiting.');
+      process.exit(exitCode);
+    }, 60_000).unref();
     // 1. Drain active submissions (abort at turn boundary, wait with timeout).
     await agentCoordinator.shutdown();
     // 2. Close persistence adapter.
     if (persistenceAdapter.close) await persistenceAdapter.close();
-    // 3. Close HTTP server.
-    await new Promise((resolve) => server.close(resolve));
+    // 3. Close HTTP server. Destroy open connections (long-poll and SSE
+    // readers are held open indefinitely) so close() can settle.
+    await new Promise((resolve) => {
+      server.close(resolve);
+      server.closeAllConnections();
+    });
     console.error('[flue] Stopped.');
     process.exit(exitCode);
   }
