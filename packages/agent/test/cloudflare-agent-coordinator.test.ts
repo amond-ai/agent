@@ -387,7 +387,7 @@ describe('createCloudflareAgentRuntime()', () => {
 		await runtime.onStart(instance, () => {});
 
 		expect(events).toEqual(['record-terminal', 'settle']);
-		expect(payloads).toEqual([directInput(), directInput().payload]);
+		expect(payloads).toEqual([directInput().payload, directInput().payload]);
 		expect(await executionStore.submissions.getSubmission('direct-1')).toMatchObject({ status: 'settled' });
 	});
 
@@ -470,7 +470,7 @@ describe('createCloudflareAgentRuntime()', () => {
 		expect((await executionStore.submissions.getSubmission('direct-1'))?.attemptId).not.toBe(failedAttempt);
 	});
 
-	it('uses the public dispatch input as processing context payload without internal envelope fields', async () => {
+	it('uses the public dispatch input as context payload without internal envelope fields when processing', async () => {
 		const { storage } = makeFakeSql();
 		const payloads: unknown[] = [];
 		let resolveProcessed!: () => void;
@@ -513,7 +513,7 @@ describe('createCloudflareAgentRuntime()', () => {
 		expect(payloads).toEqual([dispatchInput()]);
 	});
 
-	it('uses the full dispatch input when constructing detached recovery context', async () => {
+	it('uses the public dispatch input as context payload without internal envelope fields when recovering', async () => {
 		const { storage } = makeFakeSql();
 		const recovery = makeRecoveryContext({ inspection: 'completed' });
 		const payloads: unknown[] = [];

@@ -153,14 +153,9 @@ export function createAgentSubmissionSessionHandler(
 	};
 }
 
-/** Payload for processing and terminal contexts: the user's direct payload or the dispatch input. */
-function agentSubmissionProcessingPayload(input: AgentSubmissionInput): unknown {
+/** Context payload for all submission contexts: the user's direct payload or the public dispatch input. */
+function agentSubmissionPayload(input: AgentSubmissionInput): unknown {
 	return input.kind === 'dispatch' ? agentSubmissionDispatchInput(input) : input.payload;
-}
-
-/** Payload for read-only contexts (inspection, repair): the full submission envelope. */
-function agentSubmissionReadPayload(input: AgentSubmissionInput): unknown {
-	return input.kind === 'dispatch' ? agentSubmissionDispatchInput(input) : input;
 }
 
 function agentSubmissionDispatchId(input: AgentSubmissionInput): string | undefined {
@@ -322,9 +317,9 @@ export async function reconcileInterruptedSubmission(
 	}
 
 	// Inspect canonical session state.
-	const readPayload = agentSubmissionReadPayload(input);
+	const payload = agentSubmissionPayload(input);
 	const dispatchId = agentSubmissionDispatchId(input);
-	const ctx = createContext(readPayload, dispatchId);
+	const ctx = createContext(payload, dispatchId);
 	const state = await createAgentSubmissionSessionHandler(agent, input, (s) => s.inspectSubmissionInput(input))(ctx);
 
 	// Check turn journal for pre-commit interruption that can be retried.
@@ -351,7 +346,7 @@ export async function reconcileInterruptedSubmission(
 		journal.streamConsumedAt === undefined
 	) {
 		const streamKey = journal.streamKey;
-		const recoveryCtx = createContext(readPayload, dispatchId);
+		const recoveryCtx = createContext(payload, dispatchId);
 		const recovered = (await createAgentSubmissionSessionHandler(
 			agent,
 			input,
@@ -386,7 +381,7 @@ export async function reconcileInterruptedSubmission(
 		journal.committed === false &&
 		journal.toolRequest
 	) {
-		const repairCtx = createContext(readPayload, dispatchId);
+		const repairCtx = createContext(payload, dispatchId);
 		const repairedLeafId = (await createAgentSubmissionSessionHandler(
 			agent,
 			input,
@@ -531,7 +526,7 @@ export async function processSubmission(opts: ProcessSubmissionOptions): Promise
 	if (persisted?.status !== 'running' || persisted.attemptId !== attempt.attemptId) return;
 
 	const agent = opts.resolveAgent(input.agent);
-	const ctx = opts.createContext(agentSubmissionProcessingPayload(input), agentSubmissionDispatchId(input));
+	const ctx = opts.createContext(agentSubmissionPayload(input), agentSubmissionDispatchId(input));
 
 	if (submission.kind === 'direct') {
 		ctx.setEventCallback(
@@ -613,9 +608,9 @@ async function failInterruptedSubmission(
 	interruptedTools?: ReadonlyArray<{ readonly name: string; readonly id: string }>,
 ): Promise<boolean> {
 	const { input } = submission;
-	const processingPayload = agentSubmissionProcessingPayload(input);
+	const payload = agentSubmissionPayload(input);
 	const dispatchId = agentSubmissionDispatchId(input);
-	const ctx = createContext(processingPayload, dispatchId);
+	const ctx = createContext(payload, dispatchId);
 	// The terminal message is a best-effort diagnostic recorded in the
 	// session. If it fails (e.g., disk full, SQLite corruption), proceed
 	// to settle the submission anyway — a persistent save failure must
