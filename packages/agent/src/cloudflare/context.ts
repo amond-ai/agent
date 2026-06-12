@@ -37,7 +37,7 @@ export function getCloudflareContext(): CloudflareContext {
 	const ctx = contextStorage.getStore();
 	if (!ctx) {
 		throw new Error(
-			'[flue:cloudflare] Not running in a Cloudflare context. ' +
+			'[flue] Not running in a Cloudflare context. ' +
 				'This function can only be called inside a Cloudflare Worker or Durable Object.',
 		);
 	}
@@ -48,7 +48,7 @@ export function getDurableObjectIdentity(): FlueDurableObjectIdentity {
 	const ctx = getCloudflareContext();
 	if (!ctx.durableObjectIdentity) {
 		throw new Error(
-			'[flue:cloudflare] Durable Object identity is not available in this Cloudflare context.',
+			'[flue] Durable Object identity is not available in this Cloudflare context.',
 		);
 	}
 	return ctx.durableObjectIdentity;

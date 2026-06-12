@@ -49,7 +49,7 @@ describe('Cloudflare context', () => {
 
 	it('rejects context access when code runs outside a Cloudflare context', () => {
 		expect(() => getCloudflareContext()).toThrow(
-			'[flue:cloudflare] Not running in a Cloudflare context. This function can only be called inside a Cloudflare Worker or Durable Object.',
+			'[flue] Not running in a Cloudflare context. This function can only be called inside a Cloudflare Worker or Durable Object.',
 		);
 	});
 
@@ -78,7 +78,7 @@ describe('Cloudflare context', () => {
 		};
 
 		expect(() => runWithCloudflareContext(context, () => getDurableObjectIdentity())).toThrow(
-			'[flue:cloudflare] Durable Object identity is not available in this Cloudflare context.',
+			'[flue] Durable Object identity is not available in this Cloudflare context.',
 		);
 	});
 });
