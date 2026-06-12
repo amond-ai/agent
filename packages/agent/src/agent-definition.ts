@@ -9,25 +9,6 @@ import type {
 	ToolDefinition,
 } from './types.ts';
 
-const AGENT_PROFILE_FIELDS = new Set([
-	'name',
-	'description',
-	'model',
-	'instructions',
-	'skills',
-	'tools',
-	'subagents',
-	'thinkingLevel',
-	'compaction',
-	'durability',
-]);
-
-// `name` is profile-only: a created agent is addressed by its module filename,
-// so a top-level name on the runtime config would have nothing to control.
-const AGENT_RUNTIME_FIELDS = new Set(
-	[...AGENT_PROFILE_FIELDS, 'profile', 'cwd', 'sandbox'].filter((field) => field !== 'name'),
-);
-
 const VALID_THINKING_LEVELS = {
 	off: true,
 	minimal: true,
@@ -37,18 +18,32 @@ const VALID_THINKING_LEVELS = {
 	xhigh: true,
 } as const satisfies Record<ThinkingLevel, true>;
 
-const AgentProfileSchema = v.looseObject({
-	name: v.optional(v.string()),
-	description: v.optional(v.string()),
-	model: v.optional(v.union([v.string(), v.literal(false)])),
-	instructions: v.optional(v.string()),
-	skills: v.optional(v.array(v.unknown())),
-	tools: v.optional(v.array(v.unknown())),
-	subagents: v.optional(v.array(v.unknown())),
-	thinkingLevel: v.optional(v.string()),
-	compaction: v.optional(v.union([v.literal(false), v.looseObject({})])),
-	durability: v.optional(v.looseObject({})),
-});
+const AgentProfileSchema = v.strictObject(
+	{
+		name: v.optional(v.string()),
+		description: v.optional(v.string()),
+		model: v.optional(v.union([v.string(), v.literal(false)])),
+		instructions: v.optional(v.string()),
+		skills: v.optional(v.array(v.unknown())),
+		tools: v.optional(v.array(v.unknown())),
+		subagents: v.optional(v.array(v.unknown())),
+		thinkingLevel: v.optional(v.string()),
+		compaction: v.optional(v.union([v.literal(false), v.looseObject({})])),
+		durability: v.optional(v.looseObject({})),
+	},
+	(issue) =>
+		issue.expected === 'never'
+			? `received unknown agent profile field ${issue.received}`
+			: issue.message,
+);
+
+// `name` is profile-only: a created agent is addressed by its module filename,
+// so a top-level name on the runtime config would have nothing to control.
+const AGENT_RUNTIME_FIELDS = new Set(
+	[...Object.keys(AgentProfileSchema.entries), 'profile', 'cwd', 'sandbox'].filter(
+		(field) => field !== 'name',
+	),
+);
 
 /**
  * Validates and returns a reusable agent profile. Use profiles as the baseline
@@ -168,7 +163,6 @@ function assertAgentProfile(
 	}
 	activeDefinitions.add(source);
 
-	assertKnownFields(definition, label);
 	if (definition.name !== undefined) assertAgentName(definition.name, `${label} name`);
 	if (definition.description !== undefined)
 		assertNonEmptyString(definition.description, `${label} description`);
@@ -183,14 +177,6 @@ function assertAgentProfile(
 	assertUniqueNames(definition.subagents, `${label} subagents`, 'subagent');
 
 	activeDefinitions.delete(source);
-}
-
-function assertKnownFields(definition: AgentProfile, label: string): void {
-	for (const key of Object.keys(definition)) {
-		if (!AGENT_PROFILE_FIELDS.has(key)) {
-			throw new Error(`[flue] ${label} received unknown agent profile field "${key}".`);
-		}
-	}
 }
 
 function assertThinkingLevel(value: ThinkingLevel | undefined, label: string): void {
