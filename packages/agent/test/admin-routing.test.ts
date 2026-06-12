@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { InMemoryRunRegistry } from '../src/node/run-registry.ts';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
 import { admin } from '../src/runtime/admin-app.ts';
 import { configureFlueRuntime, resetFlueRuntimeForTests } from '../src/runtime/flue-app.ts';
@@ -119,21 +118,21 @@ describe('admin()', () => {
 	});
 
 	it('lists workflow run pointers when the mounted admin app receives a runs request', async () => {
-		const runRegistry = new InMemoryRunRegistry();
-		await runRegistry.recordRunStart({
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: { report: 'weekly' },
 		});
-		await runRegistry.recordRunEnd({
+		await runStore.endRun({
 			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
 			endedAt: '2026-06-01T10:05:00.000Z',
 			durationMs: 300_000,
 			isError: false,
+			result: { delivered: true },
 		});
-		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runRegistry });
+		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runStore });
 		const app = new Hono();
 		app.route('/inspection', admin());
 
@@ -156,9 +155,9 @@ describe('admin()', () => {
 	});
 
 	it('forwards cursor limit status and workflow filters when the mounted admin app lists runs', async () => {
-		const runRegistry = new InMemoryRunRegistry();
-		const listRuns = vi.spyOn(runRegistry, 'listRuns');
-		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runRegistry });
+		const runStore = new InMemoryRunStore();
+		const listRuns = vi.spyOn(runStore, 'listRuns');
+		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runStore });
 		const app = new Hono();
 		app.route('/inspection', admin());
 
@@ -180,20 +179,6 @@ describe('admin()', () => {
 	});
 
 	it('resolves a workflow run record when the mounted admin app receives a run detail request', async () => {
-		const runRegistry = new InMemoryRunRegistry();
-		await runRegistry.recordRunStart({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-		await runRegistry.recordRunEnd({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: false,
-		});
 		const runStore = new InMemoryRunStore();
 		await runStore.createRun({
 			runId: 'run_01DAILYREPORT',
@@ -208,7 +193,7 @@ describe('admin()', () => {
 			isError: false,
 			result: { delivered: true },
 		});
-		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runRegistry, runStore });
+		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runStore });
 		const app = new Hono();
 		app.route('/inspection', admin());
 
@@ -231,11 +216,12 @@ describe('admin()', () => {
 	});
 
 	it('forwards Cloudflare admin run detail requests through the internal metadata path', async () => {
-		const runRegistry = new InMemoryRunRegistry();
-		await runRegistry.recordRunStart({
+		const runIndex = new InMemoryRunStore();
+		await runIndex.createRun({
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
 		});
 		const routeRunRequest = vi.fn(async (request: Request) => {
 			expect(new URL(request.url).pathname).toBe('/__flue/internal/run-metadata');
@@ -244,7 +230,7 @@ describe('admin()', () => {
 		configureFlueRuntime({
 			target: 'cloudflare',
 			manifest: { agents: [] },
-			createRunRegistryForRequest: () => runRegistry,
+			createRunIndexForRequest: () => runIndex,
 			routeRunRequest,
 		});
 		const app = new Hono();
@@ -259,7 +245,7 @@ describe('admin()', () => {
 		expect(routeRunRequest).toHaveBeenCalledOnce();
 	});
 
-	it('rejects run listing when the runtime has no run registry', async () => {
+	it('rejects run listing when the runtime has no run store', async () => {
 		configureFlueRuntime({ target: 'node', manifest: { agents: [] } });
 		const app = new Hono();
 		app.route('/inspection', admin());
@@ -269,15 +255,15 @@ describe('admin()', () => {
 		expect(response.status).toBe(501);
 		expect(await response.json()).toEqual({
 			error: {
-				type: 'run_registry_unavailable',
-				message: 'Run lookup is not available in this runtime.',
+				type: 'run_store_unavailable',
+				message: 'Run history is not available in this runtime.',
 				details:
-					'This endpoint requires the generated runtime to be configured with a run registry.',
+					'This endpoint requires the generated runtime to be configured with a run store.',
 			},
 		});
 	});
 
-	it('rejects run detail lookup when the runtime has no run registry', async () => {
+	it('rejects run detail lookup when the runtime has no run store', async () => {
 		configureFlueRuntime({ target: 'node', manifest: { agents: [] } });
 		const app = new Hono();
 		app.route('/inspection', admin());
@@ -289,10 +275,10 @@ describe('admin()', () => {
 		expect(response.status).toBe(501);
 		expect(await response.json()).toEqual({
 			error: {
-				type: 'run_registry_unavailable',
-				message: 'Run lookup is not available in this runtime.',
+				type: 'run_store_unavailable',
+				message: 'Run history is not available in this runtime.',
 				details:
-					'This endpoint requires the generated runtime to be configured with a run registry.',
+					'This endpoint requires the generated runtime to be configured with a run store.',
 			},
 		});
 	});

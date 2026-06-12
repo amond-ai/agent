@@ -17,10 +17,10 @@ import type { ModelConfig, ProviderConfiguration } from './types.ts';
 
 export type { FlueContextConfig, FlueContextInternal } from './client.ts';
 export { createFlueContext } from './client.ts';
-// `FlueRegistry` (Durable Object class) and `createCloudflareRunRegistry`
-// (registry client) live in the `@flue/runtime/cloudflare` subpath because
-// they pull in `cloudflare:workers`, a virtual module Node can't resolve.
-// The generated CF entry imports them from there directly.
+// `FlueRegistry` (Durable Object class) and the composite Cloudflare run
+// store/index factories live in the `@flue/runtime/cloudflare` subpath
+// because that subpath pulls in `cloudflare:workers`, a virtual module Node
+// can't resolve. The generated CF entry imports them from there directly.
 export {
 	CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH,
 	createCloudflareAgentRuntime,
@@ -81,17 +81,16 @@ export { handleRunRouteRequest } from './runtime/flue-app.ts';
 export { handleStreamHead, handleStreamRead } from './runtime/handle-stream-routes.ts';
 export { generateWorkflowRunId } from './runtime/ids.ts';
 export { hasRegisteredProvider } from './runtime/providers.ts';
+export type { EventStreamStore } from './runtime/event-stream-store.ts';
+export { SqliteEventStreamStore } from './runtime/event-stream-store.ts';
 export type {
 	ListRunsOpts,
 	ListRunsResponse,
-	RecordRunEndInput,
-	RecordRunStartInput,
 	RunPointer,
-	RunRegistry,
-} from './runtime/run-registry.ts';
-export type { EventStreamStore } from './runtime/event-stream-store.ts';
-export { SqliteEventStreamStore } from './runtime/event-stream-store.ts';
-export type { RunRecord, RunStatus, RunStore } from './runtime/run-store.ts';
+	RunRecord,
+	RunStatus,
+	RunStore,
+} from './runtime/run-store.ts';
 
 export { bashFactoryToSessionEnv } from './sandbox.ts';
 export type { DirectAgentSubmissionInput, DispatchAgentSubmissionInput } from './runtime/agent-submissions.ts';

@@ -62,7 +62,8 @@ describe('package entrypoints', () => {
 
 		expect(cloudflare).toMatchObject({
 			cfSandboxToSessionEnv: expect.any(Function),
-			createCloudflareRunRegistry: expect.any(Function),
+			createCloudflareRunIndex: expect.any(Function),
+			createCloudflareRunStore: expect.any(Function),
 			extend: expect.any(Function),
 			FlueRegistry: expect.any(Function),
 			getCloudflareAIBindingApiProvider: expect.any(Function),

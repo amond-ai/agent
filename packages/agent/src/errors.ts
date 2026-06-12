@@ -364,18 +364,6 @@ export class RunStoreUnavailableError extends FlueHttpError {
 	}
 }
 
-export class RunRegistryUnavailableError extends FlueHttpError {
-	constructor() {
-		super({
-			type: 'run_registry_unavailable',
-			message: 'Run lookup is not available in this runtime.',
-			details: 'This endpoint requires the generated runtime to be configured with a run registry.',
-			dev: '',
-			status: 501,
-		});
-	}
-}
-
 export class InvalidRequestError extends FlueHttpError {
 	constructor({ reason }: { reason: string }) {
 		super({

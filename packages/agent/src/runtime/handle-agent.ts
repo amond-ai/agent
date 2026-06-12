@@ -19,7 +19,6 @@ import type { DispatchInput } from './dispatch-queue.ts';
 import { agentStreamPath, parseOffset, runStreamPath, type EventStreamStore } from './event-stream-store.ts';
 
 import { generateWorkflowRunId } from './ids.ts';
-import type { RunRegistry } from './run-registry.ts';
 import { isEphemeralRunEvent, type RunStore } from './run-store.ts';
 import { DirectAgentPayloadSchema } from './schemas.ts';
 
@@ -107,7 +106,6 @@ export interface HandleWorkflowOptions {
 	createContext: CreateContextFn;
 	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 	runStore?: RunStore;
-	runRegistry?: RunRegistry;
 	eventStreamStore: EventStreamStore;
 	runId?: string;
 }
@@ -159,7 +157,6 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 		handler,
 		createContext,
 		runStore,
-		runRegistry,
 		eventStreamStore,
 	} = opts;
 	const startWorkflowAdmission = opts.startWorkflowAdmission ?? defaultStartWorkflowAdmission;
@@ -179,7 +176,6 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 			createContext,
 			startWorkflowAdmission,
 			runStore,
-			runRegistry,
 			eventStreamStore,
 		});
 
@@ -204,7 +200,6 @@ export interface InvokeWorkflowAttachedOptions {
 	createContext: CreateContextFn;
 	onEvent?: FlueEventCallback;
 	runStore?: RunStore;
-	runRegistry?: RunRegistry;
 	eventStreamStore: EventStreamStore;
 }
 
@@ -227,7 +222,6 @@ export interface FailRecoveredRunOptions {
 	createContext: CreateContextFn;
 	error: unknown;
 	runStore?: RunStore;
-	runRegistry?: RunRegistry;
 	eventStreamStore: EventStreamStore;
 }
 
@@ -241,7 +235,6 @@ interface WorkflowAdmissionOptions {
 	createContext: CreateContextFn;
 	startWorkflowAdmission: StartWorkflowAdmissionFn;
 	runStore?: RunStore;
-	runRegistry?: RunRegistry;
 	eventStreamStore: EventStreamStore;
 }
 
@@ -267,7 +260,6 @@ async function prepareWorkflowExecution(
 		createContext,
 		startWorkflowAdmission,
 		runStore,
-		runRegistry,
 		eventStreamStore,
 	} = opts;
 	if (!runStore) throw new RunStoreUnavailableError();
@@ -279,7 +271,6 @@ async function prepareWorkflowExecution(
 		request,
 		createContext,
 		runStore,
-		runRegistry,
 		eventStreamStore,
 		requirePersistedAdmission: true,
 	});
@@ -349,14 +340,6 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 		await reconcileTerminalRun(opts, run, terminalEvent);
 		return;
 	}
-	if (run)
-		await safeRegistry('recordRunStart(recovery)', () =>
-			opts.runRegistry?.recordRunStart({
-				runId: opts.runId,
-				workflowName: run.workflowName,
-				startedAt: run.startedAt,
-			}),
-		);
 	// Derive the next event index from the stream head, not the event count —
 	// the count undercounts when the stream has gaps (a dropped append or a
 	// crash mid-append), which would mint duplicate eventIndex values and
@@ -367,6 +350,18 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 	const startedAtMs = Date.parse(startedAt);
 	const startEvent = events.find((event) => event.type === 'run_start');
 	const payload = run?.payload !== undefined ? run.payload : startEvent?.payload;
+	// The original workflow may have crashed before its admission write
+	// landed. Idempotent first-writer-wins createRun makes the recovered run
+	// visible so the terminal endRun below has a record to finalize.
+	if (!run)
+		await safeRunStore('createRun(recovery)', () =>
+			opts.runStore?.createRun({
+				runId: opts.runId,
+				workflowName: opts.workflowName,
+				startedAt,
+				payload,
+			}),
+		);
 	// Ensure the event stream exists — the original workflow may have crashed
 	// before createWorkflowRunLifecycle called createStream. Idempotent.
 	await opts.eventStreamStore.createStream(runStreamPath(opts.runId));
@@ -411,6 +406,19 @@ async function reconcileTerminalRun(
 	const error = terminalEvent?.error !== undefined ? terminalEvent.error : run?.error;
 	const endedAt = terminalEvent?.timestamp ?? run?.endedAt ?? new Date().toISOString();
 	const durationMs = terminalEvent?.durationMs ?? run?.durationMs ?? 0;
+	if (terminalEvent && !run) {
+		// Stream holds a terminal run_end but the record is missing — the
+		// original admission write was lost. Idempotent createRun, then the
+		// terminal endRun below repairs the record in cursor-safe order.
+		await safeRunStore('createRun(recovery)', () =>
+			opts.runStore?.createRun({
+				runId: opts.runId,
+				workflowName: opts.workflowName,
+				startedAt: endedAt,
+				payload: undefined,
+			}),
+		);
+	}
 	if (terminalEvent && (!run || run.status === 'active')) {
 		await opts.runStore?.endRun({
 			runId: opts.runId,
@@ -425,23 +433,6 @@ async function reconcileTerminalRun(
 	// between appendEvent(run_end) and closeStream() can leave the stream
 	// permanently open without this repair.
 	await opts.eventStreamStore.closeStream(runStreamPath(opts.runId));
-	await safeRegistry('recordRunStart(recovery)', () =>
-		opts.runRegistry?.recordRunStart({
-			runId: opts.runId,
-			workflowName: run?.workflowName ?? opts.workflowName,
-			startedAt: run?.startedAt ?? endedAt,
-		}),
-	);
-	await safeRegistry('recordRunEnd(recovery)', () =>
-		opts.runRegistry?.recordRunEnd({
-			runId: opts.runId,
-			workflowName: run?.workflowName ?? opts.workflowName,
-			startedAt: run?.startedAt ?? endedAt,
-			endedAt,
-			durationMs,
-			isError,
-		}),
-	);
 }
 
 function findTerminalRunEvent(
@@ -491,7 +482,6 @@ export async function invokeWorkflowAttached(
 		request: opts.request,
 		createContext: opts.createContext,
 		runStore: opts.runStore,
-		runRegistry: opts.runRegistry,
 		eventStreamStore: opts.eventStreamStore,
 	});
 	const { ctx } = lifecycle;
@@ -518,7 +508,6 @@ interface WorkflowRunLifecycleOptions {
 	request: Request;
 	createContext: CreateContextFn;
 	runStore?: RunStore;
-	runRegistry?: RunRegistry;
 	eventStreamStore: EventStreamStore;
 	requirePersistedAdmission?: boolean;
 }
@@ -537,18 +526,16 @@ async function createWorkflowRunLifecycle(
 	const ctx = options.createContext(options.id, options.runId, options.payload, options.request);
 	const runStore = options.runStore;
 	const workflowName = options.workflowName;
-	let didCreateRun = false;
 	try {
-		didCreateRun = runStore
-			? await persistRunAdmission('createRun', options.requirePersistedAdmission === true, () =>
-					runStore.createRun({
-						runId: options.runId,
-						workflowName,
-						startedAt,
-						payload: options.payload,
-					}),
-				)
-			: false;
+		if (runStore)
+			await persistRunAdmission('createRun', options.requirePersistedAdmission === true, () =>
+				runStore.createRun({
+					runId: options.runId,
+					workflowName,
+					startedAt,
+					payload: options.payload,
+				}),
+			);
 	} catch (error) {
 		console.error(
 			'[flue] Workflow admission error:',
@@ -562,14 +549,6 @@ async function createWorkflowRunLifecycle(
 		);
 		throw error;
 	}
-	if (didCreateRun)
-		await safeRegistry('recordRunStart', () =>
-			options.runRegistry?.recordRunStart({
-				runId: options.runId,
-				workflowName,
-				startedAt,
-			}),
-		);
 	// Create the durable event stream for this workflow run.
 	await options.eventStreamStore.createStream(runStreamPath(options.runId));
 	return { ...options, ctx, startedAt, startedAtMs };
@@ -626,7 +605,7 @@ function emitRunResume(lifecycle: WorkflowRunLifecycle): void {
  * Emit `run_end` and finalize the run.
  *
  * Terminal ordering: append `run_end` to the event stream store and close it,
- * then persist to the run store and record in the registry.
+ * then persist the terminal record to the run store.
  */
 async function emitRunEnd(
 	lifecycle: WorkflowRunLifecycle,
@@ -639,7 +618,7 @@ async function emitRunEnd(
 	const error = input.isError ? serializeError(input.error) : undefined;
 	const normalizedResult = result === undefined ? null : result;
 
-	const { runStore, runRegistry, eventStreamStore, runId } = lifecycle;
+	const { runStore, eventStreamStore, runId } = lifecycle;
 
 	// Decorate through the shared event path so eventIndex/timestamp stay continuous.
 	const decorated = lifecycle.ctx.emitEvent({
@@ -653,37 +632,23 @@ async function emitRunEnd(
 
 	// Append run_end to the durable event stream, then close it.
 	// Each operation is individually guarded so a store failure cannot
-	// prevent RunStore/RunRegistry finalization below.
+	// prevent RunStore finalization below.
 	try { await eventStreamStore.appendEvent(runStreamPath(runId), decorated); }
 	catch (e) { console.error('[flue:event-stream] appendEvent(run_end) failed:', e); }
 	try { await eventStreamStore.closeStream(runStreamPath(runId)); }
 	catch (e) { console.error('[flue:event-stream] closeStream failed:', e); }
 
-	const didEndRun = runStore
-		? await safeRunStore('endRun', () =>
-				runStore.endRun({
-					runId,
-					endedAt,
-					isError: input.isError,
-					durationMs,
-					result: input.isError ? result : normalizedResult,
-					error,
-				}),
-			)
-		: false;
-
-	if (didEndRun)
-		await safeRegistry('recordRunEnd', () =>
-			runRegistry?.recordRunEnd({
+	if (runStore)
+		await safeRunStore('endRun', () =>
+			runStore.endRun({
 				runId,
-				workflowName: lifecycle.workflowName,
-				startedAt: lifecycle.startedAt,
 				endedAt,
-				durationMs,
 				isError: input.isError,
+				durationMs,
+				result: input.isError ? result : normalizedResult,
+				error,
 			}),
 		);
-
 }
 
 const EPHEMERAL_FLUSH_INTERVAL_MS = 3_000;
@@ -784,14 +749,6 @@ async function persistRunAdmission(
 
 async function safeRunStore(label: string, fn: () => Promise<void> | undefined): Promise<boolean> {
 	return persistRunAdmission(label, false, fn);
-}
-
-async function safeRegistry(label: string, fn: () => Promise<void> | undefined): Promise<void> {
-	try {
-		await fn();
-	} catch (error) {
-		console.error(`[flue:run-registry] ${label} failed:`, error);
-	}
 }
 
 function serializeError(error: unknown): unknown {

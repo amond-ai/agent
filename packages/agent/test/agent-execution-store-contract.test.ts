@@ -172,17 +172,11 @@ describe('sqlite() PersistenceAdapter', () => {
 
 		adapter.migrate?.();
 		const runStore1 = adapter.connectRunStore();
-		const runRegistry1 = adapter.connectRunRegistry();
 		await runStore1.createRun({
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-03T00:00:00.000Z',
 			payload: { day: 'wednesday' },
-		});
-		await runRegistry1.recordRunStart({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-03T00:00:00.000Z',
 		});
 		await runStore1.endRun({
 			runId: 'run_01DAILYREPORT',
@@ -191,19 +185,10 @@ describe('sqlite() PersistenceAdapter', () => {
 			durationMs: 1000,
 			result: { report: 'done' },
 		});
-		await runRegistry1.recordRunEnd({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-03T00:00:00.000Z',
-			endedAt: '2026-06-03T00:00:01.000Z',
-			durationMs: 1000,
-			isError: false,
-		});
 		adapter.close?.();
 
 		adapter.migrate?.();
 		const runStore2 = adapter.connectRunStore();
-		const runRegistry2 = adapter.connectRunRegistry();
 		expect(await runStore2.getRun('run_01DAILYREPORT')).toMatchObject({
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
@@ -211,12 +196,12 @@ describe('sqlite() PersistenceAdapter', () => {
 			payload: { day: 'wednesday' },
 			result: { report: 'done' },
 		});
-		expect(await runRegistry2.lookupRun('run_01DAILYREPORT')).toMatchObject({
+		expect(await runStore2.lookupRun('run_01DAILYREPORT')).toMatchObject({
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			status: 'completed',
 		});
-		const listed = await runRegistry2.listRuns();
+		const listed = await runStore2.listRuns();
 		expect(listed.runs).toHaveLength(1);
 		expect(listed.runs[0]).toMatchObject({
 			runId: 'run_01DAILYREPORT',

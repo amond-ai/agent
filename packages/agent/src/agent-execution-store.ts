@@ -9,7 +9,6 @@
 
 import type { AgentSubmissionInput, DirectAgentSubmissionInput } from './runtime/agent-submissions.ts';
 import type { DispatchInput } from './runtime/dispatch-queue.ts';
-import type { RunRegistry } from './runtime/run-registry.ts';
 import type { RunStore } from './runtime/run-store.ts';
 import type { SessionStore } from './types.ts';
 
@@ -207,10 +206,8 @@ export interface AgentExecutionStore {
 export interface PersistenceAdapter {
 	/** Open the database connection and return the execution store. */
 	connect(): AgentExecutionStore;
-	/** Return a {@link RunStore} for workflow run data and events. */
+	/** Return a {@link RunStore} for workflow run records, lookup, and listing. */
 	connectRunStore(): RunStore;
-	/** Return a {@link RunRegistry} for workflow run indexing and listing. */
-	connectRunRegistry(): RunRegistry;
 	/** Return an {@link EventStreamStore} for durable event stream persistence. */
 	connectEventStreamStore(): import('./runtime/event-stream-store.ts').EventStreamStore;
 	/**

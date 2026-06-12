@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFlueContext } from '../src/client.ts';
-import { InMemoryRunRegistry } from '../src/node/run-registry.ts';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
 import { MAX_IMAGE_DATA_LENGTH } from '../src/persisted-images.ts';
 import { agentStreamPath } from '../src/runtime/event-stream-store.ts';
@@ -392,18 +391,19 @@ describe('flue()', () => {
 	});
 
 	it('applies workflow middleware to run stream reads', async () => {
-		const runRegistry = new InMemoryRunRegistry();
-		await runRegistry.recordRunStart({
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
 		});
 		const store = createTestEventStreamStore();
 		await store.createStream('runs/run_01DAILYREPORT');
 		configureFlueRuntime({
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
-			runRegistry,
+			runStore,
 			eventStreamStore: store,
 			workflowRouteMiddleware: {
 				'daily-report': async (c) => c.json({ blocked: true }, 401),

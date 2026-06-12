@@ -17,5 +17,6 @@ export {
 } from './context.ts';
 export type { CloudflareGatewayOptions } from './gateway.ts';
 export { FlueRegistry } from './registry-do.ts';
-export { createCloudflareRunRegistry } from './run-registry.ts';
+export type { CloudflareRunIndex } from './run-store.ts';
+export { createCloudflareRunIndex, createCloudflareRunStore } from './run-store.ts';
 export { getCloudflareAIBindingApiProvider } from './workers-ai-provider.ts';

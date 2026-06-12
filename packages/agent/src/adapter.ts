@@ -68,11 +68,19 @@ export { createSessionStorageKey } from './session-identity.ts';
 export { assertSupportedFlueSchemaVersion, FLUE_SCHEMA_VERSION } from './schema-version.ts';
 export { PersistedSchemaVersionError } from './errors.ts';
 
-// ─── Run store and registry types ───────────────────────────────────────────
+// ─── Run store types ─────────────────────────────────────────────────────────
 
-export type { RunRegistry, RunPointer, ListRunsOpts, ListRunsResponse, RecordRunStartInput, RecordRunEndInput } from './runtime/run-registry.ts';
-export { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, encodeRunCursor, decodeRunCursor } from './runtime/run-registry.ts';
-export type { RunStore, RunRecord, RunStatus, CreateRunInput, EndRunInput } from './runtime/run-store.ts';
+export type {
+	CreateRunInput,
+	EndRunInput,
+	ListRunsOpts,
+	ListRunsResponse,
+	RunPointer,
+	RunRecord,
+	RunStatus,
+	RunStore,
+} from './runtime/run-store.ts';
+export { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, encodeRunCursor, decodeRunCursor } from './runtime/run-store.ts';
 
 // ─── Event stream store ─────────────────────────────────────────────────────
 

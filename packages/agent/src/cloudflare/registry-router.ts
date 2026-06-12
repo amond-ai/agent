@@ -1,10 +1,6 @@
 /** Private REST router exposing {@link RegistryOps} over the `FlueRegistry` Durable Object. */
-import type {
-	ListRunsOpts,
-	RecordRunEndInput,
-	RecordRunStartInput,
-} from '../runtime/run-registry.ts';
-import type { RegistryOps } from '../sql-run-registry.ts';
+import type { ListRunsOpts } from '../runtime/run-store.ts';
+import type { RecordRunEndInput, RecordRunStartInput, RegistryOps } from './registry-ops.ts';
 
 export async function handleRegistryRequest(ops: RegistryOps, request: Request): Promise<Response> {
 	const url = new URL(request.url);

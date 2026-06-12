@@ -11,7 +11,6 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { PersistenceAdapter } from '../agent-execution-store.ts';
 import type { SqlStorage } from '../sql-storage.ts';
-import { createSqlRunRegistry } from '../sql-run-registry.ts';
 import { createSqlRunStore } from '../sql-run-store.ts';
 import { SqliteEventStreamStore } from '../runtime/event-stream-store.ts';
 import { createSqlAgentExecutionStoreFromSql, ensureSqlAgentExecutionTables } from '../sql-agent-execution-store.ts';
@@ -121,9 +120,6 @@ export function sqlite(path?: string): PersistenceAdapter {
 		},
 		connectRunStore() {
 			return createSqlRunStore(ensureOpen().sql);
-		},
-		connectRunRegistry() {
-			return createSqlRunRegistry(ensureOpen().sql);
 		},
 		connectEventStreamStore() {
 			return new SqliteEventStreamStore(ensureOpen().sql);

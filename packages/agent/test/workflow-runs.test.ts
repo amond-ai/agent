@@ -9,7 +9,6 @@ import {
 	InMemoryRunStore,
 	InMemorySessionStore,
 } from '../src/internal.ts';
-import { InMemoryRunRegistry } from '../src/node/run-registry.ts';
 import { formatOffset } from '../src/runtime/event-stream-store.ts';
 import { resetFlueRuntimeForTests } from '../src/runtime/flue-app.ts';
 import { flue } from '../src/routing.ts';
@@ -225,7 +224,6 @@ describe('workflow invocation', () => {
 
 	it('renders a null result when an invoked handler returns undefined', async () => {
 		const runStore = new InMemoryRunStore();
-		const runRegistry = new InMemoryRunRegistry();
 		const app = createApp({
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
@@ -234,7 +232,6 @@ describe('workflow invocation', () => {
 			},
 			createContext,
 			runStore,
-			runRegistry,
 		});
 
 		const response = await app.fetch(
@@ -262,7 +259,6 @@ describe('workflow invocation', () => {
 describe('workflow run lifecycle', () => {
 	it('records an errored terminal run when a workflow handler throws', async () => {
 		const runStore = new InMemoryRunStore();
-		const runRegistry = new InMemoryRunRegistry();
 		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 		try {
 			const app = createApp({
@@ -278,7 +274,6 @@ describe('workflow run lifecycle', () => {
 				},
 				createContext,
 				runStore,
-				runRegistry,
 			});
 
 			const response = await app.fetch(

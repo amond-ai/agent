@@ -13,7 +13,6 @@ import {
 	MethodNotAllowedError,
 	RouteNotFoundError,
 	RunNotFoundError,
-	RunRegistryUnavailableError,
 	RunStoreUnavailableError,
 	toHttpResponse,
 	ValidationError,
@@ -37,9 +36,8 @@ import {
 } from './handle-agent.ts';
 import { handleStreamHead, handleStreamRead } from './handle-stream-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
-import type { RunPointer, RunRegistry } from './run-registry.ts';
 import { agentStreamPath, runStreamPath, type EventStreamStore } from './event-stream-store.ts';
-import type { RunStore } from './run-store.ts';
+import type { RunPointer, RunStore } from './run-store.ts';
 
 import {
 	AgentInvocationResponseSchema,
@@ -76,7 +74,7 @@ export interface FlueRuntime {
 	 */
 	createAdmission?: Record<string, (instanceId: string) => AttachedAgentSubmissionAdmission>;
 
-	/** Node workflow-run history store. */
+	/** Node workflow-run store: records plus cross-run lookup and listing. */
 	runStore?: RunStore;
 
 	/**
@@ -86,9 +84,6 @@ export interface FlueRuntime {
 	 * Durable Object stores instead, so the worker-level runtime has none.
 	 */
 	eventStreamStore?: EventStreamStore;
-
-	/** Cross-deployment workflow-run pointer index for bare `/runs/:runId` lookups. */
-	runRegistry?: RunRegistry;
 
 	// ─── Cloudflare-only ────────────────────────────────────────────────────
 
@@ -121,8 +116,11 @@ export interface FlueRuntime {
 		target: { workflowName: string; runId: string },
 	) => Promise<Response | null>;
 
-	/** Cloudflare-only factory for the request-scoped registry client. */
-	createRunRegistryForRequest?: (env: unknown) => RunRegistry | undefined;
+	/**
+	 * Cloudflare-only factory for the request-scoped run index client
+	 * (cross-deployment lookup/listing over the `FlueRegistry` index DO).
+	 */
+	createRunIndexForRequest?: (env: unknown) => RunListing | undefined;
 
 	/** Package version inlined by the generated entry for OpenAPI metadata. */
 	runtimeVersion?: string;
@@ -136,6 +134,9 @@ export interface FlueRuntime {
 	/** Resolve discovered/default-exported created agent identities for global dispatch. */
 	resolveDispatchAgentName?: (agent: CreatedAgent) => string | undefined;
 }
+
+/** Cross-deployment run lookup/listing surface of a {@link RunStore}. */
+export type RunListing = Pick<RunStore, 'lookupRun' | 'listRuns'>;
 
 interface FlueManifest {
 	agents: Array<{
@@ -460,7 +461,6 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 				handler,
 				createContext,
 				runStore: rt.runStore,
-				runRegistry: rt.runRegistry,
 				eventStreamStore: requireNodeEventStreamStore(rt),
 			});
 		}
@@ -666,17 +666,17 @@ function nodeStreamReadResponse(
 
 async function lookupRunPointer(rt: FlueRuntime, env: unknown, runId: string): Promise<RunPointer> {
 	if (rt.target === 'cloudflare') {
-		if (!rt.createRunRegistryForRequest || !rt.routeRunRequest) {
-			throw new RunRegistryUnavailableError();
+		if (!rt.createRunIndexForRequest || !rt.routeRunRequest) {
+			throw new RunStoreUnavailableError();
 		}
-		const registry = rt.createRunRegistryForRequest(env);
-		if (!registry) throw new RunRegistryUnavailableError();
-		const pointer = await registry.lookupRun(runId);
+		const index = rt.createRunIndexForRequest(env);
+		if (!index) throw new RunStoreUnavailableError();
+		const pointer = await index.lookupRun(runId);
 		if (!pointer) throw new RunNotFoundError({ runId });
 		return pointer;
 	}
-	if (!rt.runRegistry) throw new RunRegistryUnavailableError();
-	const pointer = await rt.runRegistry.lookupRun(runId);
+	if (!rt.runStore) throw new RunStoreUnavailableError();
+	const pointer = await rt.runStore.lookupRun(runId);
 	if (!pointer) throw new RunNotFoundError({ runId });
 	return pointer;
 }

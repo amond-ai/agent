@@ -1,11 +1,9 @@
 import { Hono } from 'hono';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { InMemoryRunRegistry } from '../src/node/run-registry.ts';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
 import { flue } from '../src/routing.ts';
 import { configureFlueRuntime, resetFlueRuntimeForTests } from '../src/runtime/flue-app.ts';
-import type { RunRegistry } from '../src/runtime/run-registry.ts';
 import type { RunStore } from '../src/runtime/run-store.ts';
 
 
@@ -13,15 +11,11 @@ afterEach(() => {
 	resetFlueRuntimeForTests();
 });
 
-function createRunApp(
-	runStore: RunStore,
-	runRegistry: RunRegistry,
-) {
+function createRunApp(runStore: RunStore) {
 	configureFlueRuntime({
 		target: 'node',
 		manifest: { agents: [] },
 		runStore,
-		runRegistry,
 	});
 	const app = new Hono();
 	app.route('/', flue());
@@ -29,289 +23,10 @@ function createRunApp(
 }
 
 
-describe('workflow run store', () => {
-	it('creates an active workflow run record when workflow admission is persisted', async () => {
-		const store: RunStore = new InMemoryRunStore();
-		await store.createRun({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
-		});
-
-		expect(await store.getRun('run_01DAILYREPORT')).toEqual({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			status: 'active',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
-		});
-	});
-
-	it('finalizes a completed workflow run record when workflow execution succeeds', async () => {
-		const store: RunStore = new InMemoryRunStore();
-		await store.createRun({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
-		});
-		await store.endRun({
-			runId: 'run_01DAILYREPORT',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: false,
-			result: { delivered: true },
-		});
-
-		expect(await store.getRun('run_01DAILYREPORT')).toEqual({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			status: 'completed',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
-			endedAt: '2026-06-01T10:05:00.000Z',
-			isError: false,
-			durationMs: 300_000,
-			result: { delivered: true },
-			error: undefined,
-		});
-	});
-
-	it('finalizes an errored workflow run record when workflow execution fails', async () => {
-		const store: RunStore = new InMemoryRunStore();
-		await store.createRun({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
-		});
-		await store.endRun({
-			runId: 'run_01DAILYREPORT',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: true,
-			error: { message: 'delivery failed' },
-		});
-
-		expect(await store.getRun('run_01DAILYREPORT')).toEqual({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			status: 'errored',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
-			endedAt: '2026-06-01T10:05:00.000Z',
-			isError: true,
-			durationMs: 300_000,
-			result: undefined,
-			error: { message: 'delivery failed' },
-		});
-	});
-
-});
-
-describe('workflow run registry', () => {
-	it('records an active pointer when a workflow run starts', async () => {
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		await registry.recordRunStart({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-
-		expect(await registry.lookupRun('run_01DAILYREPORT')).toEqual({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			status: 'active',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-	});
-
-	it('updates a pointer terminal status when a workflow run ends', async () => {
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		await registry.recordRunStart({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-		await registry.recordRunEnd({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: true,
-		});
-
-		expect(await registry.lookupRun('run_01DAILYREPORT')).toEqual({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			status: 'errored',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: true,
-		});
-	});
-
-	it('creates a terminal pointer when a workflow run ends without a recorded start', async () => {
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		await registry.recordRunEnd({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: false,
-		});
-
-		expect(await registry.lookupRun('run_01DAILYREPORT')).toEqual({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			status: 'completed',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: false,
-		});
-	});
-
-	it('lists pointers newest first when multiple workflow runs exist', async () => {
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		await registry.recordRunStart({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-		await registry.recordRunStart({
-			runId: 'run_02DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:02:00.000Z',
-		});
-		await registry.recordRunStart({
-			runId: 'run_03DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:01:00.000Z',
-		});
-
-		expect((await registry.listRuns()).runs.map((pointer) => pointer.runId)).toEqual([
-			'run_02DAILYREPORT',
-			'run_03DAILYREPORT',
-			'run_01DAILYREPORT',
-		]);
-	});
-
-	it('filters pointers when status or workflow name is requested', async () => {
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		await registry.recordRunStart({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-		await registry.recordRunEnd({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-			endedAt: '2026-06-01T10:05:00.000Z',
-			durationMs: 300_000,
-			isError: false,
-		});
-		await registry.recordRunStart({
-			runId: 'run_02DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:01:00.000Z',
-		});
-		await registry.recordRunEnd({
-			runId: 'run_02DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:01:00.000Z',
-			endedAt: '2026-06-01T10:06:00.000Z',
-			durationMs: 300_000,
-			isError: true,
-		});
-		await registry.recordRunStart({
-			runId: 'run_01INVOICE',
-			workflowName: 'invoice',
-			startedAt: '2026-06-01T10:02:00.000Z',
-		});
-
-		expect(
-			(await registry.listRuns({ status: 'errored' })).runs.map((pointer) => pointer.runId),
-		).toEqual(['run_02DAILYREPORT']);
-		expect(
-			(await registry.listRuns({ workflowName: 'daily-report' })).runs.map(
-				(pointer) => pointer.runId,
-			),
-		).toEqual(['run_02DAILYREPORT', 'run_01DAILYREPORT']);
-	});
-
-	it('continues pointer listing when a cursor is supplied', async () => {
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		await registry.recordRunStart({
-			runId: 'run_01DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-		await registry.recordRunStart({
-			runId: 'run_02DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:01:00.000Z',
-		});
-		await registry.recordRunStart({
-			runId: 'run_03DAILYREPORT',
-			workflowName: 'daily-report',
-			startedAt: '2026-06-01T10:02:00.000Z',
-		});
-
-		const firstPage = await registry.listRuns({ limit: 2 });
-		expect(firstPage.runs.map((pointer) => pointer.runId)).toEqual([
-			'run_03DAILYREPORT',
-			'run_02DAILYREPORT',
-		]);
-		expect(firstPage.nextCursor).toEqual(expect.any(String));
-		expect((await registry.listRuns({ limit: 2, cursor: firstPage.nextCursor })).runs).toEqual([
-			{
-				runId: 'run_01DAILYREPORT',
-				workflowName: 'daily-report',
-				status: 'active',
-				startedAt: '2026-06-01T10:00:00.000Z',
-			},
-		]);
-	});
-
-	it('continues pointer listing when the page boundary lands on a non-Latin1 workflow name', async () => {
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		await registry.recordRunStart({
-			runId: 'run_01NIPPO',
-			workflowName: '日報',
-			startedAt: '2026-06-01T10:00:00.000Z',
-		});
-		await registry.recordRunStart({
-			runId: 'run_02NIPPO',
-			workflowName: '日報',
-			startedAt: '2026-06-01T10:01:00.000Z',
-		});
-
-		const firstPage = await registry.listRuns({ limit: 1 });
-		expect(firstPage.runs.map((pointer) => pointer.runId)).toEqual(['run_02NIPPO']);
-		expect(firstPage.nextCursor).toEqual(expect.any(String));
-		expect((await registry.listRuns({ limit: 1, cursor: firstPage.nextCursor })).runs).toEqual([
-			{
-				runId: 'run_01NIPPO',
-				workflowName: '日報',
-				status: 'active',
-				startedAt: '2026-06-01T10:00:00.000Z',
-			},
-		]);
-	});
-
-});
-
 describe('workflow run routes', () => {
 	it('returns 404 for a stream that does not exist when GET /runs/:runId is requested', async () => {
 		const store: RunStore = new InMemoryRunStore();
-		const registry: RunRegistry = new InMemoryRunRegistry();
-		const app = createRunApp(store, registry);
+		const app = createRunApp(store);
 
 		const response = await app.fetch(
 			new Request('http://localhost/runs/run_01MISSING'),

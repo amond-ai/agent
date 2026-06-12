@@ -3,11 +3,21 @@
  *
  * Backend-agnostic: runs against Cloudflare DO SQLite (workflow Durable
  * Objects) and `node:sqlite` (the Node `sqlite()` persistence adapter).
+ * One `flue_runs` table backs records, lookups, and listings; pointers are
+ * a column-subset projection of the run record.
  */
 import {
 	type CreateRunInput,
+	DEFAULT_LIST_LIMIT,
+	decodeRunCursor,
 	type EndRunInput,
+	encodeRunCursor,
+	type ListRunsOpts,
+	type ListRunsResponse,
+	MAX_LIST_LIMIT,
+	type RunPointer,
 	type RunRecord,
+	type RunStatus,
 	type RunStore,
 } from './runtime/run-store.ts';
 import { ensureFlueSchemaVersion } from './schema-version.ts';
@@ -24,8 +34,10 @@ class SqlRunStore implements RunStore {
 	constructor(private sql: SqlStorage) {}
 
 	async createRun(input: CreateRunInput): Promise<void> {
+		// Idempotent first-writer-wins: a replayed runId must never resurrect
+		// a terminal record back to 'active'.
 		this.sql.exec(
-			`INSERT OR REPLACE INTO flue_runs
+			`INSERT OR IGNORE INTO flue_runs
 			 (run_id, workflow_name, status, started_at, payload, ended_at, is_error, duration_ms, result, error)
 			 VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)`,
 			input.runId,
@@ -59,6 +71,51 @@ class SqlRunStore implements RunStore {
 		if (!row) return null;
 		return rowToRunRecord(row);
 	}
+
+	async lookupRun(runId: string): Promise<RunPointer | null> {
+		const rows = this.sql
+			.exec(
+				`SELECT run_id, workflow_name, status, started_at, ended_at, duration_ms, is_error
+				 FROM flue_runs WHERE run_id = ?`,
+				runId,
+			)
+			.toArray();
+		const row = rows[0];
+		return row ? rowToRunPointer(row) : null;
+	}
+
+	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {
+		const limit = clampLimit(opts.limit);
+		const cursor = decodeRunCursor(opts.cursor);
+		const wheres: string[] = [];
+		const bindings: unknown[] = [];
+		if (opts.status) {
+			wheres.push('status = ?');
+			bindings.push(opts.status);
+		}
+		if (opts.workflowName) {
+			wheres.push('workflow_name = ?');
+			bindings.push(opts.workflowName);
+		}
+		if (cursor) {
+			wheres.push('(started_at < ? OR (started_at = ? AND run_id < ?))');
+			bindings.push(cursor.startedAt, cursor.startedAt, cursor.runId);
+		}
+		const where = wheres.length > 0 ? `WHERE ${wheres.join(' AND ')}` : '';
+		const rows = this.sql
+			.exec(
+				`SELECT run_id, workflow_name, status, started_at, ended_at, duration_ms, is_error
+			 FROM flue_runs ${where}
+			 ORDER BY started_at DESC, run_id DESC LIMIT ?`,
+				...bindings,
+				limit + 1,
+			)
+			.toArray();
+		const hasMore = rows.length > limit;
+		const page = (hasMore ? rows.slice(0, limit) : rows).map(rowToRunPointer);
+		const last = page.at(-1);
+		return { runs: page, nextCursor: hasMore && last ? encodeRunCursor(last) : undefined };
+	}
 }
 
 function ensureRunTables(sql: SqlStorage): void {
@@ -79,6 +136,9 @@ function ensureRunTables(sql: SqlStorage): void {
 	);
 	sql.exec(
 		'CREATE INDEX IF NOT EXISTS flue_runs_workflow_started_idx ON flue_runs (workflow_name, started_at DESC)',
+	);
+	sql.exec(
+		'CREATE INDEX IF NOT EXISTS flue_runs_status_started_idx ON flue_runs (status, started_at DESC, run_id DESC)',
 	);
 }
 
@@ -103,4 +163,22 @@ function rowToRunRecord(row: SqlRow): RunRecord {
 		result,
 		error,
 	};
+}
+
+function rowToRunPointer(row: SqlRow): RunPointer {
+	return {
+		runId: String(row.run_id),
+		workflowName: String(row.workflow_name),
+		status: String(row.status) as RunStatus,
+		startedAt: String(row.started_at),
+		endedAt: typeof row.ended_at === 'string' ? row.ended_at : undefined,
+		durationMs: typeof row.duration_ms === 'number' ? row.duration_ms : undefined,
+		isError:
+			row.is_error === null || row.is_error === undefined ? undefined : Boolean(row.is_error),
+	};
+}
+
+function clampLimit(limit: number | undefined): number {
+	if (!limit || !Number.isFinite(limit) || limit <= 0) return DEFAULT_LIST_LIMIT;
+	return Math.min(limit, MAX_LIST_LIMIT);
 }

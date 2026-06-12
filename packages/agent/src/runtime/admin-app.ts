@@ -7,10 +7,9 @@ import {
 	resolver,
 	validator,
 } from 'hono-openapi';
-import { RunRegistryUnavailableError, toHttpResponse, ValidationError } from '../errors.ts';
-import { type FlueRuntime, getFlueRuntime, handleRunById } from './flue-app.ts';
-import type { ListRunsOpts, RunRegistry } from './run-registry.ts';
-import type { RunStatus } from './run-store.ts';
+import { RunStoreUnavailableError, toHttpResponse, ValidationError } from '../errors.ts';
+import { type FlueRuntime, getFlueRuntime, handleRunById, type RunListing } from './flue-app.ts';
+import type { ListRunsOpts, RunStatus } from './run-store.ts';
 import {
 	AdminRunsQuerySchema,
 	ErrorEnvelopeSchema,
@@ -146,7 +145,7 @@ const listAgentsHandler: MiddlewareHandler = async (c) => {
 
 const listRunsHandler: MiddlewareHandler = async (c) => {
 	const rt = requireRuntime();
-	const registry = requireRegistry(rt, c.env);
+	const runListing = requireRunListing(rt, c.env);
 	const url = new URL(c.req.url);
 	const opts: ListRunsOpts = {
 		...parseListQuery(c.req.raw),
@@ -154,7 +153,7 @@ const listRunsHandler: MiddlewareHandler = async (c) => {
 	};
 	const workflowName = url.searchParams.get('workflowName');
 	if (workflowName) opts.workflowName = workflowName;
-	const out = await registry.listRuns(opts);
+	const out = await runListing.listRuns(opts);
 	return c.json({ items: out.runs, nextCursor: out.nextCursor });
 };
 
@@ -181,14 +180,14 @@ function requireRuntime(): FlueRuntime {
 	return rt;
 }
 
-function requireRegistry(rt: FlueRuntime, env: unknown): RunRegistry {
+function requireRunListing(rt: FlueRuntime, env: unknown): RunListing {
 	if (rt.target === 'cloudflare') {
-		const registry = rt.createRunRegistryForRequest?.(env);
-		if (!registry) throw new RunRegistryUnavailableError();
-		return registry;
+		const index = rt.createRunIndexForRequest?.(env);
+		if (!index) throw new RunStoreUnavailableError();
+		return index;
 	}
-	if (!rt.runRegistry) throw new RunRegistryUnavailableError();
-	return rt.runRegistry;
+	if (!rt.runStore) throw new RunStoreUnavailableError();
+	return rt.runStore;
 }
 
 function parseListQuery(request: Request): { cursor?: string; limit?: number } {

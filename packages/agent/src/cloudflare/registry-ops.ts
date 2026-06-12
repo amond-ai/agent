@@ -1,12 +1,15 @@
 /**
- * SQL-backed workflow-run registry (pointer index) over the generic
- * {@link SqlStorage} interface.
+ * Internal run-pointer index for the Cloudflare target.
  *
- * Backend-agnostic: runs against Cloudflare DO SQLite (the `FlueRegistry`
- * Durable Object) and `node:sqlite` (the Node `sqlite()` persistence
- * adapter). The Cloudflare target talks to the synchronous {@link RegistryOps}
- * through its private REST router (`cloudflare/registry-router.ts`); Node
- * wires {@link createSqlRunRegistry} directly into the runtime.
+ * Cloudflare stores run records in per-workflow Durable Objects, so a
+ * singleton `FlueRegistry` DO keeps a pointer index for cross-deployment
+ * lookup and listing. This topology is internal plumbing behind the
+ * composite Cloudflare `RunStore` (see `cloudflare/run-store.ts`); it is
+ * not part of the public adapter contract — single-database adapters back
+ * pointers from their run records directly.
+ *
+ * Does not import `cloudflare:workers`; the `FlueRegistry` DO class wraps
+ * these synchronous ops in `cloudflare/registry-do.ts`.
  */
 import {
 	DEFAULT_LIST_LIMIT,
@@ -15,16 +18,33 @@ import {
 	type ListRunsOpts,
 	type ListRunsResponse,
 	MAX_LIST_LIMIT,
-	type RecordRunEndInput,
-	type RecordRunStartInput,
 	type RunPointer,
-	type RunRegistry,
-} from './runtime/run-registry.ts';
-import type { RunStatus } from './runtime/run-store.ts';
-import { ensureFlueSchemaVersion } from './schema-version.ts';
-import type { SqlStorage } from './sql-storage.ts';
+	type RunStatus,
+} from '../runtime/run-store.ts';
+import { ensureFlueSchemaVersion } from '../schema-version.ts';
+import type { SqlStorage } from '../sql-storage.ts';
 
 type SqlRow = Record<string, unknown>;
+
+export interface RecordRunStartInput {
+	runId: string;
+	workflowName: string;
+	startedAt: string;
+}
+
+/**
+ * `workflowName` and `startedAt` let `recordRunEnd` upsert the full pointer,
+ * so a terminal write heals a `recordRunStart` that was lost to a transient
+ * fault.
+ */
+export interface RecordRunEndInput {
+	runId: string;
+	workflowName: string;
+	startedAt: string;
+	endedAt: string;
+	durationMs: number;
+	isError: boolean;
+}
 
 /** Synchronous registry operations, as exposed over the Cloudflare registry DO. */
 export interface RegistryOps {
@@ -37,31 +57,6 @@ export interface RegistryOps {
 export function createRegistryOps(sql: SqlStorage): RegistryOps {
 	ensureRegistryTables(sql);
 	return new SqlRegistryOps(sql);
-}
-
-/** Async {@link RunRegistry} facade over {@link RegistryOps} for in-process SQL backends. */
-export function createSqlRunRegistry(sql: SqlStorage): RunRegistry {
-	return new SqlRunRegistry(createRegistryOps(sql));
-}
-
-class SqlRunRegistry implements RunRegistry {
-	constructor(private ops: RegistryOps) {}
-
-	async recordRunStart(input: RecordRunStartInput): Promise<void> {
-		this.ops.recordRunStart(input);
-	}
-
-	async recordRunEnd(input: RecordRunEndInput): Promise<void> {
-		this.ops.recordRunEnd(input);
-	}
-
-	async lookupRun(runId: string): Promise<RunPointer | null> {
-		return this.ops.lookupRun(runId);
-	}
-
-	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {
-		return this.ops.listRuns(opts);
-	}
 }
 
 class SqlRegistryOps implements RegistryOps {
