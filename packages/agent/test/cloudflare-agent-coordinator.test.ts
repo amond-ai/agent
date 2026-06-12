@@ -273,6 +273,29 @@ describe('createCloudflareAgentRuntime()', () => {
 		expect(await executionStore.submissions.getSubmission('direct-1')).toMatchObject({ status: 'running' });
 	});
 
+	it('degrades to an empty marker set when the marker scan fails so queued submissions remain claimable', async () => {
+		const { db, storage } = makeFakeSql();
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const runtime = makeRuntime();
+		const instance = makeInstance(storage);
+		instance.runFiber = () => new Promise<void>(() => {});
+		const executionStore = prepare(runtime, instance);
+		db.exec('DROP TABLE cf_agents_runs');
+		await executionStore.submissions.admitDirect(directInput());
+
+		await runtime.onStart(instance, () => {});
+
+		expect(await executionStore.submissions.getSubmission('direct-1')).toMatchObject({ status: 'running' });
+		expect(consoleError).toHaveBeenCalledWith(
+			'[flue:submission-reconciliation]',
+			expect.objectContaining({
+				operation: 'list_attempt_markers',
+				outcome: 'degraded_to_empty_marker_set',
+			}),
+			expect.any(Error),
+		);
+	});
+
 	it('requeues interrupted attempts when canonical input is absent', async () => {
 		const events: string[] = [];
 		const { storage } = makeFakeSql(events);

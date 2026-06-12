@@ -294,7 +294,28 @@ class CloudflareAgentCoordinator {
 		if (!(await this.submissions.hasUnsettledSubmissions())) return false;
 		if (!options.driverAlreadyArmed) await this.restoreSubmissionWake();
 		try {
-			const attemptMarkers = this.listActiveAttemptMarkers();
+			// The marker scan is advisory: a fresh marker suppresses
+			// re-reconciling an attempt that may still be running. If the scan
+			// itself fails, degrade to an empty marker set instead of aborting —
+			// a hard failure here would permanently block claiming and hang
+			// attached callers, while double-processing is bounded by the claim
+			// CAS and attempt-id ownership checks.
+			let attemptMarkers: ReadonlySet<string>;
+			try {
+				attemptMarkers = this.listActiveAttemptMarkers();
+			} catch (error) {
+				attemptMarkers = new Set();
+				console.error(
+					'[flue:submission-reconciliation]',
+					{
+						agentName: this.agentName,
+						instanceId: this.instance.name,
+						operation: 'list_attempt_markers',
+						outcome: 'degraded_to_empty_marker_set',
+					},
+					error,
+				);
+			}
 			for (const submission of await this.submissions.listRunningSubmissions()) {
 				if (this.activeAttempts.has(this.submissionAttemptLocalKey(submission))) continue;
 				if (
