@@ -6,7 +6,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { resolveConfig } from '../dist/config.mjs';
+// The config resolver is internal to the CLI (the public `@flue/cli/config`
+// subpath exposes only the `flue.config.ts` authoring API), so test it at the
+// source boundary the CLI consumes.
+import { resolveConfig } from '../src/lib/config.ts';
 
 const cli = new URL('../dist/flue.js', import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');

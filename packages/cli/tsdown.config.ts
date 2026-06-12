@@ -5,7 +5,7 @@ export default defineConfig({
 		// Bin entry, written to dist/flue.mjs (the build script renames to dist/flue.js).
 		flue: 'bin/flue.ts',
 		// `@flue/cli/config` subpath, written to dist/config.mjs.
-		config: 'src/lib/config.ts',
+		config: 'src/config.ts',
 	},
 	format: ['esm'],
 	// tsdown emits `.d.mts` for every entry. We only need one for the

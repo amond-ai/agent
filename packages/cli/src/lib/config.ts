@@ -12,7 +12,7 @@ import * as v from 'valibot';
 import { CONFIG_BASENAMES } from './config-paths.ts';
 import { resolveSourceRoot } from './source-root.ts';
 
-// ─── Public API ─────────────────────────────────────────────────────────────
+// ─── Authoring API (re-exported by the public `@flue/cli/config` subpath) ───
 
 /**
  * Configuration authored in `flue.config.ts`. Only the fields declared by
@@ -47,7 +47,7 @@ export interface UserFlueConfig {
 	output?: string;
 }
 
-/** Fully resolved configuration returned by {@link resolveConfig}. */
+/** Fully resolved configuration consumed by the rest of the CLI. */
 export interface FlueConfig {
 	/** Selected build and development target. */
 	target: 'node' | 'cloudflare';
@@ -199,7 +199,8 @@ export interface ResolvedConfigResult {
 
 /**
  * Discover, load, validate, merge, and resolve a Flue config. The single
- * entry point CLIs and embedders call.
+ * entry point the CLI calls. Internal — not exported from the public
+ * `@flue/cli/config` subpath.
  *
  * Precedence (highest first):
  *   1. Inline values (`opts.inline.*`)
