@@ -3,7 +3,6 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, UserMessage } from '@earendil-works/pi-ai';
 import type {
-	BranchSummaryEntry,
 	CompactionEntry,
 	DispatchMessageMetadata,
 	MessageEntry,
@@ -199,20 +198,6 @@ export class SessionHistory {
 		return entry.id;
 	}
 
-	appendBranchSummary(summary: string, fromId: string, details?: unknown): string {
-		const entry: BranchSummaryEntry = {
-			type: 'branch_summary',
-			id: generateEntryId(this.byId),
-			parentId: this.leafId,
-			timestamp: new Date().toISOString(),
-			fromId,
-			summary,
-			details,
-		};
-		this.appendEntry(entry);
-		return entry.id;
-	}
-
 	toData(
 		affinityKey: string,
 		metadata: Record<string, any>,
@@ -306,17 +291,6 @@ function pathToContextEntries(path: SessionEntry[]): ContextEntry[] {
 			if (entry.message.role !== 'toolResult') {
 				context.push({ message: entry.message, entry });
 			}
-		} else if (entry?.type === 'branch_summary') {
-			const signal: SignalMessage = {
-				role: 'signal',
-				type: 'branch_summary',
-				content: entry.summary,
-				timestamp: new Date(entry.timestamp).getTime(),
-			};
-			context.push({
-				message: createUserContextMessage(renderSignalMessage(signal), entry.timestamp),
-				entry,
-			});
 		}
 		index += 1;
 	}

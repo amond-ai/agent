@@ -692,7 +692,7 @@ export interface SessionData {
 	updatedAt: string;
 }
 
-export type SessionEntry = MessageEntry | CompactionEntry | BranchSummaryEntry;
+export type SessionEntry = MessageEntry | CompactionEntry;
 
 interface SessionEntryBase {
 	type: string;
@@ -742,13 +742,6 @@ export interface CompactionEntry extends SessionEntryBase {
 	 * this field was introduced (treated as zero by aggregators).
 	 */
 	usage?: PromptUsage;
-}
-
-export interface BranchSummaryEntry extends SessionEntryBase {
-	type: 'branch_summary';
-	fromId: string;
-	summary: string;
-	details?: unknown;
 }
 
 export interface SessionStore {
