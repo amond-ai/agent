@@ -23,7 +23,9 @@ import { createNoopSessionEnv } from './fixtures/session-env.ts';
 import { createTestEventStreamStore } from './helpers/test-event-stream-store.ts';
 
 // ---------------------------------------------------------------------------
-// Env setup — load ANTHROPIC_API_KEY from the repo .env file
+// Env setup — load ANTHROPIC_API_KEY from the repo .env file.
+// Used only by the 'real Anthropic API smoke' describe block at the bottom;
+// everything else in this suite runs keyless against the faux provider.
 // ---------------------------------------------------------------------------
 
 try {
@@ -172,9 +174,11 @@ async function createFauxCoordinator(
 
 describe('NodeAgentCoordinator', () => {
 	describe('basic lifecycle', () => {
-		it.skipIf(!hasApiKey)('processes a dispatch through the full submission lifecycle with file persistence', async () => {
+		it('processes a dispatch through the full submission lifecycle with file persistence', async () => {
 			const dbPath = createTempDbPath();
-			const { coordinator, executionStore } = await createRealCoordinator(dbPath);
+			const provider = createFauxProvider();
+			provider.setResponses([fauxAssistantMessage('Done.')]);
+			const { coordinator, executionStore } = await createFauxCoordinator(dbPath, provider);
 
 			const input = makeDispatchInput();
 			await coordinator.admitDispatch(input);
@@ -183,11 +187,13 @@ describe('NodeAgentCoordinator', () => {
 			const submission = await executionStore.submissions.getSubmission(input.dispatchId);
 			expect(submission).toMatchObject({ status: 'settled', kind: 'dispatch' });
 			expect(submission?.error).toBeUndefined();
-		}, 30_000);
+		});
 
-		it.skipIf(!hasApiKey)('persists settled submission across store reopens', async () => {
+		it('persists settled submission across store reopens', async () => {
 			const dbPath = createTempDbPath();
-			const { coordinator } = await createRealCoordinator(dbPath);
+			const provider = createFauxProvider();
+			provider.setResponses([fauxAssistantMessage('Done.')]);
+			const { coordinator } = await createFauxCoordinator(dbPath, provider);
 
 			const input = makeDispatchInput();
 			await coordinator.admitDispatch(input);
@@ -199,11 +205,11 @@ describe('NodeAgentCoordinator', () => {
 			expect(submission).toMatchObject({ status: 'settled', kind: 'dispatch' });
 			expect(submission?.error).toBeUndefined();
 			expect(await reopened.submissions.hasUnsettledSubmissions()).toBe(false);
-		}, 30_000);
+		});
 	});
 
 	describe('interrupt and recover', () => {
-		it.skipIf(!hasApiKey)('reconciles an interrupted submission by requeuing when canonical input is absent', async () => {
+		it('reconciles an interrupted submission by requeuing when canonical input is absent', async () => {
 			const dbPath = createTempDbPath();
 			// First process will be "interrupted" — we manually admit+claim without processing.
 			const store1 = await openExecutionStore(dbPath);
@@ -217,14 +223,16 @@ leaseExpiresAt: 1,
 		});
 			// Submission is now running with no canonical input — simulates crash before input applied.
 
-		// "Restart": new coordinator reconciles with a real LLM.
-			const { coordinator, executionStore } = await createRealCoordinator(dbPath);
+			// "Restart": a new coordinator reconciles and replays the dispatch input.
+			const provider = createFauxProvider();
+			provider.setResponses([fauxAssistantMessage('Recovered reply.')]);
+			const { coordinator, executionStore } = await createFauxCoordinator(dbPath, provider);
 			await coordinator.reconcileSubmissions();
 
 			const submission = await executionStore.submissions.getSubmission(input.dispatchId);
 			expect(submission).toMatchObject({ status: 'settled' });
 			expect(submission?.error).toBeUndefined();
-		}, 30_000);
+		});
 
 		it('terminalizes an interrupted submission when input was applied but no response completed', async () => {
 			const dbPath = createTempDbPath();
@@ -701,7 +709,7 @@ leaseExpiresAt: 1,
 	});
 
 	describe('queue ordering across restart', () => {
-		it.skipIf(!hasApiKey)('reconciles the interrupted submission before processing queued work in the same session', async () => {
+		it('reconciles the interrupted submission before processing queued work in the same session', async () => {
 			const dbPath = createTempDbPath();
 			const store = await openExecutionStore(dbPath);
 
@@ -721,8 +729,13 @@ leaseExpiresAt: 1,
 		// A is now running but unprocessed (simulates crash).
 
 			// "Restart": reconcile should handle A (requeue since no input applied),
-			// then process A, then drain B. Both use a real LLM.
-			const { coordinator, executionStore } = await createRealCoordinator(dbPath);
+			// then process A, then drain B.
+			const provider = createFauxProvider();
+			provider.setResponses([
+				fauxAssistantMessage('Reply for A.'),
+				fauxAssistantMessage('Reply for B.'),
+			]);
+			const { coordinator, executionStore } = await createFauxCoordinator(dbPath, provider);
 			await coordinator.reconcileSubmissions();
 			await coordinator.waitForIdle();
 
@@ -733,11 +746,16 @@ leaseExpiresAt: 1,
 			expect(subB).toMatchObject({ status: 'settled' });
 			expect(subB?.error).toBeUndefined();
 			expect(await executionStore.submissions.hasUnsettledSubmissions()).toBe(false);
-		}, 60_000);
+		});
 
-		it.skipIf(!hasApiKey)('processes multiple queued submissions to the same instance', async () => {
+		it('processes multiple queued submissions to the same instance', async () => {
 			const dbPath = createTempDbPath();
-			const { coordinator, executionStore } = await createRealCoordinator(dbPath);
+			const provider = createFauxProvider();
+			provider.setResponses([
+				fauxAssistantMessage('Reply for A.'),
+				fauxAssistantMessage('Reply for B.'),
+			]);
+			const { coordinator, executionStore } = await createFauxCoordinator(dbPath, provider);
 
 			const inputA = makeDispatchInput({ dispatchId: 'dispatch-sessA' });
 			const inputB = makeDispatchInput({ dispatchId: 'dispatch-sessB' });
@@ -752,11 +770,11 @@ leaseExpiresAt: 1,
 			expect(subA?.error).toBeUndefined();
 			expect(subB).toMatchObject({ status: 'settled' });
 			expect(subB?.error).toBeUndefined();
-		}, 60_000);
+		});
 	});
 
 	describe('queue drain after dispatch', () => {
-		it.skipIf(!hasApiKey)('drains queued submissions after processing a new dispatch', async () => {
+		it('drains queued submissions after processing a new dispatch', async () => {
 			const dbPath = createTempDbPath();
 			const store = await openExecutionStore(dbPath);
 
@@ -765,7 +783,12 @@ leaseExpiresAt: 1,
 			await store.submissions.admitDispatch(inputOld);
 
 			// Now create a fresh coordinator and dispatch a new submission.
-			const { coordinator, executionStore } = await createRealCoordinator(dbPath);
+			const provider = createFauxProvider();
+			provider.setResponses([
+				fauxAssistantMessage('Reply for new.'),
+				fauxAssistantMessage('Reply for old.'),
+			]);
+			const { coordinator, executionStore } = await createFauxCoordinator(dbPath, provider);
 
 			const inputNew = makeDispatchInput({ dispatchId: 'dispatch-new' });
 			await coordinator.admitDispatch(inputNew);
@@ -778,7 +801,7 @@ leaseExpiresAt: 1,
 			expect(subNew?.error).toBeUndefined();
 			expect(subOld).toMatchObject({ status: 'settled' });
 			expect(subOld?.error).toBeUndefined();
-		}, 60_000);
+		});
 	});
 
 	describe('dispatch queue admission', () => {
@@ -1028,6 +1051,27 @@ leaseExpiresAt: 1,
 			expect(submission).toMatchObject({ status: 'settled' });
 			expect(submission?.error).toBeUndefined();
 		});
+	});
+
+	// ─── Real Anthropic API smoke (integration) ─────────────────────────────
+	// The one deliberately real-LLM test in this suite. It requires
+	// ANTHROPIC_API_KEY (loaded from the repo-root .env), makes a paid network
+	// call, and skips when no key is configured. Every durable coordinator
+	// contract above is covered deterministically by the faux provider; this
+	// exists only to smoke-test the lifecycle against a real provider.
+	describe('real Anthropic API smoke', () => {
+		it.skipIf(!hasApiKey)('processes a dispatch through the full submission lifecycle against the real API', async () => {
+			const dbPath = createTempDbPath();
+			const { coordinator, executionStore } = await createRealCoordinator(dbPath);
+
+			const input = makeDispatchInput();
+			await coordinator.admitDispatch(input);
+			await coordinator.waitForIdle();
+
+			const submission = await executionStore.submissions.getSubmission(input.dispatchId);
+			expect(submission).toMatchObject({ status: 'settled', kind: 'dispatch' });
+			expect(submission?.error).toBeUndefined();
+		}, 30_000);
 	});
 
 	describe('direct and dispatch same-session ordering', () => {
