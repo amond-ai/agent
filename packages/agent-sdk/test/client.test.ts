@@ -395,7 +395,7 @@ describe('createFlueClient', () => {
 			expect(await seen[0]!.json()).toEqual({ key: 'value' });
 		});
 
-		it('works without a payload', async () => {
+		it('invokes the workflow when no payload is provided', async () => {
 			const client = createFlueClient({
 				baseUrl: 'https://flue.test',
 				fetch: async () =>
