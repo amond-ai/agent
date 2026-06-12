@@ -39,15 +39,12 @@ describe('CloudflarePlugin', () => {
 		expect(entry).not.toContain('sessionDeletionCoordinator');
 		expect(entry).not.toContain('beginSessionDeletion');
 		expect(entry).not.toContain('finishSessionDeletion');
-		expect(entry).toContain('const memoryWorkflowSessionStore = new InMemorySessionStore();');
-		expect(entry).toContain(
-			'const defaultStore = storage?.sql ? createSqlSessionStore(storage) : memoryWorkflowSessionStore;',
-		);
-		expect(entry).toContain('createSqlRunStore(doInstance.ctx.storage.sql)');
-		expect(entry).toContain(': memoryRunStore;');
+		expect(entry).not.toContain('InMemorySessionStore');
+		expect(entry).not.toContain('InMemoryRunStore');
+		expect(entry).toContain('const defaultStore = createSqlSessionStore(doInstance.ctx.storage);');
+		expect(entry).toContain('createSqlRunStore(sql)');
 		expect(entry).toContain('const eventStreamStores = new WeakMap();');
 		expect(entry).not.toContain('function createDOStore(sql)');
-		expect(entry).not.toContain('const memoryStore = new InMemorySessionStore();');
 		expect(entry).not.toContain('CREATE TABLE IF NOT EXISTS flue_sessions');
 	});
 
