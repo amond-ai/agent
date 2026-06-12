@@ -21,16 +21,13 @@ function queryExpectsRows(query: string): boolean {
 	return false;
 }
 
-function makeFakeSql(events: string[] = []) {
+function makeFakeSql() {
 	const db = new DatabaseSync(':memory:');
 	return {
 		db,
 		storage: {
 			sql: {
 				exec(query: string, ...bindings: unknown[]) {
-					if (query.includes('SET recovery_requested_at')) events.push('request-recovery');
-					if (query.includes("SET status = 'queued'")) events.push('requeue');
-					if (query.includes("SET status = 'settled', settled_at")) events.push('settle');
 					const stmt = db.prepare(query);
 					let rows: unknown[];
 					if (queryExpectsRows(query)) {
@@ -220,10 +217,15 @@ describe('createCloudflareAgentRuntime()', () => {
 
 	it('restores a wake before recording recovered raw Fiber ownership', async () => {
 		const events: string[] = [];
-		const { storage } = makeFakeSql(events);
+		const { storage } = makeFakeSql();
 		const runtime = makeRuntime();
 		const instance = makeInstance(storage, events);
 		const executionStore = prepare(runtime, instance);
+		const originalRequestRecovery = executionStore.submissions.requestSubmissionRecovery.bind(executionStore.submissions);
+		executionStore.submissions.requestSubmissionRecovery = async (attempt) => {
+			events.push('request-recovery');
+			return originalRequestRecovery(attempt);
+		};
 		await executionStore.submissions.admitDirect(directInput());
 		await executionStore.submissions.claimSubmission({ submissionId: 'direct-1', attemptId: 'attempt-1', ownerId: 'test-owner', leaseExpiresAt: Date.now() + 30_000 });
 
@@ -238,7 +240,7 @@ describe('createCloudflareAgentRuntime()', () => {
 
 	it('skips interrupted-attempt reconciliation while a fresh attempt marker covers the running attempt', async () => {
 		const events: string[] = [];
-		const { storage } = makeFakeSql(events);
+		const { storage } = makeFakeSql();
 		const recovery = makeRecoveryContext({ inspection: 'absent' });
 		const runtime = makeRuntime({
 			createdAgent: {} as never,
@@ -246,6 +248,11 @@ describe('createCloudflareAgentRuntime()', () => {
 		});
 		const instance = makeInstance(storage);
 		const executionStore = prepare(runtime, instance);
+		const originalRequeue = executionStore.submissions.requeueSubmissionBeforeInputApplied.bind(executionStore.submissions);
+		executionStore.submissions.requeueSubmissionBeforeInputApplied = async (attempt) => {
+			events.push('requeue');
+			return originalRequeue(attempt);
+		};
 		await executionStore.submissions.admitDirect(directInput());
 		await executionStore.submissions.claimSubmission({ submissionId: 'direct-1', attemptId: 'attempt-1', ownerId: 'test-owner', leaseExpiresAt: Date.now() + 30_000 });
 		await executionStore.submissions.insertAttemptMarker({ submissionId: 'direct-1', attemptId: 'attempt-1' });
@@ -261,7 +268,7 @@ describe('createCloudflareAgentRuntime()', () => {
 
 	it('reconciles running attempts when the attempt marker is stale', async () => {
 		const events: string[] = [];
-		const { db, storage } = makeFakeSql(events);
+		const { db, storage } = makeFakeSql();
 		const recovery = makeRecoveryContext({ inspection: 'absent' });
 		const runtime = makeRuntime({
 			createdAgent: {} as never,
@@ -269,6 +276,11 @@ describe('createCloudflareAgentRuntime()', () => {
 		});
 		const instance = makeInstance(storage);
 		const executionStore = prepare(runtime, instance);
+		const originalRequeue = executionStore.submissions.requeueSubmissionBeforeInputApplied.bind(executionStore.submissions);
+		executionStore.submissions.requeueSubmissionBeforeInputApplied = async (attempt) => {
+			events.push('requeue');
+			return originalRequeue(attempt);
+		};
 		await executionStore.submissions.admitDirect(directInput());
 		await executionStore.submissions.claimSubmission({ submissionId: 'direct-1', attemptId: 'attempt-1', ownerId: 'test-owner', leaseExpiresAt: Date.now() + 30_000 });
 		db.prepare(
@@ -348,7 +360,7 @@ describe('createCloudflareAgentRuntime()', () => {
 
 	it('requeues interrupted attempts when canonical input is absent', async () => {
 		const events: string[] = [];
-		const { storage } = makeFakeSql(events);
+		const { storage } = makeFakeSql();
 		const recovery = makeRecoveryContext({ inspection: 'absent' });
 		const runtime = makeRuntime({
 			createdAgent: {} as never,
@@ -356,6 +368,11 @@ describe('createCloudflareAgentRuntime()', () => {
 		});
 		const instance = makeInstance(storage);
 		const executionStore = prepare(runtime, instance);
+		const originalRequeue = executionStore.submissions.requeueSubmissionBeforeInputApplied.bind(executionStore.submissions);
+		executionStore.submissions.requeueSubmissionBeforeInputApplied = async (attempt) => {
+			events.push('requeue');
+			return originalRequeue(attempt);
+		};
 		await executionStore.submissions.admitDirect(directInput());
 		await executionStore.submissions.claimSubmission({ submissionId: 'direct-1', attemptId: 'attempt-1', ownerId: 'test-owner', leaseExpiresAt: Date.now() + 30_000 });
 
@@ -367,7 +384,7 @@ describe('createCloudflareAgentRuntime()', () => {
 
 	it('records interruption before settling applied incomplete canonical input as error', async () => {
 		const events: string[] = [];
-		const { storage } = makeFakeSql(events);
+		const { storage } = makeFakeSql();
 		const recovery = makeRecoveryContext({ inspection: 'uncertain', events });
 		const payloads: unknown[] = [];
 		const runtime = makeRuntime({
@@ -379,13 +396,18 @@ describe('createCloudflareAgentRuntime()', () => {
 		});
 		const instance = makeInstance(storage);
 		const executionStore = prepare(runtime, instance);
+		const originalFail = executionStore.submissions.failSubmission.bind(executionStore.submissions);
+		executionStore.submissions.failSubmission = async (attempt, error) => {
+			events.push('settle-error');
+			return originalFail(attempt, error);
+		};
 		await executionStore.submissions.admitDirect(directInput());
 		await executionStore.submissions.claimSubmission({ submissionId: 'direct-1', attemptId: 'attempt-1', ownerId: 'test-owner', leaseExpiresAt: Date.now() + 30_000 });
 		await executionStore.submissions.markSubmissionInputApplied({ submissionId: 'direct-1', attemptId: 'attempt-1' });
 
 		await runtime.onStart(instance, () => {});
 
-		expect(events).toEqual(['record-terminal', 'settle']);
+		expect(events).toEqual(['record-terminal', 'settle-error']);
 		expect(payloads).toEqual([directInput().payload, directInput().payload]);
 		expect(await executionStore.submissions.getSubmission('direct-1')).toMatchObject({ status: 'settled' });
 	});
@@ -439,7 +461,7 @@ describe('createCloudflareAgentRuntime()', () => {
 
 	it('retries a synchronously failed attempt on a later wake when canonical input is absent', async () => {
 		const events: string[] = [];
-		const { storage } = makeFakeSql(events);
+		const { storage } = makeFakeSql();
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		const recovery = makeRecoveryContext({ inspection: 'absent' });
 		let startCalls = 0;
@@ -454,6 +476,11 @@ describe('createCloudflareAgentRuntime()', () => {
 			return new Promise<void>(() => {});
 		};
 		const executionStore = prepare(runtime, instance);
+		const originalRequeue = executionStore.submissions.requeueSubmissionBeforeInputApplied.bind(executionStore.submissions);
+		executionStore.submissions.requeueSubmissionBeforeInputApplied = async (attempt) => {
+			events.push('requeue');
+			return originalRequeue(attempt);
+		};
 		await executionStore.submissions.admitDirect(directInput());
 
 		await runtime.onStart(instance, () => {});
