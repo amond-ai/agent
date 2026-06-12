@@ -298,7 +298,10 @@ export class SqliteEventStreamStore implements EventStreamStore {
 		bucket.add(listener);
 		return () => {
 			bucket!.delete(listener);
-			if (bucket!.size === 0) {
+			// Only remove the map entry if it still holds this bucket;
+			// deleteStream may have detached it and a newer bucket may have
+			// been installed for a recreated stream since.
+			if (bucket!.size === 0 && this.listeners.get(path) === bucket) {
 				this.listeners.delete(path);
 			}
 		};
@@ -310,6 +313,7 @@ export class SqliteEventStreamStore implements EventStreamStore {
 		// Notify subscribers before removing them so long-poll/SSE readers
 		// wake immediately rather than hanging until timeout.
 		this.notifyListeners(path);
+		this.listeners.get(path)?.clear();
 		this.listeners.delete(path);
 	}
 
