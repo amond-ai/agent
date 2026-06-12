@@ -385,7 +385,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	metadata: Record<string, any>;
 
 	private taskSessions: TaskSessionRef[];
-	private harness: Agent;
+	private agentLoop: Agent;
 	private storageKey: string;
 	private affinityKey: string;
 	private config: AgentConfig;
@@ -411,7 +411,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	private onDelete: (() => void) | undefined;
 	private submissionStore: AgentSubmissionStore | undefined;
 	private pendingSave: Promise<void> = Promise.resolve();
-	private harnessMessageCheckpointCursor = 0;
+	private agentLoopMessageCheckpointCursor = 0;
 	private activeJournalCallbacks: ProcessAgentSubmissionOptions['journal'] | undefined;
 	private activeTimeoutAt: number | undefined;
 	private activeTurnCanCommitJournal = false;
@@ -508,7 +508,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
 		const previousMessages = this.history.buildContext();
 
-		this.harness = new Agent({
+		this.agentLoop = new Agent({
 			initialState: {
 				systemPrompt,
 				model: this.config.model,
@@ -523,9 +523,9 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			sessionId: this.affinityKey,
 		});
 
-		this.harnessMessageCheckpointCursor = this.harness.state.messages.length;
+		this.agentLoopMessageCheckpointCursor = this.agentLoop.state.messages.length;
 		this.eventCallback = options.onAgentEvent;
-		this.harness.subscribe(async (event) => {
+		this.agentLoop.subscribe(async (event) => {
 			switch (event.type) {
 				case 'agent_start':
 					this.emit({ type: 'agent_start' });
@@ -614,7 +614,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					const assistant =
 						message.role === 'assistant' ? (message as AssistantMessage) : undefined;
 					const output = assistant ? (toTurnMessage(assistant) as TurnOutput) : undefined;
-					const model = this.harness.state.model;
+					const model = this.agentLoop.state.model;
 					this.emit({
 						type: 'turn',
 						turnId,
@@ -929,7 +929,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	}
 
 	abort(): void {
-		this.harness.abort();
+		this.agentLoop.abort();
 		this.compactionAbortController?.abort();
 		this.modelRetryAbortController?.abort();
 		for (const task of this.activeTasks) task.abort();
@@ -1201,13 +1201,13 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		options: CallOverrides,
 		fn: (ctx: { resolvedModel: Model<any> }) => Promise<T>,
 	): Promise<T> {
-		const previousTools = this.harness.state.tools;
-		const previousModel = this.harness.state.model;
-		const previousThinkingLevel = this.harness.state.thinkingLevel;
+		const previousTools = this.agentLoop.state.tools;
+		const previousModel = this.agentLoop.state.model;
+		const previousThinkingLevel = this.agentLoop.state.thinkingLevel;
 
 		const resolvedModel = this.resolveModelForCall(options.model, options.callSite);
-		this.harness.state.model = resolvedModel;
-		this.harness.state.thinkingLevel = this.resolveThinkingLevelForCall(options.thinkingLevel);
+		this.agentLoop.state.model = resolvedModel;
+		this.agentLoop.state.thinkingLevel = this.resolveThinkingLevelForCall(options.thinkingLevel);
 		const builtinTools = this.createBuiltinTools(
 			this.env,
 			options.tools,
@@ -1219,13 +1219,13 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			[...this.agentTools, ...options.tools],
 			builtinTools,
 		);
-		this.harness.state.tools = [...builtinTools, ...customTools, ...(options.extraTools ?? [])];
+		this.agentLoop.state.tools = [...builtinTools, ...customTools, ...(options.extraTools ?? [])];
 		try {
 			return await fn({ resolvedModel });
 		} finally {
-			this.harness.state.tools = previousTools;
-			this.harness.state.model = previousModel;
-			this.harness.state.thinkingLevel = previousThinkingLevel;
+			this.agentLoop.state.tools = previousTools;
+			this.agentLoop.state.model = previousModel;
+			this.agentLoop.state.thinkingLevel = previousThinkingLevel;
 		}
 	}
 
@@ -1396,10 +1396,10 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			this.emit({ type: 'operation_start', operationId, operationKind: operation });
 
 			// Mirror Session.abort() for the duration of this call.
-			// shell() doesn't use the harness/compaction/tasks — these
+			// shell() doesn't use the agent loop/compaction/tasks — these
 			// hooks are inert there.
 			const onAbort = () => {
-				this.harness.abort();
+				this.agentLoop.abort();
 				this.compactionAbortController?.abort(signal?.reason);
 				this.modelRetryAbortController?.abort(signal?.reason);
 				for (const task of this.activeTasks) task.abort();
@@ -1528,17 +1528,17 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
 	private rebuildHarnessContext(): void {
 		const messages = this.history.buildContext();
-		this.harness.state.messages = messages;
-		this.harnessMessageCheckpointCursor = messages.length;
+		this.agentLoop.state.messages = messages;
+		this.agentLoopMessageCheckpointCursor = messages.length;
 	}
 
 	private async checkpointHarnessMessages(): Promise<void> {
-		const messages = this.harness.state.messages.slice(
-			this.harnessMessageCheckpointCursor,
+		const messages = this.agentLoop.state.messages.slice(
+			this.agentLoopMessageCheckpointCursor,
 		) as AgentMessage[];
 		if (messages.length === 0) return;
 		this.history.appendMessages(messages);
-		this.harnessMessageCheckpointCursor = this.harness.state.messages.length;
+		this.agentLoopMessageCheckpointCursor = this.agentLoop.state.messages.length;
 		await this.save();
 		if (this.activeTurnCanCommitJournal) {
 			const leafId = this.history.getLeafId();
@@ -1619,7 +1619,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			}
 			try {
 				await start();
-				await this.harness.waitForIdle();
+				await this.agentLoop.waitForIdle();
 				await this.checkpointHarnessMessages();
 			} catch (error) {
 				try {
@@ -1633,11 +1633,11 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				throw error;
 			}
 
-			const messages = this.harness.state.messages;
+			const messages = this.agentLoop.state.messages;
 			const latest = messages[messages.length - 1];
 			if (latest?.role !== 'assistant') return;
 			const assistant = latest as AssistantMessage;
-			const model = this.harness.state.model;
+			const model = this.agentLoop.state.model;
 
 			if (isContextOverflow(assistant, model.contextWindow ?? 0)) {
 				if (overflowRecoveryAttempted) {
@@ -1649,7 +1649,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				this.rebuildHarnessContext();
 				if (!(await this.runCompaction('overflow'))) return;
 				this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...');
-				start = () => this.harness.continue();
+				start = () => this.agentLoop.continue();
 				continue;
 			}
 
@@ -1660,7 +1660,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				// budget identical to the one a restart would compute.
 				const transientRetries = countConsecutiveRetryableModelErrors(this.history.getActivePath());
 				if (!(await this.waitForTransientModelRetry(assistant, transientRetries))) return;
-				start = () => this.harness.continue();
+				start = () => this.agentLoop.continue();
 				continue;
 			}
 
@@ -1705,7 +1705,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		if (assistantMessage.stopReason === 'aborted' || assistantMessage.stopReason === 'error')
 			return;
 
-		const model = this.harness.state.model;
+		const model = this.agentLoop.state.model;
 		const settings = this.resolveCompactionSettings(model);
 		if (!settings.enabled) return;
 		const contextWindow = model.contextWindow ?? 0;
@@ -1731,14 +1731,14 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	 */
 	private async runCompaction(reason: 'threshold' | 'overflow' | 'manual'): Promise<boolean> {
 		this.compactionAbortController = new AbortController();
-		const messagesBefore = this.harness.state.messages.length;
+		const messagesBefore = this.agentLoop.state.messages.length;
 		const compactionStartMs = Date.now();
 		// True between `compaction_start` and its terminal `compaction` event,
 		// so every started compaction emits exactly one terminal event.
 		let terminalPending = false;
 
 		try {
-			const sessionModel = this.harness.state.model;
+			const sessionModel = this.agentLoop.state.model;
 			const settings = this.resolveCompactionSettings(sessionModel);
 			// Summarization may use a cheaper or stronger model than the active
 			// session model, but the cut point still uses the active model's window.
@@ -1828,7 +1828,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				this.emit({
 					type: 'compaction',
 					messagesBefore,
-					messagesAfter: this.harness.state.messages.length,
+					messagesAfter: this.agentLoop.state.messages.length,
 					durationMs: durationSince(compactionStartMs),
 					isError: true,
 					error: serializeError(abortError),
@@ -1847,7 +1847,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			});
 			this.rebuildHarnessContext();
 
-			const messagesAfter = this.harness.state.messages.length;
+			const messagesAfter = this.agentLoop.state.messages.length;
 			this.internalLog(
 				'info',
 				`[flue:compaction] Complete — messages: ${messagesBefore} → ${messagesAfter}, ` +
@@ -1873,7 +1873,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				this.emit({
 					type: 'compaction',
 					messagesBefore,
-					messagesAfter: this.harness.state.messages.length,
+					messagesAfter: this.agentLoop.state.messages.length,
 					durationMs: durationSince(compactionStartMs),
 					isError: true,
 					error: serializeError(error),
@@ -1898,7 +1898,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	}
 
 	private throwIfError(context: string): void {
-		const errorMsg = this.harness.state.errorMessage;
+		const errorMsg = this.agentLoop.state.errorMessage;
 		if (errorMsg) {
 			throw new OperationFailedError({ operation: context, reason: errorMsg });
 		}
@@ -1913,7 +1913,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	 * was appended (defensive — `throwIfError` normally fires first).
 	 *
 	 * Walks the durable, parent-linked active path rather than the volatile
-	 * flat `harness.state.messages` array, so the result is robust to
+	 * flat `agentLoop.state.messages` array, so the result is robust to
 	 * mid-call mutations (e.g. overflow recovery removing a failed
 	 * assistant turn before retry).
 	 */
@@ -1931,7 +1931,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	}
 
 	private getAssistantText(): string {
-		const messages = this.harness.state.messages;
+		const messages = this.agentLoop.state.messages;
 		for (let i = messages.length - 1; i >= 0; i--) {
 			const msg = messages[i];
 			if (msg?.role !== 'assistant') continue;
@@ -2097,7 +2097,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					);
 					const persistedAssistant = persistedAssistants.at(-1);
 					const assistant = persistedAssistant?.message as AssistantMessage | undefined;
-					const model = this.harness.state.model;
+					const model = this.agentLoop.state.model;
 					const overflow = assistant ? isContextOverflow(assistant, model.contextWindow ?? 0) : false;
 					const streamContinuation =
 						assistant?.stopReason === 'aborted' &&
@@ -2145,7 +2145,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 							}
 						}
 						await this.runModelTurnWithRecovery({
-							start: () => this.harness.continue(),
+							start: () => this.agentLoop.continue(),
 							signal: options.signal,
 							overflowRecoveryAttempted: overflow,
 						});
@@ -2179,7 +2179,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
 	/**
 	 * Shared body of `prompt()` and `skill()`: scope the runtime, optionally
-	 * inject the result-tool pair, drive the harness, and aggregate usage.
+	 * inject the result-tool pair, drive the agent loop, and aggregate usage.
 	 *
 	 * Returns `PromptResultResponse<T>` when a result schema is set, else `PromptResponse`.
 	 */
@@ -2227,7 +2227,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				}
 
 				await this.runModelTurnWithRecovery({
-					start: () => this.harness.prompt(args.promptText, args.images),
+					start: () => this.agentLoop.prompt(args.promptText, args.images),
 					signal: args.signal,
 				});
 				this.throwIfError(args.errorLabel);
@@ -2242,7 +2242,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	}
 
 	/**
-	 * Drive the harness through one or more turns until the LLM either calls
+	 * Drive the agent loop through one or more turns until the LLM either calls
 	 * the `finish` tool (success) or the `give_up` tool (typed error).
 	 *
 	 * If a turn ends with neither tool called, we send a brief reminder and
@@ -2266,7 +2266,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			// Images attach only on the first turn — retry follow-ups carry text
 			// only, so we don't re-bill image bytes on every result-tool retry.
 			await this.runModelTurnWithRecovery({
-				start: () => this.harness.prompt(nextPrompt, attempt === 0 ? initialImages : undefined),
+				start: () => this.agentLoop.prompt(nextPrompt, attempt === 0 ? initialImages : undefined),
 				signal,
 			});
 			this.throwIfError(errorLabel);
