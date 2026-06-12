@@ -108,14 +108,28 @@ describe('classifySubmissionState()', () => {
 		});
 	});
 
-	it('returns resume tool_results when a toolUse response has persisted tool results', () => {
+	it('returns resume tool_results when every call in a toolUse response has a persisted result', () => {
 		const following: SessionEntry[] = [
-			messageEntry('a1', assistant({ stopReason: 'toolUse' })),
+			messageEntry('a1', {
+				...assistant({ stopReason: 'toolUse' }),
+				content: [
+					{ type: 'toolCall', id: 'tc1', name: 'lookup', arguments: {} },
+					{ type: 'toolCall', id: 'tc2', name: 'search', arguments: {} },
+				],
+			}),
 			messageEntry('t1', {
 				role: 'toolResult',
 				toolCallId: 'tc1',
 				toolName: 'lookup',
-				content: [{ type: 'text', text: 'result' }],
+				content: [{ type: 'text', text: 'result one' }],
+				isError: false,
+				timestamp: Date.now(),
+			}),
+			messageEntry('t2', {
+				role: 'toolResult',
+				toolCallId: 'tc2',
+				toolName: 'search',
+				content: [{ type: 'text', text: 'result two' }],
 				isError: false,
 				timestamp: Date.now(),
 			}),
@@ -123,6 +137,126 @@ describe('classifySubmissionState()', () => {
 		expect(classifySubmissionState(following, { contextWindow: 100000 })).toMatchObject({
 			kind: 'resume',
 			mode: 'tool_results',
+			consecutiveRetryableErrors: 0,
+		});
+	});
+
+	it('returns resume tool_results_partial when a toolUse response has results for only some calls', () => {
+		// The mid-batch interruption shape: the turn requested three tools,
+		// only the first completed before the abort broke the tool loop. A
+		// plain resume would drop the incomplete batch from model context and
+		// re-execute the completed call; resumption must repair the batch
+		// first.
+		const following: SessionEntry[] = [
+			messageEntry('a1', {
+				...assistant({ stopReason: 'toolUse' }),
+				content: [
+					{ type: 'toolCall', id: 'tc1', name: 'lookup', arguments: {} },
+					{ type: 'toolCall', id: 'tc2', name: 'search', arguments: {} },
+					{ type: 'toolCall', id: 'tc3', name: 'fetch', arguments: {} },
+				],
+			}),
+			messageEntry('t1', {
+				role: 'toolResult',
+				toolCallId: 'tc1',
+				toolName: 'lookup',
+				content: [{ type: 'text', text: 'result one' }],
+				isError: false,
+				timestamp: Date.now(),
+			}),
+		];
+		expect(classifySubmissionState(following, { contextWindow: 100000 })).toMatchObject({
+			kind: 'resume',
+			mode: 'tool_results_partial',
+			consecutiveRetryableErrors: 0,
+		});
+	});
+
+	it('returns resume tool_results_partial when an aborted partial trails the incomplete batch', () => {
+		// Graceful shutdown mid-batch checkpoints the partial results and then
+		// the next turn's empty aborted assistant (the agent loop starts it
+		// before the abort surfaces). The partial batch — not the trailing
+		// aborted partial — must drive resumption.
+		const following: SessionEntry[] = [
+			messageEntry('a1', {
+				...assistant({ stopReason: 'toolUse' }),
+				content: [
+					{ type: 'toolCall', id: 'tc1', name: 'lookup', arguments: {} },
+					{ type: 'toolCall', id: 'tc2', name: 'search', arguments: {} },
+				],
+			}),
+			messageEntry('t1', {
+				role: 'toolResult',
+				toolCallId: 'tc1',
+				toolName: 'lookup',
+				content: [{ type: 'text', text: 'result one' }],
+				isError: false,
+				timestamp: Date.now(),
+			}),
+			messageEntry('a2', assistant({ stopReason: 'aborted' })),
+		];
+		expect(classifySubmissionState(following, { contextWindow: 100000 })).toMatchObject({
+			kind: 'resume',
+			mode: 'tool_results_partial',
+			consecutiveRetryableErrors: 0,
+		});
+	});
+
+	it('returns resume aborted_partial when a complete batch precedes the trailing aborted partial', () => {
+		// A complete batch survives in model context, so plain resumption
+		// continues from the recorded results — no repair, no re-execution.
+		const following: SessionEntry[] = [
+			messageEntry('a1', {
+				...assistant({ stopReason: 'toolUse' }),
+				content: [{ type: 'toolCall', id: 'tc1', name: 'lookup', arguments: {} }],
+			}),
+			messageEntry('t1', {
+				role: 'toolResult',
+				toolCallId: 'tc1',
+				toolName: 'lookup',
+				content: [{ type: 'text', text: 'result one' }],
+				isError: false,
+				timestamp: Date.now(),
+			}),
+			messageEntry('a2', assistant({ stopReason: 'aborted' })),
+		];
+		expect(classifySubmissionState(following, { contextWindow: 100000 })).toMatchObject({
+			kind: 'resume',
+			mode: 'aborted_partial',
+			consecutiveRetryableErrors: 0,
+		});
+	});
+
+	it('returns resume stream_continuation when a recovered stream trails a partial batch', () => {
+		// Pins the precedence: a recovered stream continuation resumes from
+		// the recovered partial and must never be rewound by batch repair.
+		const following: SessionEntry[] = [
+			messageEntry('a1', {
+				...assistant({ stopReason: 'toolUse' }),
+				content: [
+					{ type: 'toolCall', id: 'tc1', name: 'lookup', arguments: {} },
+					{ type: 'toolCall', id: 'tc2', name: 'search', arguments: {} },
+				],
+			}),
+			messageEntry('t1', {
+				role: 'toolResult',
+				toolCallId: 'tc1',
+				toolName: 'lookup',
+				content: [{ type: 'text', text: 'result one' }],
+				isError: false,
+				timestamp: Date.now(),
+			}),
+			messageEntry('a2', assistant({ stopReason: 'aborted' })),
+			messageEntry('s1', {
+				role: 'signal',
+				type: 'stream_continued',
+				content: 'The interrupted stream was recovered.',
+				timestamp: Date.now(),
+			}),
+		];
+		expect(classifySubmissionState(following, { contextWindow: 100000 })).toMatchObject({
+			kind: 'resume',
+			mode: 'stream_continuation',
 			consecutiveRetryableErrors: 0,
 		});
 	});

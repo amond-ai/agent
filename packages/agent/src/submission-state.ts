@@ -36,8 +36,16 @@ import type { MessageEntry, SessionEntry } from './types.ts';
  *
  * - `input_only` — the input was applied but no assistant response was
  *   persisted; start the first turn.
- * - `tool_results` — a toolUse response with persisted tool results;
- *   continue the loop from the results.
+ * - `tool_results` — a toolUse response whose persisted tool results form a
+ *   complete batch; continue the loop from the results.
+ * - `tool_results_partial` — the trailing toolUse turn carries an
+ *   incomplete tool-result batch (the turn was interrupted mid-batch, e.g.
+ *   graceful shutdown broke the tool loop after some calls completed). An
+ *   incomplete batch is excluded from model context, so a plain resume
+ *   would replay the turn and RE-EXECUTE the calls that already completed.
+ *   Resumption must first repair the batch — preserve every recorded
+ *   result, synthesize interrupted-markers for the unresolved calls — and
+ *   only then continue (see `findTrailingPartialToolBatch`).
  * - `stream_continuation` — an aborted response already recovered from
  *   persisted stream chunks (a `stream_continued` signal follows it);
  *   continue from the recovered partial.
@@ -55,6 +63,7 @@ import type { MessageEntry, SessionEntry } from './types.ts';
 type SubmissionResumeMode =
 	| 'input_only'
 	| 'tool_results'
+	| 'tool_results_partial'
 	| 'stream_continuation'
 	| 'transient_retry'
 	| 'overflow'
@@ -156,7 +165,7 @@ export function classifySubmissionState(
 		if (following.some((entry) => entry.type === 'message' && entry.message.role === 'toolResult')) {
 			return {
 				kind: 'resume',
-				mode: 'tool_results',
+				mode: findTrailingPartialToolBatch(following) ? 'tool_results_partial' : 'tool_results',
 				assistant,
 				consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
 			};
@@ -164,6 +173,19 @@ export function classifySubmissionState(
 		return { kind: 'tool_use_unresolved', assistant };
 	}
 	if (assistant.stopReason === 'aborted') {
+		// A turn interrupted mid-tool-batch leaves a trailing aborted
+		// assistant behind the partial batch: after the broken tool loop, the
+		// agent loop starts the next turn, which aborts at the provider and
+		// is checkpointed last. The batch — not the empty aborted partial —
+		// is the state that must drive resumption.
+		if (findTrailingPartialToolBatch(following)) {
+			return {
+				kind: 'resume',
+				mode: 'tool_results_partial',
+				assistant,
+				consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+			};
+		}
 		// An aborted partial without a recovered stream continuation. The
 		// abort itself is not a property of the work (graceful shutdown is
 		// the canonical producer), so the submission is resumable: the
@@ -178,6 +200,82 @@ export function classifySubmissionState(
 	}
 	// stopReason 'error', non-retryable and non-overflow.
 	return { kind: 'terminal_error', reason: assistant.errorMessage ?? assistant.stopReason };
+}
+
+export interface TrailingPartialToolBatch {
+	/** History entry id of the toolUse assistant whose batch is incomplete. */
+	entryId: string;
+	assistant: AssistantMessage;
+	/** The turn's full tool-call set, in original call order. */
+	toolCalls: Array<{ type: 'toolCall'; id: string; name: string }>;
+}
+
+/**
+ * Locate the trailing toolUse turn whose persisted tool-result batch is
+ * incomplete — the persistence shape left behind when an abort breaks the
+ * tool loop mid-batch. The toolUse assistant is either the last assistant in
+ * `following`, or the second-to-last when the final entry is the aborted
+ * partial of the next turn the abort also cut short.
+ *
+ * Conservative by construction: returns undefined when the batch is
+ * complete (every call id has a recorded result), when a recovered stream
+ * continuation exists (resumption continues from the recovered partial and
+ * must not rewind history), or when any unexpected entry interrupts the
+ * trailing `assistant → toolResults → [aborted assistant]` shape.
+ *
+ * Both the classifier and the session-side repair derive the batch through
+ * this single function so they can never disagree about which turn is
+ * incomplete.
+ */
+export function findTrailingPartialToolBatch(
+	following: SessionEntry[],
+): TrailingPartialToolBatch | undefined {
+	if (
+		following.some(
+			(entry) =>
+				entry.type === 'message' &&
+				entry.message.role === 'signal' &&
+				entry.message.type === 'stream_continued',
+		)
+	) {
+		return undefined;
+	}
+	let end = following.length;
+	const lastEntry = following[end - 1];
+	if (
+		lastEntry?.type === 'message' &&
+		lastEntry.message.role === 'assistant' &&
+		(lastEntry.message as AssistantMessage).stopReason === 'aborted'
+	) {
+		end -= 1;
+	}
+	// Walk back over the trailing toolResult run to the assistant that owns it.
+	let index = end - 1;
+	const resultIds = new Set<string>();
+	while (index >= 0) {
+		const entry = following[index];
+		if (entry?.type !== 'message' || entry.message.role !== 'toolResult') break;
+		resultIds.add(entry.message.toolCallId);
+		index -= 1;
+	}
+	const assistantEntry = following[index];
+	if (
+		index < 0 ||
+		assistantEntry?.type !== 'message' ||
+		assistantEntry.message.role !== 'assistant'
+	) {
+		return undefined;
+	}
+	const assistant = assistantEntry.message as AssistantMessage;
+	if (assistant.stopReason !== 'toolUse') return undefined;
+	const toolCalls = assistant.content.flatMap((content) =>
+		content.type === 'toolCall'
+			? [{ type: 'toolCall' as const, id: content.id, name: content.name }]
+			: [],
+	);
+	if (toolCalls.length === 0) return undefined;
+	if (toolCalls.every((toolCall) => resultIds.has(toolCall.id))) return undefined;
+	return { entryId: assistantEntry.id, assistant, toolCalls };
 }
 
 export function isRetryableModelError(message: AssistantMessage): boolean {
