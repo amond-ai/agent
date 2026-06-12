@@ -1,5 +1,9 @@
 import * as path from 'node:path';
 
+/**
+ * Config file basenames searched, in priority order. TypeScript first because
+ * Flue's audience writes TS agents; the rest mirror Vite's supported set.
+ */
 export const CONFIG_BASENAMES = Object.freeze([
 	'flue.config.ts',
 	'flue.config.mts',

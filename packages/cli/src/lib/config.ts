@@ -89,19 +89,11 @@ const UserFlueConfigSchema = v.strictObject({
 
 // ─── Discovery ──────────────────────────────────────────────────────────────
 
-/**
- * Config file basenames searched, in priority order. TypeScript first because
- * Flue's audience writes TS agents; the rest mirror Vite's supported set.
- */
 export interface ResolveConfigPathOptions {
 	/** Working directory for config discovery and relative `configFile` paths. */
 	cwd: string;
-	/**
-	 * Explicit config-file path (relative to `cwd`, or absolute), or `false`
-	 * to disable config loading entirely. Mirrors Astro's
-	 * `AstroInlineOnlyConfig.configFile`.
-	 */
-	configFile?: string | false;
+	/** Explicit config-file path (relative to `cwd`, or absolute). */
+	configFile?: string;
 }
 
 /**
@@ -114,8 +106,6 @@ export interface ResolveConfigPathOptions {
  * that's a typo, not a "config not configured" situation.
  */
 export function resolveConfigPath(opts: ResolveConfigPathOptions): string | undefined {
-	if (opts.configFile === false) return undefined;
-
 	const cwd = path.resolve(opts.cwd);
 	if (opts.configFile) {
 		const explicit = path.resolve(cwd, opts.configFile);
@@ -190,8 +180,8 @@ export interface ResolveConfigOptions {
 	 * Relative values resolve from the process working directory.
 	 */
 	searchFrom?: string;
-	/** Explicit config-file path relative to `cwd`, or `false` to skip loading. */
-	configFile?: string | false;
+	/** Explicit config-file path relative to `cwd`. */
+	configFile?: string;
 	/**
 	 * Inline overrides. Only fields the caller actually supplied should be
 	 * present — `undefined` means "fall through to the config-file value or the
@@ -203,8 +193,6 @@ export interface ResolveConfigOptions {
 export interface ResolvedConfigResult {
 	/** Absolute path of the loaded config file, or undefined if none. */
 	configPath: string | undefined;
-	/** The merged-but-unresolved user config (config file + inline). */
-	userConfig: UserFlueConfig;
 	/** The fully-resolved config consumed by the rest of the CLI. */
 	flueConfig: FlueConfig;
 }
@@ -304,7 +292,6 @@ export async function resolveConfig(opts: ResolveConfigOptions): Promise<Resolve
 
 	return {
 		configPath,
-		userConfig: merged,
 		flueConfig: {
 			target: merged.target,
 			root,
