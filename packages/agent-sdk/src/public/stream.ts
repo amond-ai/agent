@@ -32,14 +32,14 @@ export interface FlueEventStream<T = FlueEvent> extends AsyncIterable<T> {
 	/** Cancel the stream and abort the underlying connection. */
 	cancel(reason?: unknown): void;
 	/**
-	 * Resume offset of the most recently fetched batch (the server's
-	 * `Stream-Next-Offset`). Advances per HTTP response, not per delivered
-	 * event — every event in a batch observes the batch's final offset, so
-	 * checkpointing this value mid-batch and resuming from it skips the rest
-	 * of that batch. On workflow-run streams the event's `eventIndex` equals
-	 * the stream sequence and can serve as a per-event checkpoint instead.
-	 * Agent streams restart `eventIndex` per prompt, so there it is not an
-	 * offset.
+	 * Resume offset checkpoint (the server's `Stream-Next-Offset`). Advances
+	 * per delivered batch: it moves to a batch's next-offset only once every
+	 * event in that batch has been yielded, so resuming from a checkpointed
+	 * value never skips undelivered events — at worst it re-delivers events
+	 * of the batch in flight when the checkpoint was taken (at-least-once).
+	 * On workflow-run streams the event's `eventIndex` equals the stream
+	 * sequence and can serve as a per-event checkpoint instead. Agent streams
+	 * restart `eventIndex` per prompt, so there it is not an offset.
 	 */
 	readonly offset: string;
 }
@@ -56,10 +56,13 @@ export interface StreamConnectionOptions {
  * Creates a {@link FlueEventStream} that yields individual {@link FlueEvent}
  * values from a Durable Streams endpoint.
  *
- * Pulls events directly from the DS client's `jsonStream()` ReadableStream
- * reader in each `next()` call. This provides natural backpressure — the DS
- * client only fetches the next batch when the consumer is ready — and avoids
- * unbounded memory growth for slow consumers.
+ * Consumes the DS client's `subscribeJson()` batches and yields events one at
+ * a time. Each batch's subscriber promise resolves only after the batch's
+ * last event has been yielded, which provides natural backpressure (avoiding
+ * unbounded memory growth for slow consumers) and pairs every event with its
+ * own batch's `Stream-Next-Offset`. The DS response's live `offset` getter is
+ * never used as a checkpoint: response prefetch advances it past batches that
+ * have not been delivered yet.
  */
 export function createFlueEventStream<T = FlueEvent>(
 	streamOpts: FlueStreamOptions,
@@ -103,78 +106,175 @@ export function createFlueEventStream<T = FlueEvent>(
 		return responsePromise;
 	};
 
+	// Batches arrive through subscribeJson(); each subscriber promise resolves
+	// only once every event in its batch has been yielded, providing
+	// backpressure. `currentOffset` advances per *delivered* batch using the
+	// batch's own Stream-Next-Offset header — never the DS response's live
+	// `offset` getter, which response prefetch advances past undelivered
+	// batches.
+	//
+	// Termination must likewise be consumption-ordered: the DS response's
+	// `closed` promise resolves when *fetching* finishes, while batches can
+	// still be buffered or downloading, so it cannot end iteration directly.
+	// Instead the final batch is identified from its own metadata: every
+	// `live: false` connection yields exactly one response, and live modes
+	// end with a batch whose `streamClosed` flag is set. The lone exception
+	// is an SSE connection that ends without a stream-closed control event;
+	// for that case `closed` is used as a backstop after a macrotask barrier
+	// (all SSE batches are synthetic in-memory responses, so any still
+	// undelivered ones land within microtasks once fetching has finished).
+	let started = false;
+	let pending:
+		| { items: readonly T[]; next: number; offset: string; final: { upToDate: boolean } | undefined }
+		| undefined;
+	let drained: (() => void) | undefined;
+	let notify: (() => void) | undefined;
+	let deliveryDone = false;
+	let fetchDone = false;
+	let finalBatch: { upToDate: boolean; offset: string } | undefined;
+	let streamFailure: { error: unknown } | undefined;
+	let currentOffset = streamOpts.offset ?? '-1';
+
+	/** Wakes a next() call waiting for the next batch, end, or cancellation. */
+	const wake = () => {
+		const resolve = notify;
+		notify = undefined;
+		resolve?.();
+	};
+
+	/** Resolves the current batch's subscriber promise. */
+	const releaseBatch = () => {
+		const resolve = drained;
+		drained = undefined;
+		resolve?.();
+	};
+
 	const cancel = (reason?: unknown) => {
 		abortController.abort(reason);
 		removeExternalAbortListener?.();
+		// Unblock the subscriber loop and any waiting next() so both can
+		// observe the abort.
+		releaseBatch();
+		wake();
 	};
 
-	// Reader is initialized lazily on the first next() call.
-	let reader: ReadableStreamDefaultReader<T> | undefined;
-	let readerDone = false;
-	let currentOffset = streamOpts.offset ?? '-1';
+	const startConsuming = (res: Awaited<ReturnType<typeof stream<T>>>) => {
+		res.subscribeJson<T>((batch) => {
+			if (abortController.signal.aborted) return;
+			const final = batch.streamClosed || streamOpts.live === false ? { upToDate: batch.upToDate } : undefined;
+			if (batch.items.length === 0) {
+				// Nothing to deliver; the batch's next-offset is still a safe
+				// resume point because no undelivered event lies behind it.
+				currentOffset = batch.offset;
+				if (final) {
+					finalBatch = { ...final, offset: batch.offset };
+					deliveryDone = true;
+				}
+				wake();
+				return;
+			}
+			return new Promise<void>((resolve) => {
+				pending = { items: batch.items, next: 0, offset: batch.offset, final };
+				drained = resolve;
+				wake();
+			});
+		});
+		res.closed.then(
+			() => {
+				fetchDone = true;
+				wake();
+			},
+			(error: unknown) => {
+				streamFailure = { error };
+				deliveryDone = true;
+				wake();
+			},
+		);
+	};
 
 	const iterator: AsyncIterator<T> = {
 		async next(): Promise<IteratorResult<T>> {
-			if (abortController.signal.aborted) {
-				readerDone = true;
-				removeExternalAbortListener?.();
-				return { value: undefined as T, done: true };
-			}
-
-			if (!reader) {
-				try {
-					const res = await connect();
-					currentOffset = res.offset;
-					reader = res.jsonStream().getReader();
-				} catch (err) {
-					if (abortController.signal.aborted || isAbortError(err)) {
-						readerDone = true;
-						removeExternalAbortListener?.();
-						return { value: undefined as T, done: true };
-					}
-					throw err;
+			while (true) {
+				if (abortController.signal.aborted) {
+					removeExternalAbortListener?.();
+					return { value: undefined as T, done: true };
 				}
-			}
 
-			if (readerDone) {
-				return { value: undefined as T, done: true };
-			}
+				if (!started) {
+					started = true;
+					try {
+						startConsuming(await connect());
+					} catch (err) {
+						// Allow a later next() call to surface the same rejection
+						// again instead of waiting forever for batches that will
+						// never arrive.
+						started = false;
+						if (abortController.signal.aborted || isAbortError(err)) {
+							removeExternalAbortListener?.();
+							return { value: undefined as T, done: true };
+						}
+						throw err;
+					}
+				}
 
-			try {
-				const { value, done } = await reader.read();
-				const res = responsePromise ? await responsePromise : undefined;
-				if (res) currentOffset = res.offset;
-				if (done) {
+				if (pending) {
+					const value = pending.items[pending.next++] as T;
+					if (pending.next >= pending.items.length) {
+						currentOffset = pending.offset;
+						if (pending.final) {
+							finalBatch = { ...pending.final, offset: pending.offset };
+							deliveryDone = true;
+						}
+						pending = undefined;
+						releaseBatch();
+					}
+					return { value, done: false };
+				}
+
+				if (deliveryDone) {
+					if (streamFailure) {
+						const { error } = streamFailure;
+						streamFailure = undefined;
+						removeExternalAbortListener?.();
+						if (abortController.signal.aborted || isAbortError(error)) {
+							return { value: undefined as T, done: true };
+						}
+						throw error;
+					}
 					// The DS client makes exactly one request per `live: false`
 					// stream, even when the server caps the catch-up batch and
 					// reports more data remains (no Stream-Up-To-Date header).
 					// Reconnect from the latest offset until up-to-date.
-					if (streamOpts.live === false && res && !res.upToDate && res.offset !== connectOffset) {
-						connectOffset = res.offset;
-						reader = undefined;
+					if (streamOpts.live === false && finalBatch && !finalBatch.upToDate && finalBatch.offset !== connectOffset) {
+						connectOffset = finalBatch.offset;
 						responsePromise = undefined;
-						return iterator.next();
+						started = false;
+						deliveryDone = false;
+						fetchDone = false;
+						finalBatch = undefined;
+						continue;
 					}
-					readerDone = true;
 					removeExternalAbortListener?.();
 					return { value: undefined as T, done: true };
 				}
-				return { value, done: false };
-			} catch (err) {
-				readerDone = true;
-				removeExternalAbortListener?.();
-				if (abortController.signal.aborted || isAbortError(err)) {
+
+				if (fetchDone && streamOpts.live === 'sse') {
+					// SSE backstop: the connection ended without a stream-closed
+					// control event. Let any remaining synthetic batches land
+					// (they resolve within microtasks), then finish.
+					await new Promise<void>((resolve) => setTimeout(resolve, 0));
+					if (pending || deliveryDone || abortController.signal.aborted) continue;
+					removeExternalAbortListener?.();
 					return { value: undefined as T, done: true };
 				}
-				throw err;
+
+				// Wait for the next batch, stream end, or cancellation.
+				await new Promise<void>((resolve) => {
+					notify = resolve;
+				});
 			}
 		},
 		async return(): Promise<IteratorResult<T>> {
-			readerDone = true;
-			// cancel() on an errored stream returns a rejected promise — swallow
-			// it so a consumer breaking out of the loop can't trigger an
-			// unhandled rejection.
-			try { void reader?.cancel().catch(() => {}); } catch { /* ignore */ }
 			cancel();
 			return { value: undefined as T, done: true };
 		},

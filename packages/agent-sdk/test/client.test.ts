@@ -164,6 +164,39 @@ describe('createFlueClient', () => {
 			expect(eventStream.offset).toBe('0000000000000000_0000000000000001');
 		});
 
+		it('advances offset only when the last event of a batch has been delivered', async () => {
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test',
+				fetch: async (input) => {
+					const url = new URL(typeof input === 'string' ? input : new Request(input).url);
+					if (url.searchParams.get('offset') === '-1') {
+						return dsJsonResponse([{ type: 'agent_start' }, { type: 'turn_start' }], {
+							nextOffset: '0000000000000000_0000000000000002',
+						});
+					}
+					return dsJsonResponse([{ type: 'idle' }], {
+						closed: true,
+						nextOffset: '0000000000000000_0000000000000003',
+					});
+				},
+			});
+
+			// Default live mode: the DS client prefetches the next batch while
+			// the current one is still being delivered. The public offset must
+			// track delivered batches, not fetched responses, or resuming from
+			// a checkpoint skips events that were never delivered.
+			const eventStream = client.agents.stream('agent', 'id');
+			const iterator = eventStream[Symbol.asyncIterator]();
+
+			await iterator.next(); // agent_start — mid-batch 1
+			expect(eventStream.offset).toBe('-1');
+			await iterator.next(); // turn_start — last event of batch 1
+			expect(eventStream.offset).toBe('0000000000000000_0000000000000002');
+			await iterator.next(); // idle — last event of batch 2
+			expect(eventStream.offset).toBe('0000000000000000_0000000000000003');
+			await expect(iterator.next()).resolves.toEqual({ value: undefined, done: true });
+		});
+
 		it('cancel() stops iteration and aborts the underlying connection', async () => {
 			let fetchCount = 0;
 			let lastSignal: AbortSignal | undefined;
