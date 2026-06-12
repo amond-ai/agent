@@ -1,19 +1,25 @@
+/**
+ * SQL-backed `RunStore` over the generic {@link SqlStorage} interface.
+ *
+ * Backend-agnostic: runs against Cloudflare DO SQLite (workflow Durable
+ * Objects) and `node:sqlite` (the Node `sqlite()` persistence adapter).
+ */
 import {
 	type CreateRunInput,
 	type EndRunInput,
 	type RunRecord,
 	type RunStore,
-} from '../runtime/run-store.ts';
-import type { SqlStorage } from '../sql-storage.ts';
+} from './runtime/run-store.ts';
+import type { SqlStorage } from './sql-storage.ts';
 
 type SqlRow = Record<string, unknown>;
 
-export function createDurableRunStore(sql: SqlStorage): RunStore {
+export function createSqlRunStore(sql: SqlStorage): RunStore {
 	ensureRunTables(sql);
-	return new DurableRunStore(sql);
+	return new SqlRunStore(sql);
 }
 
-class DurableRunStore implements RunStore {
+class SqlRunStore implements RunStore {
 	constructor(private sql: SqlStorage) {}
 
 	async createRun(input: CreateRunInput): Promise<void> {

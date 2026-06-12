@@ -43,7 +43,7 @@ describe('CloudflarePlugin', () => {
 		expect(entry).toContain(
 			'const defaultStore = storage?.sql ? createSqlSessionStore(storage) : memoryWorkflowSessionStore;',
 		);
-		expect(entry).toContain('createDurableRunStore(doInstance.ctx.storage.sql)');
+		expect(entry).toContain('createSqlRunStore(doInstance.ctx.storage.sql)');
 		expect(entry).toContain(': memoryRunStore;');
 		expect(entry).toContain('const eventStreamStores = new WeakMap();');
 		expect(entry).toContain('const INTERNAL_RUN_METADATA_PATH = CLOUDFLARE_WORKFLOW_INTERNAL_METADATA_PATH;');

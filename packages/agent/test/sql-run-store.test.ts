@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { createDurableRunStore } from '../src/cloudflare/run-store.ts';
+import { createSqlRunStore } from '../src/sql-run-store.ts';
 
 function makeFakeSql() {
 	const db = new DatabaseSync(':memory:');
@@ -29,10 +29,10 @@ function makeFakeSql() {
 	};
 }
 
-describe('createDurableRunStore()', () => {
+describe('createSqlRunStore()', () => {
 	it('preserves absent optional fields when run persistence receives undefined values', async () => {
 		const { sql } = makeFakeSql();
-		const store = createDurableRunStore(sql);
+		const store = createSqlRunStore(sql);
 		const runId = 'workflow:hello:absent';
 		await store.createRun({
 			runId,
@@ -56,7 +56,7 @@ describe('createDurableRunStore()', () => {
 
 	it('preserves explicit null values when run persistence receives null', async () => {
 		const { sql } = makeFakeSql();
-		const store = createDurableRunStore(sql);
+		const store = createSqlRunStore(sql);
 		const runId = 'workflow:hello:null';
 		await store.createRun({
 			runId,

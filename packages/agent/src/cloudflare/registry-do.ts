@@ -1,5 +1,6 @@
 /** Singleton run-pointer index for the Cloudflare target. */
-import { createRegistryOps, handleRegistryRequest, type RegistryOps } from './registry-ops.ts';
+import { createRegistryOps, type RegistryOps } from '../sql-run-registry.ts';
+import { handleRegistryRequest } from './registry-router.ts';
 
 interface DurableObjectStateLike {
 	storage: { sql: import('../sql-storage.ts').SqlStorage };

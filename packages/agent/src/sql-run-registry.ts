@@ -1,4 +1,13 @@
-/** SQL-backed workflow-run registry operations and private REST router. */
+/**
+ * SQL-backed workflow-run registry (pointer index) over the generic
+ * {@link SqlStorage} interface.
+ *
+ * Backend-agnostic: runs against Cloudflare DO SQLite (the `FlueRegistry`
+ * Durable Object) and `node:sqlite` (the Node `sqlite()` persistence
+ * adapter). The Cloudflare target talks to the synchronous {@link RegistryOps}
+ * through its private REST router (`cloudflare/registry-router.ts`); Node
+ * wires {@link createSqlRunRegistry} directly into the runtime.
+ */
 import {
 	DEFAULT_LIST_LIMIT,
 	decodeRunCursor,
@@ -9,12 +18,14 @@ import {
 	type RecordRunEndInput,
 	type RecordRunStartInput,
 	type RunPointer,
-} from '../runtime/run-registry.ts';
-import type { RunStatus } from '../runtime/run-store.ts';
-import type { SqlStorage } from '../sql-storage.ts';
+	type RunRegistry,
+} from './runtime/run-registry.ts';
+import type { RunStatus } from './runtime/run-store.ts';
+import type { SqlStorage } from './sql-storage.ts';
 
 type SqlRow = Record<string, unknown>;
 
+/** Synchronous registry operations, as exposed over the Cloudflare registry DO. */
 export interface RegistryOps {
 	recordRunStart(input: RecordRunStartInput): void;
 	recordRunEnd(input: RecordRunEndInput): void;
@@ -27,53 +38,28 @@ export function createRegistryOps(sql: SqlStorage): RegistryOps {
 	return new SqlRegistryOps(sql);
 }
 
-export async function handleRegistryRequest(ops: RegistryOps, request: Request): Promise<Response> {
-	const url = new URL(request.url);
-	const segments = url.pathname.split('/').filter(Boolean);
-	try {
-		if (request.method === 'GET' && segments[0] === 'pointers' && segments.length === 2) {
-			const runId = decodeURIComponent(segments[1] ?? '');
-			if (!runId) return new Response('Missing runId.', { status: 404 });
-			const pointer = ops.lookupRun(runId);
-			if (!pointer) return new Response(null, { status: 404 });
-			return jsonResponse(pointer);
-		}
-		if (
-			request.method === 'POST' &&
-			segments[0] === 'pointers' &&
-			segments[2] === 'start' &&
-			segments.length === 3
-		) {
-			const runId = decodeURIComponent(segments[1] ?? '');
-			if (!runId) return new Response('Missing runId.', { status: 404 });
-			const body = (await request.json()) as Omit<RecordRunStartInput, 'runId'>;
-			ops.recordRunStart({ ...body, runId });
-			return new Response(null, { status: 204 });
-		}
-		if (
-			request.method === 'POST' &&
-			segments[0] === 'pointers' &&
-			segments[2] === 'end' &&
-			segments.length === 3
-		) {
-			const runId = decodeURIComponent(segments[1] ?? '');
-			if (!runId) return new Response('Missing runId.', { status: 404 });
-			const body = (await request.json()) as Omit<RecordRunEndInput, 'runId'>;
-			ops.recordRunEnd({ ...body, runId });
-			return new Response(null, { status: 204 });
-		}
-		if (request.method === 'GET' && segments[0] === 'pointers' && segments.length === 1) {
-			return jsonResponse(ops.listRuns(parseListRunsOpts(url.searchParams)));
-		}
-		return new Response(`Unknown registry endpoint: ${request.method} ${url.pathname}`, {
-			status: 404,
-		});
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		return new Response(JSON.stringify({ error: message }), {
-			status: 500,
-			headers: jsonHeaders(),
-		});
+/** Async {@link RunRegistry} facade over {@link RegistryOps} for in-process SQL backends. */
+export function createSqlRunRegistry(sql: SqlStorage): RunRegistry {
+	return new SqlRunRegistry(createRegistryOps(sql));
+}
+
+class SqlRunRegistry implements RunRegistry {
+	constructor(private ops: RegistryOps) {}
+
+	async recordRunStart(input: RecordRunStartInput): Promise<void> {
+		this.ops.recordRunStart(input);
+	}
+
+	async recordRunEnd(input: RecordRunEndInput): Promise<void> {
+		this.ops.recordRunEnd(input);
+	}
+
+	async lookupRun(runId: string): Promise<RunPointer | null> {
+		return this.ops.lookupRun(runId);
+	}
+
+	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {
+		return this.ops.listRuns(opts);
 	}
 }
 
@@ -186,28 +172,7 @@ function rowToRunPointer(row: SqlRow): RunPointer {
 	};
 }
 
-function parseListRunsOpts(params: URLSearchParams): ListRunsOpts {
-	const opts: ListRunsOpts = {};
-	const status = params.get('status');
-	if (status === 'active' || status === 'completed' || status === 'errored') opts.status = status;
-	const workflow = params.get('workflow');
-	if (workflow) opts.workflowName = workflow;
-	const limit = params.get('limit');
-	if (limit !== null) opts.limit = Number.parseInt(limit, 10);
-	const cursor = params.get('cursor');
-	if (cursor) opts.cursor = cursor;
-	return opts;
-}
-
 function clampLimit(limit: number | undefined): number {
 	if (!limit || !Number.isFinite(limit) || limit <= 0) return DEFAULT_LIST_LIMIT;
 	return Math.min(limit, MAX_LIST_LIMIT);
-}
-
-function jsonHeaders(): Record<string, string> {
-	return { 'content-type': 'application/json' };
-}
-
-function jsonResponse(body: unknown): Response {
-	return new Response(JSON.stringify(body), { headers: jsonHeaders() });
 }
