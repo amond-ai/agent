@@ -318,16 +318,11 @@ function findLatestCompactionIndex(path: SessionEntry[]): number {
 }
 
 function createContextSummaryMessage(summary: string, timestamp: string): AgentMessage {
-	// Strip legacy '[Context Summary]' prefix if the LLM included it in
-	// the stored summary text — the signal XML tag replaces the prefix.
-	const content = summary.startsWith('[Context Summary]')
-		? summary.slice('[Context Summary]'.length).replace(/^\n+/, '')
-		: summary;
 	const signal: SignalMessage = {
 		role: 'signal',
 		type: 'context_summary',
 		tagName: 'compaction',
-		content,
+		content: summary,
 		timestamp: new Date(timestamp).getTime(),
 	};
 	return createUserContextMessage(renderSignalMessage(signal), timestamp);
