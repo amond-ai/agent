@@ -152,7 +152,6 @@ import {
   InMemoryRunStore,
   createSqlRunStore,
   CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH,
-  CLOUDFLARE_WORKFLOW_INTERNAL_METADATA_PATH,
   createCloudflareAgentRuntime,
   createSqlSessionStore,
    SqliteEventStreamStore,
@@ -292,7 +291,6 @@ function resolveSandbox(sandbox) {
 const memoryWorkflowSessionStore = new InMemorySessionStore();
 const memoryRunStore = new InMemoryRunStore();
 const INTERNAL_DISPATCH_PATH = CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH;
-const INTERNAL_RUN_METADATA_PATH = CLOUDFLARE_WORKFLOW_INTERNAL_METADATA_PATH;
 const dispatchQueue = {
   async enqueue(input) {
     const identity = agentIdentities[input.agent];
@@ -498,7 +496,6 @@ function parseWorkflowStart(request, workflowName) {
 
 function parseRunRoute(request) {
   const url = new URL(request.url);
-  if (url.pathname === INTERNAL_RUN_METADATA_PATH) return { action: 'get' };
   const segments = url.pathname.split('/').filter(Boolean);
   if (segments.length !== 2 || segments[0] !== 'runs') return null;
   let runId;
@@ -508,8 +505,10 @@ function parseRunRoute(request) {
     return null;
   }
   if (!runId) return null;
-  // GET/HEAD on /runs/:runId → DS stream read. The outer worker rejects
-  // other methods before forwarding, so nothing else routes here.
+  // GET /runs/:runId?meta → run-record view; GET/HEAD otherwise → DS
+  // stream read. The outer worker rejects other methods before
+  // forwarding, so nothing else routes here.
+  if (request.method === 'GET' && url.searchParams.has('meta')) return { action: 'get', runId };
   if (request.method === 'GET' || request.method === 'HEAD') return { action: 'ds-stream', runId };
   return null;
 }
