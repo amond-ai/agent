@@ -341,7 +341,7 @@ describe('connectMcpServerWithClient()', () => {
 		);
 	});
 
-	it('rejects ordinary execution when a required-task MCP tool appears before the final listing page', async () => {
+	it('excludes a required-task MCP tool from the adapted tool list when the server lists one', async () => {
 		mcp.listToolsResults = [
 			{
 				tools: [
@@ -359,10 +359,7 @@ describe('connectMcpServerWithClient()', () => {
 		];
 		const connection = await connectMcpServerWithClient('catalog', mcp.client, transport);
 
-		await expect(connection.tools[0]?.execute({})).rejects.toThrow(
-			'Tool "long-running" requires task-based execution. Use client.experimental.tasks.callToolStream() instead.',
-		);
-		expect(mcp.client.callTool).not.toHaveBeenCalled();
+		expect(connection.tools.map((tool) => tool.name)).toEqual(['mcp__catalog__refresh']);
 	});
 
 	it('throws tool output as an error when an MCP result marks itself as an error', async () => {

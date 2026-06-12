@@ -142,7 +142,15 @@ function createMcpTools(
 	const names = new Set<string>();
 	const validator = new AjvJsonSchemaValidator();
 
-	return tools.map((tool) => {
+	const callableTools = tools.filter((tool) => {
+		if (tool.execution?.taskSupport !== 'required') return true;
+		console.warn(
+			`[flue] Skipping MCP tool "${tool.name}" from server "${serverName}": it requires task-based execution, which is not supported.`,
+		);
+		return false;
+	});
+
+	return callableTools.map((tool) => {
 		const toolName = createToolName(serverName, tool.name);
 		const outputValidator = tool.outputSchema
 			? validator.getValidator(tool.outputSchema)
@@ -160,12 +168,6 @@ function createMcpTools(
 			parameters: normalizeInputSchema(tool.inputSchema),
 			async execute(args, signal) {
 				if (signal?.aborted) throw new Error('Operation aborted');
-				if (tool.execution?.taskSupport === 'required') {
-					throw new McpError(
-						ErrorCode.InvalidRequest,
-						`Tool "${tool.name}" requires task-based execution. Use client.experimental.tasks.callToolStream() instead.`,
-					);
-				}
 				const result = (await client.callTool(
 					{
 						name: tool.name,
