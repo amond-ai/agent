@@ -141,7 +141,7 @@ export function defineStoreContractTests(
 				expect(await store.sessions.load('missing')).toBeNull();
 			});
 
-			it('saves and loads session data', async () => {
+			it('loads the saved session data when a session was saved', async () => {
 				const store = await create();
 				await store.sessions.save('s1', sessionData());
 				expect(await store.sessions.load('s1')).toEqual(sessionData());
@@ -489,7 +489,7 @@ export function defineStoreContractTests(
 				});
 			});
 
-			it('double-commit returns false', async () => {
+			it('returns false when a committed turn journal is committed again', async () => {
 				const store = await create();
 				await store.submissions.admitDispatch(dispatchInput());
 				await store.submissions.claimSubmission(claim('dispatch-1', 'attempt-1'));
@@ -609,10 +609,15 @@ export function defineStoreContractTests(
 				const deletionReleased = new Promise<void>((resolve) => {
 					releaseDeletion = resolve;
 				});
+				let signalDeletionStarted: () => void = () => {};
+				const deletionStarted = new Promise<void>((resolve) => {
+					signalDeletionStarted = resolve;
+				});
 				let deletionCalls = 0;
 
 				const first = store.submissions.deleteSession(sessionKey, async () => {
 					deletionCalls += 1;
+					signalDeletionStarted();
 					await deletionReleased;
 				});
 				const second = store.submissions.deleteSession(sessionKey, async () => {
@@ -620,8 +625,7 @@ export function defineStoreContractTests(
 				});
 
 				expect(second).toBe(first);
-				// Allow async operations to settle before checking call count.
-				await new Promise((r) => setTimeout(r, 50));
+				await deletionStarted;
 				expect(deletionCalls).toBe(1);
 				releaseDeletion();
 				await Promise.all([first, second]);
@@ -652,9 +656,18 @@ export function defineStoreContractTests(
 					releaseDeletion = resolve;
 				});
 
-				const deletion = store.submissions.deleteSession(sessionKey, () => deletionReleased);
-				// Allow the durable phase-1 marker write to settle.
-				await new Promise((r) => setTimeout(r, 50));
+				let signalDeletionStarted: () => void = () => {};
+				const deletionStarted = new Promise<void>((resolve) => {
+					signalDeletionStarted = resolve;
+				});
+
+				const deletion = store.submissions.deleteSession(sessionKey, () => {
+					signalDeletionStarted();
+					return deletionReleased;
+				});
+				// The deletion callback only runs after the durable phase-1
+				// marker write has completed.
+				await deletionStarted;
 				expect(await store.submissions.listPendingSessionDeletions()).toEqual([sessionKey]);
 				releaseDeletion();
 				await deletion;

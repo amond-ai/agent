@@ -222,15 +222,15 @@ describe('sqlite() PersistenceAdapter', () => {
 		await adapter.close?.();
 	});
 
-	it('throws on empty string path', () => {
+	it('throws when the path is an empty string', () => {
 		expect(() => sqlite('')).toThrow('non-empty file path');
 	});
 
-	it('throws on whitespace-only path', () => {
+	it('throws when the path is only whitespace', () => {
 		expect(() => sqlite('   ')).toThrow('non-empty file path');
 	});
 
-	it('close() is idempotent', async () => {
+	it('resolves when close() is called twice', async () => {
 		const adapter = sqlite();
 		await adapter.migrate?.();
 		await adapter.connect();
