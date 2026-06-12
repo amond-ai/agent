@@ -792,7 +792,11 @@ function subscribeRunFanout(lifecycle: WorkflowRunLifecycle): () => Promise<void
 	const unsubscribe = ctx.subscribeEvent((event) => {
 		if (event.type === 'run_end') return;
 		if (isEphemeralRunEvent(event)) {
-			ephemeralBatch.push(event);
+			// Snapshot at emit time: ephemeral events carry live message
+			// objects that the streaming turn keeps mutating in place, so a
+			// buffered reference would serialize content produced after the
+			// event's own timestamp/eventIndex at flush time.
+			ephemeralBatch.push(structuredClone(event));
 			scheduleEphemeralFlush();
 			return;
 		}
