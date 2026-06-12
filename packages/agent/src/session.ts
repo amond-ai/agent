@@ -1636,23 +1636,109 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
 	// ─── Model-turn recovery and compaction ───────────────────────────────────
 
+	/**
+	 * Drive the agent loop with recovery: each iteration first evaluates the
+	 * trailing assistant (overflow → compact, transient error → back off) and
+	 * then starts the next turn, so one loop body serves both live turns and
+	 * resumption of persisted state.
+	 *
+	 * Live callers pass only `start`; their first iteration has nothing to
+	 * evaluate and recovery applies to the turns the loop itself produces.
+	 * The persisted-input resume path additionally passes `resume` with the
+	 * trailing assistant the classifier found after the input (if any), so
+	 * the persisted state gets the same recovery evaluation before the first
+	 * `continue()`. When recovery is already exhausted at resume entry, the
+	 * loop throws `OperationFailedError` for `resume.errorLabel`: no live
+	 * turn has run, so `agentLoop.state.errorMessage` is unset and the
+	 * caller's `throwIfError` could not surface the failure.
+	 */
 	private async runModelTurnWithRecovery(options: {
 		start: () => Promise<void>;
 		signal: AbortSignal;
-		overflowRecoveryAttempted?: boolean;
+		resume?: { assistant: AssistantMessage | undefined; errorLabel: string };
 	}): Promise<void> {
 		let start = options.start;
-		let overflowRecoveryAttempted = options.overflowRecoveryAttempted ?? false;
+		let assistant = options.resume?.assistant;
+		let turnCompleted = false;
+		let overflowRecoveryAttempted = false;
 
-		while (true) {
+		// Cooperative halt points: checked before each turn and before recovery
+		// work (compaction, retry backoff), not during provider calls. A hung
+		// provider or long tool execution can exceed the deadline. That case is
+		// covered by DO eviction + the attempt budget (Capability K), not this
+		// check. Preemptive in-turn watchdog is deferred to Capability L.
+		const throwIfHalted = () => {
 			if (options.signal.aborted) throw abortErrorFor(options.signal);
-			// Cooperative timeout: checked between turns, not during provider calls.
-			// A hung provider or long tool execution can exceed the deadline. That case
-			// is covered by DO eviction + the attempt budget (Capability K), not this check.
-			// Preemptive in-turn watchdog is deferred to Capability L.
 			if (this.activeTimeoutAt !== undefined && Date.now() >= this.activeTimeoutAt) {
 				throw new SubmissionTimeoutError();
 			}
+		};
+
+		while (true) {
+			const overflow =
+				assistant !== undefined &&
+				isContextOverflow(assistant, this.agentLoop.state.model.contextWindow ?? 0);
+			const retryable =
+				!overflow && assistant !== undefined && isRetryableModelError(assistant);
+
+			if (turnCompleted && !overflow && !retryable) {
+				// The turn the previous iteration ran settled. This exits before
+				// the halt checks so a deadline that expired during the final
+				// turn cannot discard its result.
+				if (assistant !== undefined) {
+					await this.checkCompaction(assistant);
+					if (assistant.stopReason === 'error' || assistant.stopReason === 'aborted') {
+						this.rebuildHarnessContext();
+					}
+				}
+				return;
+			}
+			if (overflow && overflowRecoveryAttempted) {
+				// Overflow persisting through a compaction attempt is not
+				// recoverable here; the caller's `throwIfError` surfaces it.
+				this.rebuildHarnessContext();
+				return;
+			}
+
+			throwIfHalted();
+
+			if (overflow && assistant !== undefined) {
+				overflowRecoveryAttempted = true;
+				this.internalLog('info', '[flue:compaction] Overflow detected, compacting and retrying...');
+				this.rebuildHarnessContext();
+				if (!(await this.runCompaction('overflow'))) {
+					if (!turnCompleted && options.resume) {
+						throw new OperationFailedError({
+							operation: options.resume.errorLabel,
+							reason: assistant.errorMessage ?? assistant.stopReason,
+						});
+					}
+					return;
+				}
+				this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...');
+				start = () => this.agentLoop.continue();
+			} else if (retryable && assistant !== undefined) {
+				// Count trailing consecutive errors from durable history (the error
+				// is already checkpointed) so isolated transient errors separated by
+				// successful turns don't share one budget. This keeps the live
+				// budget identical to the one a restart computes when it resumes a
+				// persisted error.
+				const transientRetries = countConsecutiveRetryableModelErrors(this.history.getActivePath());
+				if (!(await this.waitForTransientModelRetry(assistant, transientRetries))) {
+					if (!turnCompleted && options.resume) {
+						throw new OperationFailedError({
+							operation: options.resume.errorLabel,
+							reason: assistant.errorMessage ?? assistant.stopReason,
+						});
+					}
+					return;
+				}
+				start = () => this.agentLoop.continue();
+			}
+
+			// Recovery may have spent significant time compacting or backing off.
+			if (overflow || retryable) throwIfHalted();
+
 			try {
 				await start();
 				await this.agentLoop.waitForIdle();
@@ -1668,43 +1754,11 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				this.rebuildHarnessContext();
 				throw error;
 			}
+			turnCompleted = true;
 
 			const messages = this.agentLoop.state.messages;
 			const latest = messages[messages.length - 1];
-			if (latest?.role !== 'assistant') return;
-			const assistant = latest as AssistantMessage;
-			const model = this.agentLoop.state.model;
-
-			if (isContextOverflow(assistant, model.contextWindow ?? 0)) {
-				if (overflowRecoveryAttempted) {
-					this.rebuildHarnessContext();
-					return;
-				}
-				overflowRecoveryAttempted = true;
-				this.internalLog('info', '[flue:compaction] Overflow detected, compacting and retrying...');
-				this.rebuildHarnessContext();
-				if (!(await this.runCompaction('overflow'))) return;
-				this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...');
-				start = () => this.agentLoop.continue();
-				continue;
-			}
-
-			if (isRetryableModelError(assistant)) {
-				// Count trailing consecutive errors from durable history (the error
-				// was just checkpointed) so isolated transient errors separated by
-				// successful turns don't share one budget. This keeps the live
-				// budget identical to the one a restart would compute.
-				const transientRetries = countConsecutiveRetryableModelErrors(this.history.getActivePath());
-				if (!(await this.waitForTransientModelRetry(assistant, transientRetries))) return;
-				start = () => this.agentLoop.continue();
-				continue;
-			}
-
-			await this.checkCompaction(assistant);
-			if (assistant.stopReason === 'error' || assistant.stopReason === 'aborted') {
-				this.rebuildHarnessContext();
-			}
-			return;
+			assistant = latest?.role === 'assistant' ? (latest as AssistantMessage) : undefined;
 		}
 	}
 
@@ -2145,52 +2199,15 @@ export class Session implements FlueSession, AgentSubmissionSession {
 							// submission-state.ts): a completed response flagged as silent
 							// overflow is compacted and continued here, while inspection
 							// reports it 'completed'.
-							const overflowAssistant =
-								state.kind === 'completed'
-									? state.overflow
-										? state.assistant
-										: undefined
-									: state.mode === 'overflow'
-										? state.assistant
-										: undefined;
-							if (state.kind === 'completed' && !overflowAssistant) break;
-							// Check timeout before entering the preamble (compaction, transient
-							// retry backoff) which can add significant time. The main timeout
-							// check lives in runModelTurnWithRecovery, but these preamble paths
-							// run before that loop is entered.
-							if (this.activeTimeoutAt !== undefined && Date.now() >= this.activeTimeoutAt) {
-								throw new SubmissionTimeoutError();
-							}
-							if (overflowAssistant) {
-								this.rebuildHarnessContext();
-								this.internalLog(
-									'info',
-									'[flue:compaction] Overflow detected, compacting and retrying...',
-								);
-								if (!(await this.runCompaction('overflow'))) {
-									throw new OperationFailedError({
-										operation: options.errorLabel,
-										reason: overflowAssistant.errorMessage ?? overflowAssistant.stopReason,
-									});
-								}
-								this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...');
-							} else if (state.kind === 'resume' && state.mode === 'transient_retry') {
-								if (
-									!(await this.waitForTransientModelRetry(
-										state.assistant,
-										state.consecutiveRetryableErrors,
-									))
-								) {
-									throw new OperationFailedError({
-										operation: options.errorLabel,
-										reason: state.assistant.errorMessage ?? state.assistant.stopReason,
-									});
-								}
-							}
+							if (state.kind === 'completed' && !state.overflow) break;
+							// Recovery for the persisted trailing assistant (overflow
+							// compaction, transient-retry backoff) happens inside the turn
+							// loop, which evaluates the resume assistant before its first
+							// `continue()`.
 							await this.runModelTurnWithRecovery({
 								start: () => this.agentLoop.continue(),
 								signal: options.signal,
-								overflowRecoveryAttempted: overflowAssistant !== undefined,
+								resume: { assistant: state.assistant, errorLabel: options.errorLabel },
 							});
 							this.throwIfError(options.errorLabel);
 							break;
