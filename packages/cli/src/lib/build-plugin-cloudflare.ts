@@ -172,7 +172,8 @@ import {
   cfSandboxToSessionEnv,
   getCloudflareAIBindingApiProvider,
   FlueRegistry,
-  createCloudflareRunRegistry,
+  createCloudflareRunIndex,
+  createCloudflareRunStore,
   resolveCloudflareExtension,
 } from '@flue/runtime/cloudflare';
 import { registerApiProvider, registerProvider } from '@flue/runtime';
@@ -350,13 +351,16 @@ function createWorkflowContextForRequest(id, runId, payload, doInstance, req, in
 }
 
 function createRunStoreForRequest(doInstance) {
-  return doInstance?.ctx?.storage?.sql
+  // Composite run store: per-workflow-DO records plus the FlueRegistry
+  // index DO for cross-deployment lookup/listing.
+  const records = doInstance?.ctx?.storage?.sql
     ? createSqlRunStore(doInstance.ctx.storage.sql)
     : memoryRunStore;
+  return createCloudflareRunStore(records, doInstance?.env?.FLUE_REGISTRY);
 }
 
-function createRunRegistryForRequest(reqEnv) {
-  return createCloudflareRunRegistry(reqEnv?.FLUE_REGISTRY);
+function createRunIndexForRequest(reqEnv) {
+  return createCloudflareRunIndex(reqEnv?.FLUE_REGISTRY);
 }
 
 async function fetchAgent(binding, instanceId, request) {
@@ -427,7 +431,6 @@ async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
     request: new Request('https://flue.invalid/workflows/' + encodeURIComponent(workflowName), { method: 'POST' }),
     error: new Error('Flue workflow execution was interrupted. Start a new workflow run explicitly if retry is appropriate.'),
     runStore,
-    runRegistry: createRunRegistryForRequest(doInstance.env),
     eventStreamStore: createEventStreamStoreForInstance(doInstance),
     createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createWorkflowContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
   });
@@ -466,7 +469,6 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
       runId: instanceId,
       handler,
       runStore: createRunStoreForRequest(doInstance),
-      runRegistry: createRunRegistryForRequest(doInstance.env),
       eventStreamStore: createEventStreamStoreForInstance(doInstance),
       createContext: (id_, runId, payload, req, initialEventIndex, dispatchId) => createWorkflowContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex, dispatchId),
       startWorkflowAdmission: (runId, run) => {
@@ -540,7 +542,7 @@ configureFlueRuntime({
     if (!binding) return null;
     return fetchAgent(binding, target.instanceId, request);
   },
-  createRunRegistryForRequest,
+  createRunIndexForRequest,
   routeRunRequest: async (request, reqEnv, target) => {
     const binding = reqEnv?.[workflowIdentities[target.workflowName]?.bindingName];
     if (!binding) return null;

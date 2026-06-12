@@ -117,7 +117,6 @@ if (!userPersistenceAdapter || typeof userPersistenceAdapter.connect !== 'functi
 }
 let executionStore;
 let runStore;
-let runRegistry;
 let eventStreamStore;
 try {
   if (userPersistenceAdapter.migrate) await userPersistenceAdapter.migrate();
@@ -126,7 +125,6 @@ try {
     throw new Error('connect() must return an AgentExecutionStore with sessions and submissions.');
   }
   runStore = userPersistenceAdapter.connectRunStore();
-  runRegistry = userPersistenceAdapter.connectRunRegistry();
   if (typeof userPersistenceAdapter.connectEventStreamStore !== 'function') {
     throw new Error('connectEventStreamStore() must be defined on the PersistenceAdapter.');
   }
@@ -142,7 +140,6 @@ const defaultAdapter = sqlite();
 if (defaultAdapter.migrate) defaultAdapter.migrate();
 const executionStore = defaultAdapter.connect();
 const runStore = defaultAdapter.connectRunStore();
-const runRegistry = defaultAdapter.connectRunRegistry();
 const eventStreamStore = defaultAdapter.connectEventStreamStore();`
 		}
 const persistenceAdapter = ${dbEntry ? `userPersistenceAdapter` : `defaultAdapter`};
@@ -203,7 +200,6 @@ configureFlueRuntime({
   workflowRouteMiddleware,
   createContext: createContextForRequest,
   runStore,
-  runRegistry,
   eventStreamStore,
 });
 
@@ -312,7 +308,6 @@ function startLocalWorkflow(name) {
       createContext: createContextForRequest,
       onEvent: (event) => sendLocalMessage({ type: 'event', requestId: message.requestId, runId, event }),
       runStore,
-      runRegistry,
       eventStreamStore,
     }).then(
       (invocation) => sendLocalMessage({ type: 'result', requestId: message.requestId, runId, result: invocation.result ?? null }, () => process.exit(0)),
