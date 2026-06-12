@@ -635,26 +635,103 @@ export class OperationFailedError extends FlueError {
 }
 
 /**
- * A durable submission exhausted its retry budget before its input was ever
- * applied: every attempt was interrupted (process crash, restart, or
- * shutdown) while the submission was claimed but unstarted. Thrown by
- * reconciliation in place of the generic retry-exhaustion error, which would
- * misdescribe the failure — no provider work happened, so there was nothing
- * to "recover". The shared `attemptCount`/`maxAttempts` budget is
- * intentional; only the terminal vocabulary distinguishes the pre-input case.
+ * A durable submission was interrupted (process crash, restart, or shutdown)
+ * and recovery settled it as failed because resuming or replaying the work
+ * was not provably safe. `meta.phase` carries where the interruption left
+ * the submission:
+ *
+ * - `'retry_exhausted_before_input'` — every attempt was interrupted while
+ *   the submission was claimed but unstarted, and the shared attempt budget
+ *   ran out. No provider work ever happened, so the generic retry-exhaustion
+ *   error would misdescribe the failure; the shared `attemptCount`/
+ *   `maxAttempts` budget itself is intentional.
+ * - `'before_input_marker'` — interrupted after the submission input was
+ *   persisted to the session but before the input-application marker was
+ *   recorded. Recovery cannot prove the input was never applied, so it does
+ *   not replay it.
+ * - `'after_input_application'` — interrupted after input application
+ *   without a completed response that recovery could safely resume. When the
+ *   interruption left tool calls whose outcomes could not be confirmed,
+ *   `meta.interruptedTools` lists them; an unresolved tool call is never
+ *   assumed to have completed and is never retried automatically.
  */
 export class SubmissionInterruptedError extends FlueError {
+	constructor(
+		input:
+			| { phase: 'retry_exhausted_before_input'; attemptCount: number; maxAttempts: number }
+			| { phase: 'before_input_marker' }
+			| {
+					phase: 'after_input_application';
+					interruptedTools?: ReadonlyArray<{ readonly name: string; readonly id: string }>;
+			  },
+	) {
+		if (input.phase === 'retry_exhausted_before_input') {
+			super({
+				type: 'submission_interrupted',
+				message: 'Submission was repeatedly interrupted before input application and exhausted its retry budget.',
+				details:
+					'Every processing attempt was interrupted before the submission input was applied to the session. ' +
+					'The input was never processed and no model call was started.',
+				dev:
+					'Repeated pre-input interruptions usually mean the process kept restarting or crashing while the ' +
+					"submission waited to start. Each claim consumes one attempt from the agent definition's " +
+					'`durability.maxAttempts` budget.',
+				meta: {
+					phase: input.phase,
+					attemptCount: input.attemptCount,
+					maxAttempts: input.maxAttempts,
+				},
+			});
+		} else if (input.phase === 'before_input_marker') {
+			super({
+				type: 'submission_interrupted',
+				message:
+					'Submission was interrupted after its input was persisted but before input application was confirmed. ' +
+					'The input was not replayed.',
+				details:
+					'The attempt was interrupted after the submission input was written to the session but before the ' +
+					'input-application marker was recorded. Recovery cannot prove the input was never applied, so it ' +
+					'does not replay it.',
+				dev: '',
+				meta: { phase: input.phase },
+			});
+		} else {
+			const toolNames = input.interruptedTools?.map((tool) => tool.name) ?? [];
+			super({
+				type: 'submission_interrupted',
+				message:
+					toolNames.length > 0
+						? `Submission was interrupted with pending tool call(s): ${toolNames.join(', ')}. ` +
+							'The tool outcome could not be confirmed and the tool was not automatically retried.'
+						: 'Submission was interrupted after input application without a completed response. ' +
+							'The work was not automatically replayed.',
+				details:
+					'Recovery settles interrupted work as failed when it cannot prove that resuming or replaying is ' +
+					'safe: a repeated model or tool call could duplicate external effects.',
+				dev: '',
+				meta: {
+					phase: input.phase,
+					...(input.interruptedTools ? { interruptedTools: input.interruptedTools } : {}),
+				},
+			});
+		}
+	}
+}
+
+/**
+ * A durable submission exhausted its recovery attempt budget after its input
+ * was applied: repeated attempts (interruption, restart, or transient
+ * failure) consumed `maxAttempts` without a completed response.
+ */
+export class SubmissionRetryExhaustedError extends FlueError {
 	constructor({ attemptCount, maxAttempts }: { attemptCount: number; maxAttempts: number }) {
 		super({
-			type: 'submission_interrupted',
-			message: 'Submission was repeatedly interrupted before input application and exhausted its retry budget.',
+			type: 'submission_retry_exhausted',
+			message: `Submission exceeded maximum recovery attempts (${attemptCount}/${maxAttempts}).`,
 			details:
-				'Every processing attempt was interrupted before the submission input was applied to the session. ' +
-				'The input was never processed and no model call was started.',
-			dev:
-				'Repeated pre-input interruptions usually mean the process kept restarting or crashing while the ' +
-				"submission waited to start. Each claim consumes one attempt from the agent definition's " +
-				'`durability.maxAttempts` budget.',
+				'Recovery re-attempted the interrupted submission until its attempt budget ran out without a ' +
+				'completed response.',
+			dev: "The budget is configured via the agent definition's `durability.maxAttempts`.",
 			meta: { attemptCount, maxAttempts },
 		});
 	}

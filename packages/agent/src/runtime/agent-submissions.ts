@@ -6,7 +6,11 @@ import type {
 } from '../agent-execution-store.ts';
 import { SUBMISSION_SESSION_NAME } from '../adapter-helpers.ts';
 import type { FlueContextInternal } from '../client.ts';
-import { SubmissionInterruptedError } from '../errors.ts';
+import {
+	SubmissionInterruptedError,
+	SubmissionRetryExhaustedError,
+	SubmissionTimeoutError,
+} from '../errors.ts';
 import { getInternalSession } from '../session.ts';
 import type {
 	AttachedAgentEvent,
@@ -343,12 +347,14 @@ export async function reconcileInterruptedSubmission(
 		const error =
 			submission.inputAppliedAt === undefined
 				? new SubmissionInterruptedError({
+						phase: 'retry_exhausted_before_input',
 						attemptCount: submission.attemptCount,
 						maxAttempts: submission.maxRetry,
 					})
-				: new Error(
-						`[flue] Agent submission exceeded maximum recovery attempts (${submission.attemptCount}/${submission.maxRetry}).`,
-					);
+				: new SubmissionRetryExhaustedError({
+						attemptCount: submission.attemptCount,
+						maxAttempts: submission.maxRetry,
+					});
 		return failInterruptedSubmission(
 			submissions, submission, attempt, agent, 'exhausted_retry_budget', error, createContext,
 		);
@@ -356,7 +362,7 @@ export async function reconcileInterruptedSubmission(
 
 	// Check timeout.
 	if (submission.timeoutAt > 0 && Date.now() >= submission.timeoutAt) {
-		const error = new Error('[flue] Agent submission exceeded configured timeout.');
+		const error = new SubmissionTimeoutError();
 		return failInterruptedSubmission(
 			submissions, submission, attempt, agent, 'exceeded_timeout', error, createContext,
 		);
@@ -455,9 +461,7 @@ export async function reconcileInterruptedSubmission(
 			await submissions.requeueSubmissionBeforeInputApplied(attempt);
 			return { disposition: 'requeued' };
 		}
-		const error = new Error(
-			'[flue] Agent submission attempt was interrupted after canonical input persistence but before the input-application marker was recorded. Provider replay was not attempted.',
-		);
+		const error = new SubmissionInterruptedError({ phase: 'before_input_marker' });
 		return failInterruptedSubmission(
 			submissions, submission, attempt, agent,
 			'interrupted_before_input_marker', error, createContext,
@@ -470,11 +474,10 @@ export async function reconcileInterruptedSubmission(
 		: undefined;
 
 	// Post-input-application interruption without completion.
-	const error = new Error(
-		interruptedTools
-			? `[flue] Agent submission was interrupted with pending tool call(s): ${interruptedTools.map((t) => t.name).join(', ')}. The tool outcome could not be confirmed. The tool was not automatically retried.`
-			: '[flue] Agent submission attempt was interrupted after input application without a completed canonical response. Provider replay was not attempted.',
-	);
+	const error = new SubmissionInterruptedError({
+		phase: 'after_input_application',
+		interruptedTools,
+	});
 	return failInterruptedSubmission(
 		submissions, submission, attempt, agent,
 		'interrupted_after_input_application', error, createContext, interruptedTools,

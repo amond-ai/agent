@@ -14,6 +14,7 @@ export {
 	SkillNotRegisteredError,
 	SubagentNotDeclaredError,
 	SubmissionInterruptedError,
+	SubmissionRetryExhaustedError,
 	SubmissionTimeoutError,
 	TaskDepthExceededError,
 	ToolInputValidationError,

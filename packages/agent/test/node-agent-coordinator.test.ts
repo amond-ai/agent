@@ -18,6 +18,7 @@ import { agentStreamPath } from '../src/runtime/event-stream-store.ts';
 import type { AgentExecutionStore } from '../src/agent-execution-store.ts';
 import { createSessionStorageKey } from '../src/session-identity.ts';
 import { generateSessionAffinityKey } from '../src/runtime/ids.ts';
+import { SubmissionInterruptedError } from '../src/errors.ts';
 import { defineTool } from '../src/tool.ts';
 import type { SessionData } from '../src/types.ts';
 import { createNoopSessionEnv } from './fixtures/session-env.ts';
@@ -913,7 +914,7 @@ leaseExpiresAt: 1,
 
 			const submission = await executionStore.submissions.getSubmission(input.dispatchId);
 			expect(submission).toMatchObject({ status: 'settled' });
-			expect(submission?.error).toContain('exceeded configured timeout');
+			expect(submission?.error).toContain('exceeded the configured timeout');
 		});
 
 		it('settles a completed canonical response as success when the configured timeout has expired', async () => {
@@ -1751,6 +1752,71 @@ leaseExpiresAt: 1,
 				.filter((event) => event.type === 'submission_settled');
 			expect(settledEvents).toMatchObject([
 				{ outcome: 'completed', submissionId: expect.any(String) },
+			]);
+		});
+
+		it('rejects a waiting direct prompt with a typed interrupted error when reconciliation terminalizes it', async () => {
+			const dbPath = createTempDbPath();
+			const provider = createFauxProvider();
+			provider.setResponses([fauxAssistantMessage('Should not be called.')]);
+			const executionStore = await openExecutionStore(dbPath);
+			const eventStreamStore = createTestEventStreamStore();
+			const coordinator = createNodeAgentCoordinator({
+				submissions: executionStore.submissions,
+				sessions: executionStore.sessions,
+				agents: {
+					assistant: createAgent(() => ({
+						model: `${provider.getModel().provider}/${provider.getModel().id}`,
+					})),
+				},
+				createContext: makeFauxCreateContext(provider, executionStore),
+				eventStreamStore,
+			});
+
+			// Simulate an attempt that lost its lease after recording input
+			// application but before persisting any canonical work: intercept
+			// admission to claim with an already-expired lease and mark input
+			// applied, so this coordinator's expired-lease reconciliation —
+			// not normal processing — terminalizes the submission while the
+			// caller is still awaiting completion.
+			const originalAdmit = executionStore.submissions.admitDirect.bind(executionStore.submissions);
+			executionStore.submissions.admitDirect = async (input) => {
+				const admitted = await originalAdmit(input);
+				await executionStore.submissions.claimSubmission({
+					submissionId: input.submissionId,
+					attemptId: 'attempt-lease-expired',
+					ownerId: 'previous-owner',
+					leaseExpiresAt: 1,
+				});
+				await executionStore.submissions.markSubmissionInputApplied({
+					submissionId: input.submissionId,
+					attemptId: 'attempt-lease-expired',
+				});
+				return admitted;
+			};
+
+			const admit = coordinator.createAdmission('assistant', 'instance-1');
+			// The waiting caller rejects with the typed interrupted error —
+			// the settled-submission error vocabulary is structured, not a
+			// raw message string.
+			const rejection = await admit({ message: 'Hello terminalized' }).then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+			expect(rejection).toBeInstanceOf(SubmissionInterruptedError);
+			expect(rejection).toMatchObject({
+				type: 'submission_interrupted',
+				meta: { phase: 'after_input_application' },
+			});
+
+			// Reconciliation-driven failure also appends a durable settlement
+			// event so detached stream readers observe the outcome.
+			const stream = await eventStreamStore.readEvents(agentStreamPath('assistant', 'instance-1'));
+			const settledEvents = stream.events
+				.map((event) => event.data as Record<string, unknown>)
+				.filter((event) => event.type === 'submission_settled');
+			expect(settledEvents).toMatchObject([
+				{ outcome: 'failed', submissionId: expect.any(String) },
 			]);
 		});
 
