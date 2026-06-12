@@ -289,9 +289,5 @@ function formatMcpResult(result: CallToolResult): string {
 		parts.push(JSON.stringify(item));
 	}
 
-	if (parts.length === 0 && 'toolResult' in result) {
-		parts.push(JSON.stringify(result.toolResult, null, 2));
-	}
-
 	return parts.filter(Boolean).join('\n\n') || '(MCP tool returned no content)';
 }
