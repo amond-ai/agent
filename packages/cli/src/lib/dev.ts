@@ -18,8 +18,8 @@ import * as path from 'node:path';
 import {
 	build,
 	cloudflareViteConfigPath,
-	cloudflareViteInputDir,
 	createCloudflareViteConfig,
+	viteInputDir,
 } from './build.ts';
 import { createEnvLoader, type EnvLoader, selectEnvFile } from './env.ts';
 import type { BuildOptions } from './types.ts';
@@ -553,7 +553,7 @@ class CloudflareReloader implements DevReloader {
 		this.root = opts.root;
 		this.sourceRoot = opts.sourceRoot;
 		this.port = opts.port;
-		const inputDir = cloudflareViteInputDir(opts.root);
+		const inputDir = viteInputDir(opts.root);
 		this.configPath = cloudflareViteConfigPath(opts.root);
 		this.entryPath = path.join(inputDir, '_entry.ts');
 	}

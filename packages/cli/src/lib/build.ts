@@ -110,8 +110,13 @@ async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 	const bundleStrategy = plugin.bundle;
 
 	if (bundleStrategy === 'vite') {
-		const entryPath = path.join(output, '_entry_server.ts');
+		// Write the generated entry to the scratch input dir (not the output
+		// dir) so the build can empty the output dir, matching the cloudflare
+		// target and preventing stale artifacts from earlier builds.
+		const inputDir = viteInputDir(root);
+		const entryPath = path.join(inputDir, '_entry_server.ts');
 		const outPath = path.join(output, 'server.mjs');
+		fs.mkdirSync(inputDir, { recursive: true });
 		fs.writeFileSync(entryPath, serverCode, 'utf-8');
 		try {
 			const pluginExternal = plugin.external ?? [];
@@ -125,7 +130,7 @@ async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 				build: {
 					ssr: entryPath,
 					outDir: output,
-					emptyOutDir: false,
+					emptyOutDir: true,
 					sourcemap: true,
 					target: 'node22',
 					rolldownOptions: {
@@ -154,7 +159,7 @@ async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 				`[flue] Plugin "${plugin.name}" set bundle: 'vite-cloudflare' but did not provide its generated entry and Vite inputs.`,
 			);
 		}
-		const inputDir = cloudflareViteInputDir(root);
+		const inputDir = viteInputDir(root);
 		const entryPath = path.join(inputDir, plugin.entryFilename);
 		const inputs = await plugin.viteInputs(ctx);
 		let generatedChanged =
@@ -339,7 +344,7 @@ function getUserExternals(root: string): string[] {
 	}
 }
 
-export function cloudflareViteInputDir(root: string): string {
+export function viteInputDir(root: string): string {
 	return path.join(root, '.flue-vite');
 }
 
