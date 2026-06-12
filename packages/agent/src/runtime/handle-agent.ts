@@ -135,8 +135,12 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 		const streamUrlUrl = new URL(request.url);
 		streamUrlUrl.search = '';
 		const streamUrl = streamUrlUrl.toString();
+		// Stream creation is owned by the coordinator at first accepted prompt
+		// (idempotent createStream before processing each claimed submission).
+		// Creating it here would leave a phantom open stream behind when
+		// admission fails, breaking the documented 404-until-first-prompt
+		// contract for stream reads.
 		const streamPath = opts.agentName ? agentStreamPath(opts.agentName, id) : undefined;
-		if (streamPath) await opts.eventStreamStore.createStream(streamPath);
 		const offset = streamPath
 			? (await opts.eventStreamStore.getStreamMeta(streamPath))?.nextOffset ?? '-1'
 			: '-1';

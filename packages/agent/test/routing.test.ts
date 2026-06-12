@@ -156,9 +156,10 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				// Simulates the coordinator: each accepted prompt appends one
-				// event to the agent's durable stream.
+				// Simulates the coordinator: each accepted prompt creates the
+				// stream (idempotent) and appends one event to it.
 				assistant: (id) => async (payload) => {
+					await store.createStream(agentStreamPath('assistant', id));
 					await store.appendEvent(agentStreamPath('assistant', id), {
 						type: 'message',
 						text: (payload as { message: string }).message,
@@ -205,6 +206,47 @@ describe('flue()', () => {
 		);
 		expect(offsetRead.status).toBe(200);
 		expect(await offsetRead.json()).toEqual([{ type: 'message', text: 'again' }]);
+	});
+
+	it('keeps the agent stream unreadable when the instance\'s only prompt fails admission', async () => {
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		configureFlueRuntime({
+			target: 'node',
+			manifest: {
+				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
+			},
+			createAdmission: {
+				// Simulates the coordinator rejecting admission (e.g. shutting down).
+				assistant: () => async () => {
+					throw new Error('[flue] runtime is shutting down; new submissions are not accepted.');
+				},
+			},
+			createContext: createTestContext,
+			eventStreamStore: createTestEventStreamStore(),
+		});
+		const app = new Hono();
+		app.route('/api', flue());
+
+		try {
+			const prompt = await app.fetch(
+				new Request('http://localhost/api/agents/assistant/customer-123', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ message: 'hello' }),
+				}),
+			);
+			expect(prompt.status).toBe(500);
+
+			// No prompt was ever admitted, so the stream must not exist:
+			// reads return the documented 404, not an open empty stream.
+			const read = await app.fetch(
+				new Request('http://localhost/api/agents/assistant/customer-123'),
+			);
+			expect(read.status).toBe(404);
+			expect(((await read.json()) as { error: { type: string } }).error.type).toBe('stream_not_found');
+		} finally {
+			consoleError.mockRestore();
+		}
 	});
 
 	it('rejects non-POST agent requests with a method envelope when a path targets an HTTP agent', async () => {
