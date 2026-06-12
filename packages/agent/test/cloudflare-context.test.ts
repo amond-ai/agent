@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cfSandboxToSessionEnv } from '../src/cloudflare/cf-sandbox.ts';
+import { cloudflareSandbox, type CloudflareSandboxStub } from '../src/cloudflare/cf-sandbox.ts';
 import {
 	getCloudflareContext,
 	getDurableObjectIdentity,
@@ -88,12 +88,14 @@ describe('Cloudflare context', () => {
 	});
 });
 
-describe('cfSandboxToSessionEnv()', () => {
+describe('cloudflareSandbox()', () => {
 	it('preserves text content when wrapped Cloudflare sandbox files are read and written', async () => {
 		const readFile = vi.fn(async () => ({ content: 'hello from Cloudflare' }));
 		const writeFile = vi.fn(async () => {});
-		const sandbox = { readFile, writeFile };
-		const env = await cfSandboxToSessionEnv(sandbox, '/workspace/project');
+		const sandbox = { readFile, writeFile } as unknown as CloudflareSandboxStub;
+		const env = await cloudflareSandbox(sandbox, { cwd: '/workspace/project' }).createSessionEnv({
+			id: 'agent-1',
+		});
 
 		await expect(env.readFile('notes.txt')).resolves.toBe('hello from Cloudflare');
 		await env.writeFile('output.txt', 'written as text');
@@ -105,8 +107,10 @@ describe('cfSandboxToSessionEnv()', () => {
 	it('preserves binary bytes when wrapped Cloudflare sandbox files are read and written through base64 encoding', async () => {
 		const readFile = vi.fn(async () => ({ content: 'AP+AQQ==' }));
 		const writeFile = vi.fn(async () => {});
-		const sandbox = { readFile, writeFile };
-		const env = await cfSandboxToSessionEnv(sandbox, '/workspace/project');
+		const sandbox = { readFile, writeFile } as unknown as CloudflareSandboxStub;
+		const env = await cloudflareSandbox(sandbox, { cwd: '/workspace/project' }).createSessionEnv({
+			id: 'agent-1',
+		});
 
 		await expect(env.readFileBuffer('artifact.bin')).resolves.toEqual(
 			new Uint8Array([0, 255, 128, 65]),
@@ -123,7 +127,9 @@ describe('cfSandboxToSessionEnv()', () => {
 
 	it('forwards command cwd env and millisecond timeout when a wrapped command executes', async () => {
 		const exec = vi.fn(async () => ({ stdout: 'done', stderr: 'warning', exitCode: 3 }));
-		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+			cwd: '/workspace/project',
+		}).createSessionEnv({ id: 'agent-1' });
 
 		await expect(
 			env.exec('pnpm test', {
@@ -146,7 +152,9 @@ describe('cfSandboxToSessionEnv()', () => {
 			stdout: '.env\0.gitignore\0src\0README.md\0',
 			stderr: '',
 		}));
-		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+			cwd: '/workspace/project',
+		}).createSessionEnv({ id: 'agent-1' });
 
 		await expect(env.readdir('config')).resolves.toEqual([
 			'.env',
@@ -166,7 +174,9 @@ describe('cfSandboxToSessionEnv()', () => {
 			stdout: '4096/1718000000/directory\nsymbolic link\n',
 			stderr: '',
 		}));
-		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+			cwd: '/workspace/project',
+		}).createSessionEnv({ id: 'agent-1' });
 
 		await expect(env.stat('linked-dir')).resolves.toEqual({
 			isFile: false,
@@ -183,7 +193,9 @@ describe('cfSandboxToSessionEnv()', () => {
 
 	it('issues a single well-formed rm -rf command when recursive and force are both requested', async () => {
 		const exec = vi.fn(async () => ({ success: true, stdout: '', stderr: '' }));
-		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+			cwd: '/workspace/project',
+		}).createSessionEnv({ id: 'agent-1' });
 
 		await env.rm('tmp', { recursive: true, force: true });
 
@@ -196,7 +208,9 @@ describe('cfSandboxToSessionEnv()', () => {
 			stdout: '',
 			stderr: 'rm: cannot remove /workspace/project/tmp: Permission denied',
 		}));
-		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+			cwd: '/workspace/project',
+		}).createSessionEnv({ id: 'agent-1' });
 
 		await expect(env.rm('tmp', { recursive: true })).rejects.toThrow(
 			'rm failed for /workspace/project/tmp: rm: cannot remove /workspace/project/tmp: Permission denied',
@@ -217,7 +231,9 @@ describe('cfSandboxToSessionEnv()', () => {
 			await commandFinished;
 			return { success: true, stdout: 'finished remotely', stderr: '' };
 		});
-		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+			cwd: '/workspace/project',
+		}).createSessionEnv({ id: 'agent-1' });
 		const controller = new AbortController();
 
 		const result = env.exec('pnpm test', { signal: controller.signal });

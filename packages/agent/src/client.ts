@@ -36,11 +36,6 @@ export interface FlueContextConfig {
 	createDefaultEnv: () => Promise<SessionEnv>;
 	defaultStore: SessionStore;
 	/**
-	 * Platform-specific sandbox resolver hook. Called before default resolution.
-	 * Returns SessionEnv to use, or null to fall through to default logic.
-	 */
-	resolveSandbox?: (sandbox: unknown) => Promise<SessionEnv> | null;
-	/**
 	 * The current HTTP request, if any. Surfaced to handlers as `ctx.req`.
 	 * Build plugins pass the standard Fetch `Request` through; non-HTTP entry
 	 * points (e.g. future cron triggers) leave it undefined.
@@ -306,10 +301,6 @@ async function resolveSessionEnv(
 	}
 	if (isBashFactory(sandbox)) {
 		return { env: await bashFactoryToSessionEnv(sandbox) };
-	}
-	if (config.resolveSandbox) {
-		const resolved = await config.resolveSandbox(sandbox);
-		if (resolved) return { env: resolved };
 	}
 	if (isSandboxFactory(sandbox)) {
 		const env = await sandbox.createSessionEnv({ id });

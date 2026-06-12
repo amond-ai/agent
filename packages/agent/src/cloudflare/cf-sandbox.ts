@@ -2,10 +2,56 @@
 import { abortErrorFor } from '../abort.ts';
 import type { SandboxApi } from '../sandbox.ts';
 import { createSandboxSessionEnv } from '../sandbox.ts';
-import type { SessionEnv } from '../types.ts';
+import type { SandboxFactory, SessionEnv } from '../types.ts';
+
+/**
+ * Minimal structural surface of a `@cloudflare/sandbox` Durable Object stub
+ * (the value returned by `getSandbox()`). Kept structural so `@flue/runtime`
+ * does not depend on `@cloudflare/sandbox` and stays importable on Node;
+ * only the methods Flue calls are listed. A wrong object fails loudly on
+ * the first method call.
+ */
+export interface CloudflareSandboxStub {
+	exec(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ success: boolean; stdout: string; stderr: string; exitCode?: number }>;
+	readFile(path: string, options?: { encoding?: string }): Promise<{ content: string }>;
+	writeFile(path: string, content: string, options?: { encoding?: string }): Promise<unknown>;
+	exists(path: string): Promise<{ exists: boolean }>;
+	mkdir(path: string, options?: { recursive?: boolean }): Promise<unknown>;
+	deleteFile(path: string): Promise<unknown>;
+}
+
+export interface CloudflareSandboxOptions {
+	/** Working directory inside the container. Defaults to `/workspace`. */
+	cwd?: string;
+}
+
+/**
+ * Wrap a Cloudflare Sandbox Durable Object stub into a Flue
+ * {@link SandboxFactory}:
+ *
+ * ```ts
+ * import { getSandbox } from '@cloudflare/sandbox';
+ * import { cloudflareSandbox } from '@flue/runtime/cloudflare';
+ *
+ * export default createAgent(({ id, env }) => ({
+ *   sandbox: cloudflareSandbox(getSandbox(env.Sandbox, id)),
+ * }));
+ * ```
+ */
+export function cloudflareSandbox(
+	sandbox: CloudflareSandboxStub,
+	options?: CloudflareSandboxOptions,
+): SandboxFactory {
+	return {
+		createSessionEnv: () => cfSandboxToSessionEnv(sandbox, options?.cwd),
+	};
+}
 
 export async function cfSandboxToSessionEnv(
-	sandbox: any,
+	sandbox: CloudflareSandboxStub,
 	cwd: string = '/workspace',
 ): Promise<SessionEnv> {
 	const api: SandboxApi = {

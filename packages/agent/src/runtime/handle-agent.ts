@@ -59,8 +59,8 @@ function parseDirectAgentPayload(payload: unknown): DirectAgentPayload {
 
 /**
  * Caller-provided context factory. Differs per-target:
- *   - Node: env=process.env, defaultStore=in-memory, no resolveSandbox.
- *   - Cloudflare: env=DO env, defaultStore=DO SQLite, resolveSandbox=cfSandboxToSessionEnv.
+ *   - Node: env=process.env, defaultStore=in-memory.
+ *   - Cloudflare: env=DO env, defaultStore=DO SQLite.
  */
 export type CreateContextFn = (
 	id: string,

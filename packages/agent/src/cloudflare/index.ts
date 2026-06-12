@@ -6,7 +6,8 @@ export type {
 export { extend, resolveCloudflareExtension } from './extension.ts';
 
 export type { CloudflareAIBinding, CloudflareAIBindingRegistration } from '../runtime/providers.ts';
-export { cfSandboxToSessionEnv } from './cf-sandbox.ts';
+export type { CloudflareSandboxOptions, CloudflareSandboxStub } from './cf-sandbox.ts';
+export { cfSandboxToSessionEnv, cloudflareSandbox } from './cf-sandbox.ts';
 export type { CloudflareContext, FlueDurableObjectIdentity } from './context.ts';
 export {
 	getCloudflareContext,
