@@ -10,6 +10,15 @@ export { connectMcpServer } from './mcp.ts';
 export { ResultUnavailableError } from './result.ts';
 export { type FlueEventSubscriber, observe } from './runtime/events.ts';
 export { dispatch } from './runtime/flue-app.ts';
+export type { AgentManifestEntry } from './runtime/flue-app.ts';
+export { getRun, listAgents, listRuns } from './runtime/inspect.ts';
+export type {
+	ListRunsOpts,
+	ListRunsResponse,
+	RunPointer,
+	RunRecord,
+	RunStatus,
+} from './runtime/run-store.ts';
 export {
 	configureProvider,
 	type HttpProviderRegistration,

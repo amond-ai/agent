@@ -25,6 +25,9 @@ describe('package entrypoints', () => {
 			defineAgentProfile: expect.any(Function),
 			defineTool: expect.any(Function),
 			dispatch: expect.any(Function),
+			getRun: expect.any(Function),
+			listAgents: expect.any(Function),
+			listRuns: expect.any(Function),
 			observe: expect.any(Function),
 			registerApiProvider: expect.any(Function),
 			registerProvider: expect.any(Function),
@@ -34,11 +37,11 @@ describe('package entrypoints', () => {
 		expect(runtime).not.toHaveProperty('resetProvidersForTests');
 	});
 
-	it('exposes flue() and admin() when a consumer imports @flue/runtime/routing', async () => {
+	it('exposes flue() when a consumer imports @flue/runtime/routing', async () => {
 		const routing = await import('@flue/runtime/routing');
 
 		expect(routing.flue).toEqual(expect.any(Function));
-		expect(routing.admin).toEqual(expect.any(Function));
+		expect(routing).not.toHaveProperty('admin');
 	});
 
 	it('exposes generated-runtime APIs when generated code imports @flue/runtime/internal', async () => {

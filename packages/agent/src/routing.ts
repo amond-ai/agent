@@ -5,8 +5,8 @@
  * Without `app.ts`, Flue generates an application that mounts {@link flue} at
  * `/`. When `app.ts` exists, its default {@link Fetchable} export owns the
  * request pipeline and must mount {@link flue} explicitly to publish Flue
- * routes. Mount {@link admin} explicitly when the application needs protected
- * deployment inspection routes.
+ * routes. Compose deployment-inspection endpoints from the `listRuns()`,
+ * `getRun()`, and `listAgents()` primitives exported by `@flue/runtime`.
  *
  * ```ts
  * import { flue } from '@flue/runtime/routing';
@@ -17,7 +17,6 @@
  * export default app;
  * ```
  */
-export { admin } from './runtime/admin-app.ts';
 export { flue } from './runtime/flue-app.ts';
 
 /**

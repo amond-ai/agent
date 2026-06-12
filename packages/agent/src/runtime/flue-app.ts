@@ -125,7 +125,7 @@ export interface FlueRuntime {
 	/** Package version inlined by the generated entry for OpenAPI metadata. */
 	runtimeVersion?: string;
 
-	/** Build manifest inlined by the generated entry for admin listing routes. */
+	/** Build manifest inlined by the generated entry. */
 	manifest?: FlueManifest;
 
 	/** Internal dispatch admission queue. Defaults to process-lifetime memory. */
@@ -138,12 +138,18 @@ export interface FlueRuntime {
 /** Cross-deployment run lookup/listing surface of a {@link RunStore}. */
 export type RunListing = Pick<RunStore, 'lookupRun' | 'listRuns'>;
 
+/** One built agent in the deployment manifest, as returned by `listAgents()`. */
+export interface AgentManifestEntry {
+	/** Addressable agent name — the `agents/<name>.ts` module name. */
+	name: string;
+	/** Transports the agent is exposed over. */
+	transports: { http?: true };
+	/** Whether the module default-exports a created agent. */
+	created: boolean;
+}
+
 interface FlueManifest {
-	agents: Array<{
-		name: string;
-		transports: { http?: true };
-		created: boolean;
-	}>;
+	agents: AgentManifestEntry[];
 	workflows?: Array<{
 		name: string;
 		transports: { http?: boolean };
@@ -601,36 +607,6 @@ const runStreamReadHandler: MiddlewareHandler = async (c) => {
 	});
 };
 
-export async function handleRunById(opts: {
-	rt: FlueRuntime;
-	request: Request;
-	env: unknown;
-	runId: string;
-}): Promise<Response> {
-	const { rt, request, env, runId } = opts;
-	const pointer = await findRunPointer(rt, env, runId);
-	if (!pointer) throw new RunNotFoundError({ runId });
-
-	if (rt.target === 'cloudflare') {
-		const response = await rt.routeRunRequest!(
-			runMetaRequest(request, runId),
-			env,
-			{ workflowName: pointer.workflowName, runId },
-		);
-		if (response) return response;
-		throw new RouteNotFoundError({
-			method: request.method,
-			path: new URL(request.url).pathname,
-		});
-	}
-
-	return handleRunRouteRequest({
-		runStore: rt.runStore,
-		workflowName: pointer.workflowName,
-		runId,
-	});
-}
-
 export interface HandleRunRouteOptions {
 	runStore?: RunStore;
 	workflowName: string;
@@ -704,14 +680,6 @@ async function findRunPointer(
 	}
 	if (!rt.runStore) throw new RunStoreUnavailableError();
 	return rt.runStore.lookupRun(runId);
-}
-
-/** Rewrite a request to the `?meta` (run record) view of `/runs/:runId`. */
-function runMetaRequest(request: Request, runId: string): Request {
-	const url = new URL(request.url);
-	url.pathname = `/runs/${encodeURIComponent(runId)}`;
-	url.search = '?meta';
-	return new Request(url, request);
 }
 
 function isRegisteredWorkflow(rt: FlueRuntime, workflowName: string): boolean {
