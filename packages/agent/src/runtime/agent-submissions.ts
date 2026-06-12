@@ -386,17 +386,27 @@ export async function reconcileInterruptedSubmission(
 			if (replacement) return { disposition: 'replacement', submission: replacement };
 		}
 	}
+	// The journal is the authoritative record of provider work: a null
+	// journal means no attempt ever reached the beforeProvider write (the
+	// crash window between the input-application marker and the first
+	// journal row), and phase 'before_provider' means the provider call for
+	// the current turn never started. Either way a retry is safe by
+	// construction.
+	const providerUnreached = journal === null || journal.phase === 'before_provider';
 	if (
-		journal &&
-		(journal.phase === 'before_provider' || journal.phase === 'provider_started') &&
-		!journal.committed &&
-		// 'continuable': session has partial progress that can resume.
-		// 'uncertain' with before_provider: the provider hasn't started, so
-		// a retry is safe — the journal is the authoritative record of what
-		// happened, and it says we never reached the provider. Without this,
-		// a crash after input application but before any provider response
-		// would terminally fail the submission instead of retrying.
-		(state === 'continuable' || (state === 'uncertain' && journal.phase === 'before_provider'))
+		submission.inputAppliedAt !== undefined &&
+		(journal === null ||
+			((journal.phase === 'before_provider' || journal.phase === 'provider_started') &&
+				!journal.committed)) &&
+		// 'continuable': session has partial progress that restart processing
+		// can resume (persisted tool results, a recovered stream partial, a
+		// transient retryable error, or an aborted partial that replays from
+		// the last durable message).
+		// 'uncertain' with the provider unreached: nothing observable
+		// happened, so a retry is safe. Without this, a crash after input
+		// application but before any provider response would terminally fail
+		// the submission instead of retrying.
+		(state === 'continuable' || (state === 'uncertain' && providerUnreached))
 	) {
 		const replacement = await submissions.replaceTurnJournalAttempt(attempt, crypto.randomUUID(), lease);
 		if (replacement) return { disposition: 'replacement', submission: replacement };

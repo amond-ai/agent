@@ -411,8 +411,27 @@ describe('createCloudflareAgentRuntime()', () => {
 			return originalFail(attempt, error);
 		};
 		await executionStore.submissions.admitDirect(directInput());
-		await executionStore.submissions.claimSubmission({ submissionId: 'direct-1', attemptId: 'attempt-1', ownerId: 'test-owner', leaseExpiresAt: Date.now() + 30_000 });
+		const claimed = await executionStore.submissions.claimSubmission({ submissionId: 'direct-1', attemptId: 'attempt-1', ownerId: 'test-owner', leaseExpiresAt: Date.now() + 30_000 });
+		if (!claimed) throw new Error('Expected claimed submission.');
 		await executionStore.submissions.markSubmissionInputApplied({ submissionId: 'direct-1', attemptId: 'attempt-1' });
+		// The journal records that the provider was reached for the current
+		// turn; with the canonical state still 'uncertain', the interruption
+		// cannot be proven replay-safe and must terminalize. (Without a
+		// journal the provider was provably never reached and reconciliation
+		// retries instead.)
+		await executionStore.submissions.beginTurnJournal({
+			submissionId: 'direct-1',
+			sessionKey: claimed.sessionKey,
+			kind: 'direct',
+			attemptId: 'attempt-1',
+			operationId: 'op-1',
+			turnId: 'turn-1',
+			phase: 'before_provider',
+		});
+		await executionStore.submissions.updateTurnJournalPhase(
+			{ submissionId: 'direct-1', attemptId: 'attempt-1' },
+			'provider_started',
+		);
 
 		await runtime.onStart(instance, () => {});
 

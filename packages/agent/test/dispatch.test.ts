@@ -5,6 +5,7 @@ import {
 } from '@earendil-works/pi-ai';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAgent } from '../src/agent-definition.ts';
+import { OperationFailedError } from '../src/errors.ts';
 import { dispatch } from '../src/index.ts';
 import {
 	configureFlueRuntime,
@@ -362,6 +363,141 @@ describe('dispatched session processing', () => {
 			message: { role: 'user', content: [{ type: 'text', text: 'Hello directly' }] },
 		});
 		expect(data?.entries[0]).not.toHaveProperty('dispatch');
+	});
+
+	it('does not commit the journal or delete stream chunks when a turn ends aborted', async () => {
+		const provider = createProvider();
+		provider.setResponses([
+			fauxAssistantMessage('partial output collected before the abort', {
+				stopReason: 'aborted',
+				errorMessage: 'Request was aborted',
+			}),
+		]);
+		const store = new InMemorySessionStore();
+		const chunkSegments: Array<{ streamKey: string; body: string }> = [];
+		const deletedStreamKeys: string[] = [];
+		// Documented narrow fake: the session only touches the stream-chunk
+		// subset of the submission store during processing.
+		const submissionStore = {
+			appendStreamChunkSegment: async (streamKey: string, _segmentIndex: number, body: string) => {
+				chunkSegments.push({ streamKey, body });
+				return true;
+			},
+			getStreamChunkSegments: async () => [],
+			deleteStreamChunkSegments: async (streamKey: string) => {
+				deletedStreamKeys.push(streamKey);
+			},
+		} as unknown as import('../src/agent-execution-store.ts').AgentSubmissionStore;
+		const journalCommits: string[] = [];
+		const agent = createAgent(() => ({
+			model: `${provider.getModel().provider}/${provider.getModel().id}`,
+		}));
+		const input: DirectAgentSubmissionInput = {
+			kind: 'direct',
+			submissionId: 'direct:aborted-turn-no-commit',
+			agent: 'moderator',
+			id: 'guild:aborted-turn-no-commit',
+			payload: { message: 'Hello directly' },
+			acceptedAt: '2026-06-01T00:00:00.000Z',
+		};
+		const ctx = createFlueContext({
+			id: input.id,
+			payload: input.payload,
+			env: {},
+			req: new Request('http://flue.local/agents/moderator/guild:aborted-turn-no-commit', { method: 'POST' }),
+			agentConfig: {
+				subagents: {},
+				resolveModel: () => provider.getModel(),
+			},
+			createDefaultEnv: async () => createNoopSessionEnv({ cwd: '/' }),
+			defaultStore: store,
+			submissionStore,
+		});
+
+		await expect(
+			createAgentSubmissionSessionHandler(agent, input, (s) =>
+				s.processSubmissionInput(input, {
+					submissionAttempt: { submissionId: input.submissionId, attemptId: 'attempt-1' },
+					journal: {
+						committed: async () => {
+							journalCommits.push('committed');
+						},
+						checkpointReady: async () => {
+							journalCommits.push('checkpoint-ready');
+						},
+					},
+				}),
+			)(ctx),
+		).rejects.toBeInstanceOf(OperationFailedError);
+
+		// The aborted turn is not durable progress: the journal must stay
+		// uncommitted and the persisted partial-stream chunks must survive so
+		// restart reconciliation can recover the interrupted stream.
+		expect(journalCommits).toEqual([]);
+		expect(deletedStreamKeys).toEqual([]);
+		expect(chunkSegments.length).toBeGreaterThan(0);
+	});
+
+	it('does not commit the journal or delete stream chunks when a turn ends with a model error', async () => {
+		const provider = createProvider();
+		provider.setResponses([
+			fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'invalid_api_key' }),
+		]);
+		const store = new InMemorySessionStore();
+		const deletedStreamKeys: string[] = [];
+		// Documented narrow fake: the session only touches the stream-chunk
+		// subset of the submission store during processing.
+		const submissionStore = {
+			appendStreamChunkSegment: async () => true,
+			getStreamChunkSegments: async () => [],
+			deleteStreamChunkSegments: async (streamKey: string) => {
+				deletedStreamKeys.push(streamKey);
+			},
+		} as unknown as import('../src/agent-execution-store.ts').AgentSubmissionStore;
+		const journalCommits: string[] = [];
+		const agent = createAgent(() => ({
+			model: `${provider.getModel().provider}/${provider.getModel().id}`,
+		}));
+		const input: DirectAgentSubmissionInput = {
+			kind: 'direct',
+			submissionId: 'direct:error-turn-no-commit',
+			agent: 'moderator',
+			id: 'guild:error-turn-no-commit',
+			payload: { message: 'Hello directly' },
+			acceptedAt: '2026-06-01T00:00:00.000Z',
+		};
+		const ctx = createFlueContext({
+			id: input.id,
+			payload: input.payload,
+			env: {},
+			req: new Request('http://flue.local/agents/moderator/guild:error-turn-no-commit', { method: 'POST' }),
+			agentConfig: {
+				subagents: {},
+				resolveModel: () => provider.getModel(),
+			},
+			createDefaultEnv: async () => createNoopSessionEnv({ cwd: '/' }),
+			defaultStore: store,
+			submissionStore,
+		});
+
+		await expect(
+			createAgentSubmissionSessionHandler(agent, input, (s) =>
+				s.processSubmissionInput(input, {
+					submissionAttempt: { submissionId: input.submissionId, attemptId: 'attempt-1' },
+					journal: {
+						committed: async () => {
+							journalCommits.push('committed');
+						},
+						checkpointReady: async () => {
+							journalCommits.push('checkpoint-ready');
+						},
+					},
+				}),
+			)(ctx),
+		).rejects.toBeInstanceOf(OperationFailedError);
+
+		expect(journalCommits).toEqual([]);
+		expect(deletedStreamKeys).toEqual([]);
 	});
 
 	it('persists one provider-visible terminal advisory when an interrupted submission cannot replay safely', async () => {

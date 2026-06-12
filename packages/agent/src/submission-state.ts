@@ -12,13 +12,12 @@
  *   resume, settle, or fail when (re)processing the input.
  *
  * The two consumers intentionally do NOT agree on every state. The current
- * divergences, preserved verbatim from the pre-consolidation
- * implementations and pinned by `test/submission-state.test.ts`:
+ * divergences, pinned by `test/submission-state.test.ts`:
  *
- * - `resume` with mode `overflow`, `transient_retry`, or `input_only`: the
- *   preamble resumes these, but inspection reports `'uncertain'` —
- *   reconciliation compensates with its uncertain-before-provider retry
- *   special case (see `reconcileInterruptedSubmission`).
+ * - `resume` with mode `overflow` or `input_only`: the preamble resumes
+ *   these, but inspection reports `'uncertain'` — reconciliation
+ *   compensates with its provider-unreached retry special case (see
+ *   `reconcileInterruptedSubmission`).
  * - `completed` with `overflow: true` (silent or truncation overflow on a
  *   stop/length response): inspection reports `'completed'`, but the
  *   preamble treats it as an overflow resume (compact and continue).
@@ -45,13 +44,21 @@ import type { MessageEntry, SessionEntry } from './types.ts';
  * - `transient_retry` — a retryable model error; wait out the backoff and
  *   retry the turn.
  * - `overflow` — a context-overflow response; compact and retry the turn.
+ * - `aborted_partial` — an aborted response without a recovered stream
+ *   continuation (e.g. checkpointed when graceful shutdown aborted the
+ *   turn). The partial is excluded from model context, so resuming replays
+ *   the turn from the last durable user/toolResult message; the collected
+ *   partial output stays preserved in history. When durable stream chunks
+ *   exist, reconciliation upgrades this state to `stream_continuation` via
+ *   `recoverInterruptedStream` before processing resumes.
  */
 type SubmissionResumeMode =
 	| 'input_only'
 	| 'tool_results'
 	| 'stream_continuation'
 	| 'transient_retry'
-	| 'overflow';
+	| 'overflow'
+	| 'aborted_partial';
 
 export type SubmissionState =
 	/** The persisted input entry was not found in session history. */
@@ -66,6 +73,8 @@ export type SubmissionState =
 	| { kind: 'completed'; assistant: AssistantMessage; overflow: boolean }
 	/** A toolUse response with no persisted tool results. */
 	| { kind: 'tool_use_unresolved'; assistant: AssistantMessage }
+	/** A non-retryable error response. */
+	| { kind: 'terminal_error'; reason: string }
 	| {
 			kind: 'resume';
 			mode: 'input_only';
@@ -77,9 +86,7 @@ export type SubmissionState =
 			mode: Exclude<SubmissionResumeMode, 'input_only'>;
 			assistant: AssistantMessage;
 			consecutiveRetryableErrors: number;
-	  }
-	/** A non-resumable error or aborted response. */
-	| { kind: 'terminal_error'; reason: string };
+	  };
 
 /**
  * Classify how far a persisted submission input progressed.
@@ -156,8 +163,20 @@ export function classifySubmissionState(
 		}
 		return { kind: 'tool_use_unresolved', assistant };
 	}
-	// stopReason 'error' (non-retryable, non-overflow) or 'aborted' without a
-	// recovered stream continuation.
+	if (assistant.stopReason === 'aborted') {
+		// An aborted partial without a recovered stream continuation. The
+		// abort itself is not a property of the work (graceful shutdown is
+		// the canonical producer), so the submission is resumable: the
+		// partial is excluded from model context and the turn replays from
+		// the last durable message.
+		return {
+			kind: 'resume',
+			mode: 'aborted_partial',
+			assistant,
+			consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+		};
+	}
+	// stopReason 'error', non-retryable and non-overflow.
 	return { kind: 'terminal_error', reason: assistant.errorMessage ?? assistant.stopReason };
 }
 

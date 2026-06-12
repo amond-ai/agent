@@ -395,6 +395,12 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	private activeTimeoutAt: number | undefined;
 	private activeTurnCanCommitJournal = false;
 	private activeStreamChunkWriter: StreamChunkWriter | undefined;
+	/**
+	 * Stream keys whose chunk segments belong to aborted/error turns of this
+	 * session. They are kept durable so restart reconciliation can recover the
+	 * partial stream, and deleted once a later turn checkpoint supersedes them.
+	 */
+	private staleStreamChunkKeys = new Set<string>();
 	private activeSubmissionId: string | undefined;
 	private activeSubmissionAttemptId: string | undefined;
 
@@ -580,7 +586,22 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				case 'turn_end': {
 					const turnId = this.activeTurnId ?? generateTurnId();
 					await this.activeStreamChunkWriter?.flush();
-					this.activeTurnCanCommitJournal = true;
+					const message = event.message;
+					const assistant =
+						message.role === 'assistant' ? (message as AssistantMessage) : undefined;
+					// An aborted/error turn is not durable progress: leave the
+					// journal uncommitted and keep the persisted partial-stream
+					// chunks alive so restart reconciliation can resume the
+					// submission (stream recovery, transient retry, or replay
+					// from the input) instead of terminally failing it. The
+					// chunks become stale once a later turn commits; stage them
+					// for deletion at that point.
+					const turnInterrupted =
+						assistant?.stopReason === 'aborted' || assistant?.stopReason === 'error';
+					this.activeTurnCanCommitJournal = !turnInterrupted;
+					if (turnInterrupted && this.activeStreamChunkWriter) {
+						this.staleStreamChunkKeys.add(this.activeStreamChunkWriter.streamKey);
+					}
 					await this.checkpointHarnessMessages();
 					this.emit({
 						type: 'turn_messages',
@@ -589,9 +610,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 						message: event.message,
 						toolResults: event.toolResults,
 					});
-					const message = event.message;
-					const assistant =
-						message.role === 'assistant' ? (message as AssistantMessage) : undefined;
 					const output = assistant ? (toTurnMessage(assistant) as TurnOutput) : undefined;
 					const model = this.agentLoop.state.model;
 					this.emit({
@@ -1559,9 +1577,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					turnId: this.activeTurnId ?? generateTurnId(),
 					checkpointLeafId: leafId,
 				});
-				if (this.activeStreamChunkWriter) {
-					await this.submissionStore?.deleteStreamChunkSegments(this.activeStreamChunkWriter.streamKey);
-				}
 			} else {
 				await this.activeJournalCallbacks?.committed?.({
 					operationId: this.activeOperationId ?? generateOperationId(),
@@ -1569,12 +1584,27 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					checkpointLeafId: leafId,
 					committedLeafId: leafId,
 				});
-				if (this.activeStreamChunkWriter) {
-					await this.submissionStore?.deleteStreamChunkSegments(this.activeStreamChunkWriter.streamKey);
-				}
 			}
+			await this.deleteSupersededStreamChunks();
 			this.activeTurnCanCommitJournal = false;
 		}
+	}
+
+	/**
+	 * Delete stream chunk segments that a durable turn checkpoint has just
+	 * superseded: the active turn's own segments plus any segments staged by
+	 * earlier aborted/error turns of this session (kept alive until now so an
+	 * intervening crash could still recover the interrupted stream).
+	 */
+	private async deleteSupersededStreamChunks(): Promise<void> {
+		if (!this.submissionStore) return;
+		if (this.activeStreamChunkWriter) {
+			await this.submissionStore.deleteStreamChunkSegments(this.activeStreamChunkWriter.streamKey);
+		}
+		for (const streamKey of this.staleStreamChunkKeys) {
+			await this.submissionStore.deleteStreamChunkSegments(streamKey);
+		}
+		this.staleStreamChunkKeys.clear();
 	}
 
 	private async save(): Promise<void> {
@@ -1980,14 +2010,14 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				// (see submission-state.ts).
 				return 'completed';
 			case 'resume':
-				// Divergence preserved from before consolidation (see
-				// submission-state.ts): only tool-result repair and a recovered
-				// stream are reported continuable; overflow, transient-retry, and
-				// input-only states stay 'uncertain', and reconciliation compensates
-				// with its uncertain-before-provider retry special case.
-				return state.mode === 'tool_results' || state.mode === 'stream_continuation'
-					? 'continuable'
-					: 'uncertain';
+				// Overflow and input-only resumes stay 'uncertain' (see
+				// submission-state.ts): reconciliation compensates with its
+				// provider-unreached retry special case. Every other resume mode
+				// has partial progress that restart processing can safely
+				// continue, so reconciliation reports it 'continuable'.
+				return state.mode === 'overflow' || state.mode === 'input_only'
+					? 'uncertain'
+					: 'continuable';
 			default:
 				return 'uncertain';
 		}

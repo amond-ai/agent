@@ -154,13 +154,16 @@ describe('classifySubmissionState()', () => {
 		});
 	});
 
-	it('returns terminal_error when an aborted response has no stream continuation', () => {
-		// The bare-aborted state. F2/step 5 changes this to a resumable state;
-		// until then both consumers treat it as terminal.
+	it('returns resume aborted_partial when an aborted response has no stream continuation', () => {
+		// The bare-aborted state, e.g. a partial checkpointed when graceful
+		// shutdown aborted the turn. The partial is excluded from model
+		// context, so resumption replays the turn from the last durable
+		// message instead of terminally failing recoverable work.
 		const following: SessionEntry[] = [messageEntry('a1', assistant({ stopReason: 'aborted' }))];
-		expect(classifySubmissionState(following, { contextWindow: 100000 })).toEqual({
-			kind: 'terminal_error',
-			reason: 'aborted',
+		expect(classifySubmissionState(following, { contextWindow: 100000 })).toMatchObject({
+			kind: 'resume',
+			mode: 'aborted_partial',
+			consecutiveRetryableErrors: 0,
 		});
 	});
 
