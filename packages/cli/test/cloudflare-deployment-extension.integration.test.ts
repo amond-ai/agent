@@ -42,7 +42,7 @@ export default {
 			expect(await afterScheduled.json()).toEqual({ count: 3 });
 		} finally {
 			await server?.close();
-			fs.rmSync(root, { recursive: true, force: true });
+			removeFixture(root);
 		}
 	}, 90000);
 
@@ -61,7 +61,7 @@ export default {
 				`throw new Error('[flue] cloudflare.ts default export must be an object containing non-HTTP Worker handlers.');`,
 			);
 		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
+			removeFixture(root);
 		}
 	}, 90000);
 
@@ -84,7 +84,7 @@ export default {
 			const entry = fs.readFileSync(path.join(viteInputDir(root), '_entry.ts'), 'utf8');
 			expect(entry).not.toContain(`from '@cloudflare/sandbox'`);
 		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
+			removeFixture(root);
 		}
 	}, 90000);
 
@@ -144,17 +144,21 @@ export default {
 			).rejects.toThrow('durable object binding "FLUE_ASSISTANT_AGENT" is reserved by Flue');
 			expect(fs.readFileSync(entryPath, 'utf8')).toBe(entry);
 		} finally {
-			fs.rmSync(root, { recursive: true, force: true });
+			removeFixture(root);
 		}
 	}, 90000);
 });
+
+function removeFixture(root: string): void {
+	fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
 
 async function expectRuntimeFailure(cloudflareSource: string, expected: string): Promise<void> {
 	const root = await createGeneratedFixture(cloudflareSource);
 	try {
 		await expect(startServer(root)).rejects.toThrow(expected);
 	} finally {
-		fs.rmSync(root, { recursive: true, force: true });
+		removeFixture(root);
 	}
 }
 
@@ -215,7 +219,7 @@ async function createGeneratedFixture(
 		});
 		return root;
 	} catch (error) {
-		fs.rmSync(root, { recursive: true, force: true });
+		removeFixture(root);
 		throw error;
 	}
 }
@@ -230,7 +234,12 @@ async function startServer(root: string): Promise<{ url: string; close(): Promis
 		logLevel: 'silent',
 		server: { host: '127.0.0.1', port: 0 },
 	});
-	await server.listen();
+	try {
+		await server.listen();
+	} catch (error) {
+		await server.close();
+		throw error;
+	}
 	const url = server.resolvedUrls?.local[0];
 	if (!url) throw new Error('Vite server URL unavailable');
 	return { url, close: () => server.close() };
