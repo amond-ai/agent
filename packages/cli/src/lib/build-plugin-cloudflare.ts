@@ -168,7 +168,6 @@ import {
 } from '@flue/runtime/internal';
 import {
   runWithCloudflareContext,
-  cfSandboxToSessionEnv,
   getCloudflareAIBindingApiProvider,
   FlueRegistry,
   createCloudflareRunIndex,
@@ -249,45 +248,6 @@ async function createDefaultEnv() {
   }));
 }
 
-/**
- * Detect and wrap external sandbox instances (e.g. from @cloudflare/sandbox's
- * getSandbox()). Returns SessionEnv if the value looks like a Durable Object
- * RPC stub, null otherwise.
- *
- * NOTE on detection: The value returned by \`getSandbox()\` is a workerd RPC
- * Proxy. None of the obvious detection strategies work:
- *
- *   - Structural duck-typing (\`'X' in stub\`, \`typeof stub.X === 'function'\`):
- *     the proxy lies positively for any property name, so any check returns
- *     \`true\` regardless of what's actually on the remote.
- *   - \`instanceof <UserSandboxClass>\` (e.g. \`Sandbox\` from
- *     \`@cloudflare/sandbox\`): the user's class only exists on the in-DO
- *     side; over RPC the caller gets a generic stub.
- *   - \`instanceof DurableObject\` (imported from \`cloudflare:workers\`): the
- *     stub's prototype chain has a class *named* \`DurableObject\`, but it's a
- *     workerd-internal class with a different identity than the importable
- *     one. \`instanceof\` checks identity, not name, so it returns \`false\`.
- *
- * The one signal that does work — verified by runtime probe — is the string
- * name of the prototype's constructor. Workerd's internal RPC stub class is
- * named \`DurableObject\`, and \`Object.getPrototypeOf(stub).constructor.name\`
- * returns that string. This is a heuristic (it relies on a workerd-internal
- * naming convention, not a contractual API), but it's empirically correct
- * today and will misroute only if a user passes some other DO stub to
- * \`createAgent(() => ({ sandbox }))\` — in which case \`cfSandboxToSessionEnv\` will fail
- * loudly on first method call.
- */
-function resolveSandbox(sandbox) {
-  if (
-    sandbox &&
-    typeof sandbox === 'object' &&
-    Object.getPrototypeOf(sandbox)?.constructor?.name === 'DurableObject'
-  ) {
-    return cfSandboxToSessionEnv(sandbox);
-  }
-  return null;
-}
-
 const memoryWorkflowSessionStore = new InMemorySessionStore();
 const memoryRunStore = new InMemoryRunStore();
 const INTERNAL_DISPATCH_PATH = CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH;
@@ -320,7 +280,6 @@ function createContextForRequest(id, runId, payload, doInstance, req, defaultSto
     },
     createDefaultEnv,
     defaultStore,
-    resolveSandbox,
   });
 }
 
@@ -337,7 +296,6 @@ function createAgentContextForRequest(executionStore, id, payload, doInstance, r
     },
     createDefaultEnv,
     defaultStore: executionStore.sessions,
-    resolveSandbox,
     submissionStore: executionStore.submissions,
   });
 }
