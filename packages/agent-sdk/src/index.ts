@@ -31,6 +31,7 @@ export type {
 	FlueStreamOptions,
 } from './public/stream.ts';
 export type {
+	AgentPromptResponse,
 	AttachedAgentEvent,
 	FlueEvent,
 	FluePublicError,

@@ -31,6 +31,19 @@ interface PromptUsage {
 
 type OperationKind = 'prompt' | 'skill' | 'task' | 'shell' | 'compact';
 
+/**
+ * Terminal result of one direct-agent prompt. Mirrors the runtime
+ * `PromptResponse` shape served by `POST /agents/:name/:id?wait=result`.
+ */
+export interface AgentPromptResponse {
+	/** Assistant text returned by the prompt. */
+	text: string;
+	/** Aggregated token and cost usage for model work performed by the prompt. */
+	usage: PromptUsage;
+	/** Model selected for the prompt's primary turn. */
+	model: { provider: string; id: string };
+}
+
 /** Normalized text content emitted with model-turn events. */
 export type LlmTextContent = {
 	type: 'text';

@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http.ts';
+import type { AgentPromptResponse } from '../types.ts';
 
 export interface AgentPromptImage {
 	type: 'image';
@@ -27,7 +28,7 @@ export interface AgentSendResult {
 /** Result of one agent prompt that waited for the terminal result. */
 export interface AgentPromptResult extends AgentSendResult {
 	/** Terminal result of the prompt. */
-	result: unknown;
+	result: AgentPromptResponse;
 }
 
 export async function promptAgent(
