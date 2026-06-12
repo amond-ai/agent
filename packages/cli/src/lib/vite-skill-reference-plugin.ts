@@ -54,6 +54,11 @@ export function skillReferencePlugin(options: SkillReferencePluginOptions): Plug
 			if (declarations.length === 0) return null;
 			let transformed = parseableCode;
 			for (const declaration of declarations.sort((a, b) => b.start - a.start)) {
+				if (!declaration.specifier.startsWith('.')) {
+					throw new Error(
+						`[flue] Skill import "${declaration.specifier}" must use a relative path to a SKILL.md inside the project root (for example "./skills/review/SKILL.md"). Bare and absolute specifiers are unsupported because imported skills are packaged into the deployed application.`,
+					);
+				}
 				const authoredPath = path.resolve(path.dirname(importerPath), declaration.specifier);
 				assertPackagedSkillPath(authoredPath, projectRoot);
 				const resolvedPath = canonicalPath(authoredPath);
