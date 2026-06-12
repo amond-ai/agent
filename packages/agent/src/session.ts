@@ -78,6 +78,7 @@ import type {
 	AgentSubmissionInput,
 	AgentSubmissionInspection,
 	AgentSubmissionInterruption,
+	AgentSubmissionSession,
 	DirectAgentSubmissionInput,
 	ProcessAgentSubmissionOptions,
 } from './runtime/agent-submissions.ts';
@@ -378,7 +379,7 @@ function sleepUntilRetry(delayMs: number, signal: AbortSignal): Promise<void> {
 	});
 }
 
-export class Session implements FlueSession {
+export class Session implements FlueSession, AgentSubmissionSession {
 	readonly name: string;
 	readonly fs: FlueFs;
 	metadata: Record<string, any>;

@@ -80,7 +80,12 @@ interface AgentSubmissionToolRequest {
 	readonly toolCalls: ReadonlyArray<{ type: 'toolCall'; id: string; name: string }>;
 }
 
-interface AgentSubmissionSession {
+/**
+ * Internal durable-submission executor surface that the submission
+ * coordinators drive. `Session` declares conformance so signature drift is
+ * caught at compile time.
+ */
+export interface AgentSubmissionSession {
 	inspectSubmissionInput(input: AgentSubmissionInput): AgentSubmissionInspection;
 	processSubmissionInput(
 		input: AgentSubmissionInput,
