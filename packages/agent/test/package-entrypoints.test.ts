@@ -89,4 +89,14 @@ describe('package entrypoints', () => {
 			runWithCloudflareContext: expect.any(Function),
 		});
 	});
+
+	it('exposes the adapter contract suites when an adapter author imports @flue/runtime/test-utils', async () => {
+		const testUtils = await import('@flue/runtime/test-utils');
+
+		expect(testUtils).toMatchObject({
+			defineEventStreamStoreContractTests: expect.any(Function),
+			defineRunStoreContractTests: expect.any(Function),
+			defineStoreContractTests: expect.any(Function),
+		});
+	});
 });
