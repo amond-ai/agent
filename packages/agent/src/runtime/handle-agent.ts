@@ -352,6 +352,13 @@ async function runWorkflowAdmissionMode(execution: AdmittedWorkflowExecution): P
 		await execution.completion?.catch(() => undefined);
 		throw error;
 	}
+	// The run continues in the background after the 202 response; a handler
+	// failure is already recorded as an errored run_end, so log it here instead
+	// of letting the floated completion reject unhandled (which would crash the
+	// Node process).
+	execution.completion?.catch((error) => {
+		console.error('[flue] Workflow run failed:', execution.runId, error);
+	});
 	return new Response(JSON.stringify({ status: 'accepted', runId: execution.runId }), {
 		status: 202,
 		headers: { 'content-type': 'application/json', 'X-Flue-Run-Id': execution.runId },

@@ -316,6 +316,48 @@ describe('workflow run lifecycle', () => {
 		}
 	});
 
+	it('records an errored terminal run without an unhandled rejection when a workflow handler throws in default admission mode', async () => {
+		const runStore = new InMemoryRunStore();
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		try {
+			const app = createApp({
+				target: 'node',
+				manifest: {
+					agents: [],
+					workflows: [{ name: 'daily-report', transports: { http: true } }],
+				},
+				workflowHandlers: {
+					'daily-report': async () => {
+						throw new Error('report generation failed');
+					},
+				},
+				createContext,
+				runStore,
+			});
+
+			const response = await app.fetch(
+				new Request('http://localhost/flue/workflows/daily-report', { method: 'POST' }),
+			);
+			const body = (await response.json()) as { status: string; runId: string };
+
+			expect(response.status).toBe(202);
+			expect(body).toEqual({ status: 'accepted', runId: expect.any(String) });
+			// Vitest fails the run on an unhandled rejection, so waiting for the
+			// terminal record also guards against the background completion
+			// rejecting without a handler.
+			await vi.waitFor(async () => {
+				expect((await runStore.getRun(body.runId))?.status).toBe('errored');
+			});
+			expect(consoleError).toHaveBeenCalledWith(
+				'[flue] Workflow run failed:',
+				body.runId,
+				expect.objectContaining({ message: 'report generation failed' }),
+			);
+		} finally {
+			consoleError.mockRestore();
+		}
+	});
+
 	it('derives recovery event indexes from the stream head, not the event count', async () => {
 		const db = new DatabaseSync(':memory:');
 		const eventStreamStore = createTestEventStreamStore(db);
