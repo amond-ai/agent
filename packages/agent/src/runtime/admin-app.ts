@@ -7,12 +7,7 @@ import {
 	resolver,
 	validator,
 } from 'hono-openapi';
-import {
-	RouteNotFoundError,
-	RunRegistryUnavailableError,
-	toHttpResponse,
-	ValidationError,
-} from '../errors.ts';
+import { RunRegistryUnavailableError, toHttpResponse, ValidationError } from '../errors.ts';
 import { type FlueRuntime, getFlueRuntime, handleRunById } from './flue-app.ts';
 import type { ListRunsOpts, RunRegistry } from './run-registry.ts';
 import type { RunStatus } from './run-store.ts';
@@ -165,23 +160,15 @@ const listRunsHandler: MiddlewareHandler = async (c) => {
 
 const runDetailHandler: MiddlewareHandler = async (c) => {
 	const rt = requireRuntime();
+	// Hono's `:runId` pattern never matches an empty segment.
 	const runId = c.req.param('runId') ?? '';
-	if (!runId) {
-		throw new RouteNotFoundError({ method: c.req.method, path: new URL(c.req.url).pathname });
-	}
 	return handleRunById({
 		rt,
-		request: rewriteToPublicRunRequest(c.req.raw, runId),
+		request: c.req.raw,
 		env: c.env,
 		runId,
 	});
 };
-
-function rewriteToPublicRunRequest(request: Request, runId: string): Request {
-	const url = new URL(request.url);
-	url.pathname = `/runs/${encodeURIComponent(runId)}`;
-	return new Request(url, request);
-}
 
 function requireRuntime(): FlueRuntime {
 	const rt = getFlueRuntime();

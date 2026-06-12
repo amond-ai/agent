@@ -564,11 +564,8 @@ const runStreamReadHandler: MiddlewareHandler = async (c) => {
 		throw new MethodNotAllowedError({ method, allowed: ['GET', 'HEAD'] });
 	}
 
-	const runId = c.req.param('runId') || undefined;
-	if (!runId) {
-		throw new RouteNotFoundError({ method, path: new URL(c.req.url).pathname });
-	}
-
+	// Hono's `:runId` pattern never matches an empty segment.
+	const runId = c.req.param('runId') ?? '';
 	const streamPath = runStreamPath(runId);
 	const pointer = await lookupRunPointer(rt, c.env, runId);
 

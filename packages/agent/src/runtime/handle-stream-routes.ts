@@ -185,9 +185,8 @@ function handleCatchUpMode(
 	offsetParam: string,
 	result: EventStreamReadResult,
 ): Response {
-	const startOffset = offsetParam === 'now' ? 'now' : offsetParam;
 	const isClosed = result.closed && result.upToDate;
-	const etag = startOffset === 'now' ? undefined : generateETag(path, startOffset, result.nextOffset, isClosed);
+	const etag = offsetParam === 'now' ? undefined : generateETag(path, offsetParam, result.nextOffset, isClosed);
 
 	const conditional = etag ? checkConditional(request, etag) : null;
 	if (conditional) return conditional;
@@ -263,8 +262,7 @@ function longPollDataResponse(
 	};
 	if (result.upToDate) headers[STREAM_UP_TO_DATE] = 'true';
 	if (isClosed) headers[STREAM_CLOSED] = 'true';
-	const startOffset = offsetParam === 'now' ? 'now' : offsetParam;
-	if (startOffset !== 'now') headers.etag = generateETag(path, startOffset, result.nextOffset, isClosed);
+	if (offsetParam !== 'now') headers.etag = generateETag(path, offsetParam, result.nextOffset, isClosed);
 	return new Response(JSON.stringify(result.events.map((e) => e.data)), { status: 200, headers });
 }
 
