@@ -83,6 +83,7 @@ export function createFlueEventStream<T = FlueEvent>(
 
 	const fetch = connectionOpts.fetch ?? globalThis.fetch;
 
+	let connectOffset = streamOpts.offset ?? '-1';
 	let responsePromise: Promise<Awaited<ReturnType<typeof stream<T>>>> | undefined;
 	const connect = (): Promise<Awaited<ReturnType<typeof stream<T>>>> => {
 		if (responsePromise) return responsePromise;
@@ -91,7 +92,7 @@ export function createFlueEventStream<T = FlueEvent>(
 		}
 		responsePromise = stream<T>({
 			url: connectionOpts.url,
-			offset: streamOpts.offset ?? '-1',
+			offset: connectOffset,
 			live: streamOpts.live ?? true,
 			json: true,
 			signal: abortController.signal,
@@ -141,8 +142,19 @@ export function createFlueEventStream<T = FlueEvent>(
 
 			try {
 				const { value, done } = await reader.read();
-				if (responsePromise) currentOffset = (await responsePromise).offset;
+				const res = responsePromise ? await responsePromise : undefined;
+				if (res) currentOffset = res.offset;
 				if (done) {
+					// The DS client makes exactly one request per `live: false`
+					// stream, even when the server caps the catch-up batch and
+					// reports more data remains (no Stream-Up-To-Date header).
+					// Reconnect from the latest offset until up-to-date.
+					if (streamOpts.live === false && res && !res.upToDate && res.offset !== connectOffset) {
+						connectOffset = res.offset;
+						reader = undefined;
+						responsePromise = undefined;
+						return iterator.next();
+					}
 					readerDone = true;
 					removeExternalAbortListener?.();
 					return { value: undefined as T, done: true };

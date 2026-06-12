@@ -118,17 +118,28 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 					fetch: http.fetchWithHeaders.bind(http),
 				}),
 			events: async (runId, opts) => {
-				const res = await dsStream<FlueEvent>({
-					url: http.url(`/runs/${encodeURIComponent(runId)}`),
-					offset: opts?.offset ?? '-1',
-					live: false,
-					json: true,
-					signal: opts?.signal,
-					backoffOptions: opts?.backoffOptions,
-					fetch: http.fetchWithHeaders.bind(http),
-					warnOnHttp: false,
-				});
-				return readJsonWithAbort<FlueEvent[]>(res, opts?.signal);
+				const url = http.url(`/runs/${encodeURIComponent(runId)}`);
+				const events: FlueEvent[] = [];
+				let offset = opts?.offset ?? '-1';
+				// The DS client makes exactly one request per `live: false` stream,
+				// even when the server caps the catch-up batch and reports more data
+				// remains (no Stream-Up-To-Date header). Loop until up-to-date.
+				for (;;) {
+					const res = await dsStream<FlueEvent>({
+						url,
+						offset,
+						live: false,
+						json: true,
+						signal: opts?.signal,
+						backoffOptions: opts?.backoffOptions,
+						fetch: http.fetchWithHeaders.bind(http),
+						warnOnHttp: false,
+					});
+					events.push(...(await readJsonWithAbort<FlueEvent[]>(res, opts?.signal)));
+					if (res.upToDate || res.offset === offset) break;
+					offset = res.offset;
+				}
+				return events;
 			},
 
 		},

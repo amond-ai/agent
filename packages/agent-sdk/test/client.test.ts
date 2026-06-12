@@ -210,6 +210,36 @@ describe('createFlueClient', () => {
 			const parsed = new URL(urls[0]!);
 			expect(parsed.pathname).toBe('/runs/run-1');
 		});
+
+		it('yields the full history with live:false when the server splits catch-up into multiple batches', async () => {
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test',
+				fetch: async (input) => {
+					const url = new URL(typeof input === 'string' ? input : new Request(input).url);
+					if (url.searchParams.get('offset') === '-1') {
+						// Server caps the batch and omits Stream-Up-To-Date.
+						return dsJsonResponse(
+							[
+								{ type: 'run_start', runId: 'run-1' },
+								{ type: 'turn_start', runId: 'run-1' },
+							],
+							{ upToDate: false, nextOffset: '0000000000000000_0000000000000002' },
+						);
+					}
+					return dsJsonResponse([{ type: 'run_end', runId: 'run-1', isError: false, durationMs: 50 }], {
+						closed: true,
+						nextOffset: '0000000000000000_0000000000000003',
+					});
+				},
+			});
+
+			const events = [];
+			for await (const event of client.runs.stream('run-1', { live: false })) {
+				events.push(event);
+			}
+			expect(events).toHaveLength(3);
+			expect(events[2]).toMatchObject({ type: 'run_end' });
+		});
 	});
 
 	describe('runs.events()', () => {
@@ -230,6 +260,37 @@ describe('createFlueClient', () => {
 			expect(events).toHaveLength(2);
 			expect(events[0]).toMatchObject({ type: 'run_start' });
 			expect(events[1]).toMatchObject({ type: 'run_end' });
+		});
+
+		it('returns the full history when the server splits catch-up into multiple batches', async () => {
+			const offsets: Array<string | null> = [];
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test',
+				fetch: async (input) => {
+					const url = new URL(typeof input === 'string' ? input : new Request(input).url);
+					const offset = url.searchParams.get('offset');
+					offsets.push(offset);
+					if (offset === '-1') {
+						// Server caps the batch and omits Stream-Up-To-Date.
+						return dsJsonResponse(
+							[
+								{ type: 'run_start', runId: 'r1' },
+								{ type: 'turn_start', runId: 'r1' },
+							],
+							{ upToDate: false, nextOffset: '0000000000000000_0000000000000002' },
+						);
+					}
+					return dsJsonResponse([{ type: 'run_end', runId: 'r1', isError: false, durationMs: 50 }], {
+						closed: true,
+						nextOffset: '0000000000000000_0000000000000003',
+					});
+				},
+			});
+
+			const events = await client.runs.events('r1');
+			expect(events).toHaveLength(3);
+			expect(events[2]).toMatchObject({ type: 'run_end' });
+			expect(offsets).toEqual(['-1', '0000000000000000_0000000000000002']);
 		});
 	});
 
