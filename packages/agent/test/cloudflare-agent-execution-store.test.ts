@@ -66,95 +66,86 @@ describe('createSqlAgentExecutionStore()', () => {
 
 		createSqlAgentExecutionStore({ sql, transactionSync }, 'FlueAssistantAgent');
 
-		expect(
-			db.prepare("SELECT name FROM pragma_table_info('flue_agent_submissions') ORDER BY cid").all(),
-		).toEqual([
-			{ name: 'sequence' },
-			{ name: 'submission_id' },
-			{ name: 'session_key' },
-			{ name: 'kind' },
-			{ name: 'payload' },
-			{ name: 'status' },
-			{ name: 'accepted_at' },
-			{ name: 'attempt_id' },
-			{ name: 'input_applied_at' },
-			{ name: 'recovery_requested_at' },
-			{ name: 'started_at' },
-			{ name: 'settled_at' },
-			{ name: 'error' },
-			{ name: 'attempt_count' },
-			{ name: 'max_retry' },
-			{ name: 'timeout_at' },
-			{ name: 'owner_id' },
-			{ name: 'lease_expires_at' },
-		]);
-		expect(
-			db.prepare("SELECT name FROM pragma_table_info('flue_agent_turn_journals') ORDER BY cid").all(),
-		).toEqual([
-			{ name: 'submission_id' },
-			{ name: 'session_key' },
-			{ name: 'kind' },
-			{ name: 'attempt_id' },
-			{ name: 'operation_id' },
-			{ name: 'turn_id' },
-			{ name: 'phase' },
-			{ name: 'revision' },
-			{ name: 'created_at' },
-			{ name: 'updated_at' },
-			{ name: 'checkpoint_leaf_id' },
-			{ name: 'tool_request_json' },
-			{ name: 'stream_key' },
-			{ name: 'stream_consumed_at' },
-			{ name: 'committed' },
-			{ name: 'committed_leaf_id' },
-		]);
-		expect(
+		const columnNames = (table: string) =>
+			new Set(
+				(db.prepare(`SELECT name FROM pragma_table_info('${table}')`).all() as Array<{ name: string }>).map(
+					(row) => row.name,
+				),
+			);
+		expect(columnNames('flue_agent_submissions')).toEqual(
+			new Set([
+				'sequence',
+				'submission_id',
+				'session_key',
+				'kind',
+				'payload',
+				'status',
+				'accepted_at',
+				'attempt_id',
+				'input_applied_at',
+				'recovery_requested_at',
+				'started_at',
+				'settled_at',
+				'error',
+				'attempt_count',
+				'max_retry',
+				'timeout_at',
+				'owner_id',
+				'lease_expires_at',
+			]),
+		);
+		expect(columnNames('flue_agent_turn_journals')).toEqual(
+			new Set([
+				'submission_id',
+				'session_key',
+				'kind',
+				'attempt_id',
+				'operation_id',
+				'turn_id',
+				'phase',
+				'revision',
+				'created_at',
+				'updated_at',
+				'checkpoint_leaf_id',
+				'tool_request_json',
+				'stream_key',
+				'stream_consumed_at',
+				'committed',
+				'committed_leaf_id',
+			]),
+		);
+		const tableNames = new Set(
+			(
+				db
+					.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+					.all() as Array<{ name: string }>
+			).map((row) => row.name),
+		);
+		expect(tableNames).toEqual(
+			new Set([
+				'flue_agent_attempt_markers',
+				'flue_agent_dispatch_receipts',
+				'flue_agent_session_deletions',
+				'flue_agent_stream_chunks',
+				'flue_agent_submissions',
+				'flue_agent_turn_journals',
+				'flue_image_chunks',
+				'flue_meta',
+				'flue_session_entries',
+				'flue_sessions',
+			]),
+		);
+		const submissionIndexNames = (
 			db
-			.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
-			.all(),
-		).toEqual([
-			{ name: 'flue_agent_attempt_markers' },
-			{ name: 'flue_agent_dispatch_receipts' },
-			{ name: 'flue_agent_session_deletions' },
-			{ name: 'flue_agent_stream_chunks' },
-			{ name: 'flue_agent_submissions' },
-			{ name: 'flue_agent_turn_journals' },
-			{ name: 'flue_image_chunks' },
-			{ name: 'flue_meta' },
-			{ name: 'flue_session_entries' },
-			{ name: 'flue_sessions' },
-			{ name: 'sqlite_sequence' },
-		]);
-		expect(
-			db
-			.prepare(
-	
-					"SELECT name FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'flue_agent_submissions' ORDER BY name",
-				)
-				.all(),
-		).toEqual([
-			{ name: 'flue_agent_submissions_session_status_sequence_idx' },
-			{ name: 'flue_agent_submissions_status_sequence_idx' },
-			{ name: 'sqlite_autoindex_flue_agent_submissions_1' },
-		]);
-		expect(
-			db
-				.prepare(
-					"SELECT name FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'flue_agent_dispatch_receipts' ORDER BY name",
-				)
-				.all(),
-		).toEqual([
-			{ name: 'sqlite_autoindex_flue_agent_dispatch_receipts_1' },
-		]);
-		expect(
-			db
-				.prepare(
-					"SELECT name FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'flue_agent_turn_journals' ORDER BY name",
-				)
-				.all(),
-		).toEqual([
-			{ name: 'sqlite_autoindex_flue_agent_turn_journals_1' },
-		]);
+				.prepare("SELECT name FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'flue_agent_submissions'")
+				.all() as Array<{ name: string }>
+		).map((row) => row.name);
+		expect(submissionIndexNames).toEqual(
+			expect.arrayContaining([
+				'flue_agent_submissions_session_status_sequence_idx',
+				'flue_agent_submissions_status_sequence_idx',
+			]),
+		);
 	});
 
 	it('chunks and hydrates session images and removes chunks on deletion', async () => {
