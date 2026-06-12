@@ -424,7 +424,7 @@ export interface AgentRuntimeConfig {
 	/** Working directory inside the initialized sandbox. */
 	cwd?: string;
 	/** Sandbox factory used to construct the initialized environment. */
-	sandbox?: false | SandboxFactory | BashFactory;
+	sandbox?: SandboxFactory | BashFactory;
 }
 
 /** Options for {@link FlueContext.init}. */
@@ -874,8 +874,8 @@ export interface SandboxFactory {
 }
 
 /**
- * Structural type for duck-type detection of just-bash `Bash` instances in init().
- * Purely structural — no just-bash import, so client.ts stays platform-agnostic.
+ * Structural type for the just-bash `Bash` runtime a {@link BashFactory} returns.
+ * Purely structural — no just-bash import, so the runtime stays platform-agnostic.
  */
 export interface BashLike {
 	exec(

@@ -143,11 +143,8 @@ function createBashSessionEnv(bash: BashLike): SessionEnv {
 	};
 }
 
-/**
- * Duck-type detection for just-bash Bash instances. Shared with client.ts
- * so the predicate doesn't drift between the throwing and boolean variants.
- */
-export function isBashLike(value: unknown): value is BashLike {
+/** Duck-type detection for just-bash Bash instances. */
+function isBashLike(value: unknown): value is BashLike {
 	return (
 		typeof value === 'object' &&
 		value !== null &&

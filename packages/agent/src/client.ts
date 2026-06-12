@@ -7,7 +7,7 @@ import {
 import { discoverSessionContext } from './context.ts';
 import { Harness } from './harness.ts';
 import { dispatchGlobalEvent } from './runtime/events.ts';
-import { bashFactoryToSessionEnv, createCwdSessionEnv, isBashLike } from './sandbox.ts';
+import { bashFactoryToSessionEnv, createCwdSessionEnv } from './sandbox.ts';
 import type {
 	AgentConfig,
 	AgentHarnessOptions,
@@ -301,35 +301,11 @@ async function resolveSessionEnv(
 	sandbox: AgentRuntimeConfig['sandbox'],
 	config: FlueContextConfig,
 ): Promise<{ env: SessionEnv; toolFactory?: SessionToolFactory }> {
-	if (sandbox === undefined || sandbox === false) {
+	if (sandbox === undefined) {
 		return { env: await config.createDefaultEnv() };
-	}
-	// JS-caller / `any`-input fallback for the removed `'empty'` and
-	// `'local'` magic strings. TS callers get compile errors from the
-	// `AgentRuntimeConfig['sandbox']` union. The `as unknown` cast keeps `tsc`
-	// from flagging these branches as dead under the narrowed type.
-	if ((sandbox as unknown) === 'empty') {
-		throw new Error(
-			"[flue] `sandbox: 'empty'` is no longer supported. " +
-				'Omit the `sandbox` option (or pass `false`) for the default in-memory sandbox.',
-		);
-	}
-	if ((sandbox as unknown) === 'local') {
-		throw new Error(
-			"[flue] `sandbox: 'local'` is no longer supported. " +
-				'Use the `local()` factory instead: ' +
-				"`import { local } from '@flue/runtime/node'; createAgent(() => ({ sandbox: local(), model: false }))`. " +
-				'The factory accepts an `env` option for opting host env vars into the sandbox.',
-		);
 	}
 	if (isBashFactory(sandbox)) {
 		return { env: await bashFactoryToSessionEnv(sandbox) };
-	}
-	if (isBashLike(sandbox)) {
-		throw new Error(
-			'[flue] createAgent() sandbox no longer accepts a Bash-like object directly. ' +
-				'Pass a BashFactory instead, e.g. `sandbox: () => new Bash({ fs })`.',
-		);
 	}
 	if (config.resolveSandbox) {
 		const resolved = await config.resolveSandbox(sandbox);
