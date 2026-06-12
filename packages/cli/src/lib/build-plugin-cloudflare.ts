@@ -150,7 +150,7 @@ import {
   createFlueContext,
   InMemorySessionStore,
   InMemoryRunStore,
-  createDurableRunStore,
+  createSqlRunStore,
   CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH,
   CLOUDFLARE_WORKFLOW_INTERNAL_METADATA_PATH,
   createCloudflareAgentRuntime,
@@ -352,7 +352,7 @@ function createWorkflowContextForRequest(id, runId, payload, doInstance, req, in
 
 function createRunStoreForRequest(doInstance) {
   return doInstance?.ctx?.storage?.sql
-    ? createDurableRunStore(doInstance.ctx.storage.sql)
+    ? createSqlRunStore(doInstance.ctx.storage.sql)
     : memoryRunStore;
 }
 
