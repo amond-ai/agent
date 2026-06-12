@@ -394,8 +394,11 @@ const grepBackends = new WeakMap<SessionEnv, Promise<'rg' | 'grep'>>();
 function resolveGrepBackend(env: SessionEnv): Promise<'rg' | 'grep'> {
 	let backend = grepBackends.get(env);
 	if (!backend) {
+		// No caller signal here: the probe result is cached per-env, so an
+		// operation abort mid-probe would poison the cache with 'grep'. A
+		// short deadline keeps a hung exec from wedging the first search.
 		backend = env
-			.exec('rg --version')
+			.exec('rg --version', { timeout: 10 })
 			.then((result) => (result.exitCode === 0 ? 'rg' : 'grep'))
 			.catch(() => 'grep');
 		grepBackends.set(env, backend);
@@ -426,7 +429,7 @@ function createGrepTool(env: SessionEnv): AgentTool<typeof GrepParams> {
 				cmd = `grep -rnH ${patternFlag}${includeFlag} -- ${shellQuote(params.pattern)} ${shellQuote(searchPath)}`;
 			}
 
-			const result = await env.exec(cmd);
+			const result = await env.exec(cmd, { signal });
 
 			if (result.exitCode === 1 && !result.stdout.trim()) {
 				return {
@@ -476,7 +479,7 @@ function createGlobTool(env: SessionEnv): AgentTool<typeof GlobParams> {
 
 			const searchPath = params.path || '.';
 			const cmd = `find ${shellQuote(searchPath)} -type f -name ${shellQuote(params.pattern)} 2>/dev/null | head -${MAX_GLOB_RESULTS}`;
-			const result = await env.exec(cmd);
+			const result = await env.exec(cmd, { signal });
 
 			if (result.exitCode !== 0 && !result.stdout.trim()) {
 				return {

@@ -15,7 +15,7 @@ describe('createTools()', () => {
 		await grep?.execute('second', { pattern: 'match', include: '*.ts' });
 
 		expect(exec).toHaveBeenCalledTimes(3);
-		expect(exec).toHaveBeenNthCalledWith(1, 'rg --version');
+		expect(exec).toHaveBeenNthCalledWith(1, 'rg --version', { timeout: 10 });
 		expect(exec.mock.calls[1]?.[0]).toContain('rg --line-number --with-filename --color never');
 		expect(exec.mock.calls[1]?.[0]).toContain("--glob '*.ts' -- 'match' '.'");
 		expect(exec.mock.calls[2]?.[0]).toContain('rg --line-number --with-filename --color never');
@@ -32,6 +32,29 @@ describe('createTools()', () => {
 
 		expect(exec).toHaveBeenCalledTimes(2);
 		expect(exec.mock.calls[1]?.[0]).toContain("grep -rnH -E --include='*.ts' -- 'match' 'src'");
+	});
+
+	it('forwards the operation signal to env.exec when grep searches', async () => {
+		const exec = vi
+			.fn()
+			.mockResolvedValueOnce({ stdout: 'ripgrep 14.1.0', stderr: '', exitCode: 0 })
+			.mockResolvedValueOnce({ stdout: 'src/a.ts:1:match', stderr: '', exitCode: 0 });
+		const grep = createTools(createNoopSessionEnv({ exec })).find((tool) => tool.name === 'grep');
+		const controller = new AbortController();
+
+		await grep?.execute('call', { pattern: 'match' }, controller.signal);
+
+		expect(exec.mock.calls[1]?.[1]).toEqual({ signal: controller.signal });
+	});
+
+	it('forwards the operation signal to env.exec when glob searches', async () => {
+		const exec = vi.fn().mockResolvedValueOnce({ stdout: 'src/a.ts', stderr: '', exitCode: 0 });
+		const glob = createTools(createNoopSessionEnv({ exec })).find((tool) => tool.name === 'glob');
+		const controller = new AbortController();
+
+		await glob?.execute('call', { pattern: '*.ts' }, controller.signal);
+
+		expect(exec.mock.calls[0]?.[1]).toEqual({ signal: controller.signal });
 	});
 
 	it('uses the backend fixed-string flag when literal mode is enabled', async () => {
