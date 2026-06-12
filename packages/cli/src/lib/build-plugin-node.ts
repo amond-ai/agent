@@ -341,7 +341,6 @@ function startLocalAgent(name, id) {
     }
     let didStart = false;
     void invokeDirectAttached({
-      id,
       payload: { message: message.message },
       admitAttachedSubmission: createAdmission[name](id),
       onEvent: (event) => {
