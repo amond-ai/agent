@@ -6,6 +6,7 @@ import type {
 } from '../agent-execution-store.ts';
 import { SUBMISSION_SESSION_NAME } from '../adapter-helpers.ts';
 import type { FlueContextInternal } from '../client.ts';
+import { getInternalSession } from '../session.ts';
 import type {
 	AttachedAgentEvent,
 	CallHandle,
@@ -645,10 +646,11 @@ async function openAgentSubmissionSession(
 	input: AgentSubmissionInput,
 ): Promise<AgentSubmissionSession> {
 	const harness = await ctx.initializeCreatedAgent(agent, undefined);
-	// External submissions always target the default session of the default harness.
+	// External submissions always target the default session of the default
+	// harness. `harness.session()` hands out the public FlueSession facade;
+	// unwrap it to reach the internal durable submission executor surface.
+	// Non-facade objects (test fakes injected through this seam) are used
+	// directly via the same structural contract.
 	const session = await harness.session(SUBMISSION_SESSION_NAME);
-	if (!session || typeof session !== 'object') {
-		throw new Error('[flue] Internal session is unavailable for submission processing.');
-	}
-	return session as unknown as AgentSubmissionSession;
+	return getInternalSession(session) ?? (session as unknown as AgentSubmissionSession);
 }

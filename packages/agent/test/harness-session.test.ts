@@ -119,6 +119,31 @@ describe('FlueHarness', () => {
 			});
 		});
 
+		it('hides internal runtime members when a session is handed to user code', async () => {
+			const store = new TrackingSessionStore();
+			const harness = await createContext(createEnv(), store).init(
+				createAgent(() => ({ model: false })),
+			);
+
+			const session = await harness.session();
+
+			expect(Object.keys(session).sort()).toEqual([
+				'compact',
+				'delete',
+				'fs',
+				'name',
+				'prompt',
+				'shell',
+				'skill',
+				'task',
+			]);
+			const runtimeObject = session as unknown as Record<string, unknown>;
+			expect(runtimeObject.abort).toBeUndefined();
+			expect(runtimeObject.close).toBeUndefined();
+			expect(runtimeObject.metadata).toBeUndefined();
+			expect(runtimeObject.processSubmissionInput).toBeUndefined();
+		});
+
 		it('rejects persisted session data written by an earlier beta', async () => {
 			const store = new TrackingSessionStore();
 			await store.save('agent-session:["agent-instance","default","review"]', {

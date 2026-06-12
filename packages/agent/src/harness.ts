@@ -6,7 +6,12 @@ import { discoverSessionContext } from './context.ts';
 import { SessionAlreadyExistsError, SessionNotFoundError } from './errors.ts';
 import { generateSessionAffinityKey } from './runtime/ids.ts';
 import { createCwdSessionEnv, createFlueFs } from './sandbox.ts';
-import { type CreateTaskSessionOptions, deleteSessionTree, Session } from './session.ts';
+import {
+	createPublicSession,
+	type CreateTaskSessionOptions,
+	deleteSessionTree,
+	Session,
+} from './session.ts';
 import {
 	assertPublicSessionName,
 	createSessionStorageKey,
@@ -115,7 +120,13 @@ export class Harness implements FlueHarness {
 	private async openSession(name: string | undefined, mode: OpenMode): Promise<FlueSession> {
 		const sessionName = normalizeSessionName(name);
 		assertPublicSessionName(sessionName);
-		return this.runSessionOperation(sessionName, () => this.loadSession(sessionName, mode));
+		const session = await this.runSessionOperation(sessionName, () =>
+			this.loadSession(sessionName, mode),
+		);
+		// User code only ever receives the FlueSession facade; the internal
+		// Session (durable submission executor, abort/close, metadata) stays
+		// runtime-owned.
+		return createPublicSession(session);
 	}
 
 	private runSessionOperation<T>(sessionName: string, operation: () => Promise<T>): Promise<T> {

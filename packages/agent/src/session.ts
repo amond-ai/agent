@@ -1,4 +1,8 @@
-/** Internal session implementation. Not exported publicly — wrapped by FlueSession. */
+/**
+ * Internal session implementation. Not exported publicly — user code receives
+ * the facade from `createPublicSession()`, which exposes exactly the
+ * `FlueSession` contract.
+ */
 
 import type {
 	AgentMessage,
@@ -2373,6 +2377,46 @@ export class Session implements FlueSession {
 			this.getAssistantText(),
 		);
 	}
+}
+
+// ─── Public facade ──────────────────────────────────────────────────────────
+
+const publicSessionsBySession = new WeakMap<Session, FlueSession>();
+const internalSessionsByFacade = new WeakMap<FlueSession, Session>();
+
+/**
+ * Wrap an internal Session in a facade exposing exactly the {@link FlueSession}
+ * contract. Session instances carry internal runtime surface (the durable
+ * submission executor, `abort()`/`close()`, load-bearing `metadata`) that must
+ * not leak to user code at runtime. Repeated calls for the same Session return
+ * the same facade.
+ */
+export function createPublicSession(session: Session): FlueSession {
+	const existing = publicSessionsBySession.get(session);
+	if (existing) return existing;
+	const facade: FlueSession = {
+		name: session.name,
+		fs: session.fs,
+		prompt: session.prompt.bind(session) as FlueSession['prompt'],
+		shell: session.shell.bind(session),
+		skill: session.skill.bind(session) as FlueSession['skill'],
+		task: session.task.bind(session) as FlueSession['task'],
+		compact: session.compact.bind(session),
+		delete: session.delete.bind(session),
+	};
+	publicSessionsBySession.set(session, facade);
+	internalSessionsByFacade.set(facade, session);
+	return facade;
+}
+
+/**
+ * Recover the internal Session behind a facade produced by
+ * {@link createPublicSession}, or `undefined` when the object is not a
+ * registered facade (e.g. a test fake injected through a harness seam).
+ * Runtime-internal use only (durable submission processing).
+ */
+export function getInternalSession(session: FlueSession): Session | undefined {
+	return internalSessionsByFacade.get(session);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
