@@ -49,8 +49,13 @@ function dsJsonEmpty(response) {
 	response.end('[]');
 }
 
-/** Respond with admin run metadata. */
-function adminRunJson(response, status) {
+/** True when the request is the run-record probe (`GET /runs/:runId?meta`). */
+function isRunMetaRequest(request) {
+	return new URL(request.url, 'http://localhost').searchParams.has('meta');
+}
+
+/** Respond with run-record metadata (the `?meta` view). */
+function runMetaJson(response, status) {
 	response.writeHead(200, { 'content-type': 'application/json' });
 	response.end(
 		JSON.stringify({
@@ -67,8 +72,8 @@ test('forwards repeated headers to automatic metadata and replay requests', asyn
 	await withServer(
 		(request, response) => {
 			requests.push({ url: request.url, headers: request.headers });
-			if (request.url === '/admin/runs/run-1') {
-				adminRunJson(response, 'completed');
+			if (isRunMetaRequest(request)) {
+				runMetaJson(response, 'completed');
 				return;
 			}
 			dsJsonEmpty(response);
@@ -89,9 +94,11 @@ test('forwards repeated headers to automatic metadata and replay requests', asyn
 			assert.equal(result.code, 0, result.stderr);
 		},
 	);
-	// Auto-follow queries admin endpoint, then DS catch-up read on /runs/run-1.
+	// Auto-follow probes the public ?meta view, then does a DS catch-up read,
+	// both on /runs/run-1.
 	const urls = requests.map((request) => request.url.split('?')[0]);
-	assert.deepEqual(urls, ['/admin/runs/run-1', '/runs/run-1']);
+	assert.deepEqual(urls, ['/runs/run-1', '/runs/run-1']);
+	assert.ok(isRunMetaRequest(requests[0]), 'Expected the first request to be the ?meta probe');
 	for (const request of requests) {
 		assert.equal(request.headers.authorization, 'Bearer secret');
 		assert.equal(request.headers['x-tenant-id'], 'tenant-1');
@@ -105,8 +112,8 @@ test('forwards authentication headers to follow-mode streams', async () => {
 			requests.push({ url: request.url, headers: request.headers });
 			const url = new URL(request.url, 'http://localhost');
 			// Run probe (runs before streaming, even with explicit --follow).
-			if (url.pathname === '/admin/runs/run-1') {
-				adminRunJson(response, 'active');
+			if (isRunMetaRequest(request)) {
+				runMetaJson(response, 'active');
 				return;
 			}
 			// DS catch-up read (first stream request from the client).
@@ -153,7 +160,9 @@ test('forwards authentication headers to follow-mode streams', async () => {
 		assert.equal(request.headers.authorization, 'Bearer secret');
 	}
 	// Verify the DS offset query param includes the converted --since value.
-	const streamRequest = requests.find((request) => request.url.startsWith('/runs/run-1'));
+	const streamRequest = requests.find(
+		(request) => request.url.startsWith('/runs/run-1') && !isRunMetaRequest(request),
+	);
 	assert.ok(streamRequest, 'Expected a stream request');
 	const streamUrl = new URL(streamRequest.url, 'http://localhost');
 	assert.equal(streamUrl.searchParams.get('offset'), '0000000000000000_0000000000000025');
@@ -165,8 +174,8 @@ test('flushes buffered output and exits 130 when SIGINT arrives during follow mo
 		(request, response) => {
 			const url = new URL(request.url, 'http://localhost');
 			// Run probe (runs before streaming, even with explicit --follow).
-			if (url.pathname === '/admin/runs/run-1') {
-				adminRunJson(response, 'active');
+			if (isRunMetaRequest(request)) {
+				runMetaJson(response, 'active');
 				return;
 			}
 			if (url.searchParams.get('offset') === '-1') {
@@ -248,7 +257,7 @@ test('fails fast instead of retrying when the server is unreachable in follow mo
 test('exits with code 2 and filters output when --types excludes the failing run_end', async () => {
 	await withServer(
 		(request, response) => {
-			// One-shot replay: DS catch-up read on /runs/run-1 (no admin lookup
+			// One-shot replay: DS catch-up read on /runs/run-1 (no ?meta probe
 			// because --no-follow skips the metadata request).
 			assert.equal(request.url.split('?')[0], '/runs/run-1');
 			response.writeHead(200, {
@@ -296,12 +305,12 @@ test('handles redirects without crashing', async () => {
 	await withServer(
 		(_request, response) => {
 			redirectTargetHit = true;
-			adminRunJson(response, 'completed');
+			runMetaJson(response, 'completed');
 		},
 		async (redirectServer) => {
 			await withServer(
 				(_request, response) => {
-					response.writeHead(302, { location: `${redirectServer}/admin/runs/run-1` });
+					response.writeHead(302, { location: `${redirectServer}/runs/run-1?meta` });
 					response.end();
 				},
 				async (server) => {
