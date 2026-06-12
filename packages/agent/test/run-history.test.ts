@@ -279,6 +279,32 @@ describe('workflow run registry', () => {
 		]);
 	});
 
+	it('continues pointer listing when the page boundary lands on a non-Latin1 workflow name', async () => {
+		const registry: RunRegistry = new InMemoryRunRegistry();
+		await registry.recordRunStart({
+			runId: 'workflow:日報:01',
+			workflowName: '日報',
+			startedAt: '2026-06-01T10:00:00.000Z',
+		});
+		await registry.recordRunStart({
+			runId: 'workflow:日報:02',
+			workflowName: '日報',
+			startedAt: '2026-06-01T10:01:00.000Z',
+		});
+
+		const firstPage = await registry.listRuns({ limit: 1 });
+		expect(firstPage.runs.map((pointer) => pointer.runId)).toEqual(['workflow:日報:02']);
+		expect(firstPage.nextCursor).toEqual(expect.any(String));
+		expect((await registry.listRuns({ limit: 1, cursor: firstPage.nextCursor })).runs).toEqual([
+			{
+				runId: 'workflow:日報:01',
+				workflowName: '日報',
+				status: 'active',
+				startedAt: '2026-06-01T10:00:00.000Z',
+			},
+		]);
+	});
+
 });
 
 describe('workflow run routes', () => {

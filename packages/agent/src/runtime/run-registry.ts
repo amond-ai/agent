@@ -67,14 +67,18 @@ export function decodeRunCursor(cursor: string | undefined): CursorTuple | undef
 }
 
 function base64UrlEncode(value: string): string {
-	const b64 = btoa(value);
+	const bytes = new TextEncoder().encode(value);
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	const b64 = btoa(binary);
 	return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function base64UrlDecode(value: string): string {
 	const padded = value + '='.repeat((4 - (value.length % 4)) % 4);
 	const b64 = padded.replace(/-/g, '+').replace(/_/g, '/');
-	return atob(b64);
+	const binary = atob(b64);
+	return new TextDecoder().decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
 }
 
 export interface RunRegistry {
