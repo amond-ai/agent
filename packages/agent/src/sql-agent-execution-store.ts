@@ -327,13 +327,12 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
 			this.sql
 				.exec(
 					`INSERT OR IGNORE INTO flue_agent_stream_chunks
-					 (stream_key, segment_index, body, created_at)
-					 VALUES (?, ?, ?, ?)
+					 (stream_key, segment_index, body)
+					 VALUES (?, ?, ?)
 					 RETURNING stream_key`,
 					streamKey,
 					segmentIndex,
 					body,
-					Date.now(),
 				)
 				.toArray().length > 0
 		);
@@ -561,8 +560,8 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
 			}
 			const startedAt = deletionRow.started_at;
 			this.sql.exec(
-				`INSERT OR IGNORE INTO flue_agent_dispatch_receipts (dispatch_id, accepted_at, settled_at)
-				 SELECT submission_id, accepted_at, COALESCE(settled_at, accepted_at)
+				`INSERT OR IGNORE INTO flue_agent_dispatch_receipts (dispatch_id, accepted_at)
+				 SELECT submission_id, accepted_at
 				 FROM flue_agent_submissions
 				 WHERE session_key = ? AND kind = 'dispatch' AND status = 'settled' AND accepted_at <= ?`,
 				sessionKey,
@@ -1113,7 +1112,6 @@ function ensureTurnJournalTable(sql: SqlStorage): void {
 		 stream_key TEXT NOT NULL,
 		 segment_index INTEGER NOT NULL,
 		 body TEXT NOT NULL,
-		 created_at INTEGER NOT NULL,
 		 PRIMARY KEY (stream_key, segment_index)
 		)`,
 	);
@@ -1167,8 +1165,7 @@ function ensureSubmissionTable(sql: SqlStorage): void {
 	sql.exec(
 		`CREATE TABLE IF NOT EXISTS flue_agent_dispatch_receipts (
 		 dispatch_id TEXT PRIMARY KEY,
-		 accepted_at INTEGER NOT NULL,
-		 settled_at INTEGER NOT NULL
+		 accepted_at INTEGER NOT NULL
 		)`,
 	);
 	sql.exec(
