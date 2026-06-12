@@ -149,23 +149,25 @@ async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 			}
 		}
 	} else if (bundleStrategy === 'vite-cloudflare') {
-		if (!plugin.entryFilename || !plugin.additionalOutputs) {
+		if (!plugin.entryFilename || !plugin.viteInputs) {
 			throw new Error(
-				`[flue] Plugin "${plugin.name}" set bundle: 'vite-cloudflare' but did not provide its generated entry and configuration outputs.`,
+				`[flue] Plugin "${plugin.name}" set bundle: 'vite-cloudflare' but did not provide its generated entry and Vite inputs.`,
 			);
 		}
 		const inputDir = cloudflareViteInputDir(root);
 		const entryPath = path.join(inputDir, plugin.entryFilename);
-		const inputs = await plugin.additionalOutputs(ctx);
+		const inputs = await plugin.viteInputs(ctx);
 		let generatedChanged =
 			!fs.existsSync(entryPath) || fs.readFileSync(entryPath, 'utf-8') !== serverCode;
 		fs.mkdirSync(inputDir, { recursive: true });
 		if (generatedChanged) fs.writeFileSync(entryPath, serverCode, 'utf-8');
-		for (const [filename, content] of Object.entries(inputs)) {
-			const filePath =
-				filename === 'wrangler.jsonc'
-					? cloudflareViteConfigPath(root)
-					: path.join(inputDir, filename);
+		const inputFiles: Array<[string, string]> = [
+			[cloudflareViteConfigPath(root), inputs.wranglerConfig],
+			...Object.entries(inputs.entryDirFiles ?? {}).map(
+				([filename, content]): [string, string] => [path.join(inputDir, filename), content],
+			),
+		];
+		for (const [filePath, content] of inputFiles) {
 			const changed = !fs.existsSync(filePath) || fs.readFileSync(filePath, 'utf-8') !== content;
 			fs.mkdirSync(path.dirname(filePath), { recursive: true });
 			if (changed) fs.writeFileSync(filePath, content, 'utf-8');
@@ -191,7 +193,7 @@ async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 		anyChanged = true;
 	}
 
-	if (plugin.additionalOutputs && bundleStrategy !== 'vite-cloudflare') {
+	if (plugin.additionalOutputs) {
 		const outputs = await plugin.additionalOutputs(ctx);
 		for (const [filename, content] of Object.entries(outputs)) {
 			const filePath = path.join(output, filename);
@@ -231,8 +233,6 @@ async function withTemporaryProcessEnv<T>(
 }
 
 function resolvePlugin(options: BuildOptions): BuildPlugin {
-	if (options.plugin) return options.plugin;
-
 	if (!options.target) {
 		throw new Error(
 			'[flue] No build target specified. Use --target to choose a target:\n' +

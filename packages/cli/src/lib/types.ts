@@ -27,11 +27,11 @@ export interface BuildContext {
 	 * Defaults to `<root>/dist`; users can override with `--output`
 	 * (CLI) or `output` (programmatic) to redirect the build elsewhere.
 	 *
-	 * Note that this is the literal output directory — `server.mjs`,
-	 * `wrangler.jsonc`, etc. are written directly inside it. The user's
-		 * Cloudflare's generated Vite input configuration and official-plugin
-		 * deployment redirect still anchor on `root`, regardless of this value.
-
+	 * Note that this is the literal output directory — `server.mjs` and
+	 * other artifacts are written directly inside it. Cloudflare's
+	 * generated Vite inputs (`<root>/.flue-vite/` and the composed
+	 * `<root>/.flue-vite.wrangler.jsonc`) always anchor on `root`,
+	 * regardless of this value.
 	 */
 	output: string;
 	/**
@@ -98,10 +98,30 @@ export interface BuildPlugin {
 	external?: string[];
 	/**
 	 * Additional files to write to the output directory (`ctx.output`).
-	 * Keys are filenames relative to `output` (e.g. `wrangler.jsonc`,
-	 * `Dockerfile`). Values are file contents. May be async.
+	 * Keys are filenames relative to `output` (e.g. `Dockerfile`). Values
+	 * are file contents. May be async.
 	 */
 	additionalOutputs?(ctx: BuildContext): Record<string, string> | Promise<Record<string, string>>;
+	/**
+	 * Inputs for the `'vite-cloudflare'` strategy. Required when
+	 * `bundle === 'vite-cloudflare'`; ignored otherwise. May be async.
+	 */
+	viteInputs?(ctx: BuildContext): ViteCloudflareInputs | Promise<ViteCloudflareInputs>;
+}
+
+/** Generated inputs consumed by the official Cloudflare Vite integration. */
+export interface ViteCloudflareInputs {
+	/**
+	 * Composed wrangler config contents, written to
+	 * `<root>/.flue-vite.wrangler.jsonc` at the project root so official
+	 * local variable discovery continues to find `.dev.vars` and `.env`.
+	 */
+	wranglerConfig: string;
+	/**
+	 * Extra files written next to the generated entry in `<root>/.flue-vite/`.
+	 * Keys are filenames relative to that directory.
+	 */
+	entryDirFiles?: Record<string, string>;
 }
 
 export interface BuildOptions {
@@ -118,6 +138,4 @@ export interface BuildOptions {
 	output?: string;
 	target?: 'node' | 'cloudflare';
 	mode?: 'build' | 'development';
-	/** Overrides `target` when provided. */
-	plugin?: BuildPlugin;
 }

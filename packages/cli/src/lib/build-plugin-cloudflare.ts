@@ -7,7 +7,7 @@ import {
 	validateUserWranglerConfig,
 } from './cloudflare-wrangler-merge.ts';
 import { generateBuiltModuleNormalizationSource } from './generated-entry-normalization.ts';
-import type { BuildContext, BuildPlugin } from './types.ts';
+import type { BuildContext, BuildPlugin, ViteCloudflareInputs } from './types.ts';
 
 export class CloudflarePlugin implements BuildPlugin {
 	name = 'cloudflare';
@@ -536,9 +536,7 @@ export default {
 `;
 	}
 
-	async additionalOutputs(ctx: BuildContext): Promise<Record<string, string>> {
-		const outputs: Record<string, string> = {};
-
+	async viteInputs(ctx: BuildContext): Promise<ViteCloudflareInputs> {
 		const flueBindings: Array<{ name: string; class_name: string }> = ctx.agents.map((agent) => ({
 			name: agentBindingName(agent.name),
 			class_name: agentClassName(agent.name),
@@ -586,13 +584,11 @@ export default {
 			merged.$schema = 'https://workers.cloudflare.com/schema/wrangler.json';
 		}
 
-		outputs['wrangler.jsonc'] = JSON.stringify(merged, null, 2);
-
 		// Flue no longer emits a Dockerfile. Users who use container sandboxes
 		// provide their own Dockerfile at whatever path their wrangler.jsonc's
 		// `containers[].image` points to.
 
-		return outputs;
+		return { wranglerConfig: JSON.stringify(merged, null, 2) };
 	}
 }
 
