@@ -21,6 +21,11 @@ export type { RequestHeaders };
 export interface WorkflowInvokeOptions {
 	/** Workflow-defined payload. */
 	payload?: unknown;
+	/**
+	 * When `'result'`, the request waits for the run to finish and resolves
+	 * with its terminal result. Omit to start the run without waiting.
+	 */
+	wait?: 'result';
 	signal?: AbortSignal;
 }
 
@@ -35,6 +40,12 @@ export interface WorkflowInvokeResult {
 	 * this offset yields the run's events from the start.
 	 */
 	offset: string;
+}
+
+/** Result of one workflow invocation that waited for the terminal result. */
+export interface WorkflowWaitResult extends WorkflowInvokeResult {
+	/** Terminal result of the workflow run. */
+	result: unknown;
 }
 
 /** Options for one catch-up read of workflow-run events (no live tailing). */
@@ -65,6 +76,11 @@ export interface FlueClient {
 	};
 	/** Start workflow runs. */
 	workflows: {
+		/** Run a workflow to completion and resolve with its terminal result. */
+		invoke(
+			name: string,
+			options: WorkflowInvokeOptions & { wait: 'result' },
+		): Promise<WorkflowWaitResult>;
 		/** Start a workflow run. Returns the run ID and its server-provided stream coordinates. */
 		invoke(name: string, options?: WorkflowInvokeOptions): Promise<WorkflowInvokeResult>;
 	};
@@ -120,11 +136,13 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 		workflows: {
 			// The admission envelope IS the result: the server owns stream-URL
 			// and offset derivation (DS offsets are opaque tokens clients must
-			// not construct).
-			invoke: (name, opts) =>
-				http.json<WorkflowInvokeResult>({
+			// not construct). With `wait: 'result'` the server also resolves
+			// the run's terminal result before responding.
+			invoke: (name, opts?: WorkflowInvokeOptions) =>
+				http.json<WorkflowWaitResult>({
 					method: 'POST',
 					path: `/workflows/${encodeURIComponent(name)}`,
+					query: opts?.wait === 'result' ? { wait: 'result' } : undefined,
 					body: opts?.payload,
 					signal: opts?.signal,
 				}),

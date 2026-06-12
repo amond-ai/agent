@@ -391,7 +391,36 @@ describe('createFlueClient', () => {
 			expect(result.offset).toBe('-1');
 			expect(seen).toHaveLength(1);
 			expect(new URL(seen[0]!.url).pathname).toBe('/workflows/my-workflow');
+			expect(new URL(seen[0]!.url).searchParams.has('wait')).toBe(false);
 			expect(seen[0]!.method).toBe('POST');
+			expect(await seen[0]!.json()).toEqual({ key: 'value' });
+		});
+
+		it('requests ?wait=result and returns the terminal result when wait is "result"', async () => {
+			const seen: Request[] = [];
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test',
+				fetch: async (input, init) => {
+					seen.push(new Request(input, init));
+					return Response.json({
+						result: { summary: 'done' },
+						runId: 'run_abc123',
+						streamUrl: 'https://flue.test/runs/run_abc123',
+						offset: '-1',
+					});
+				},
+			});
+
+			const result = await client.workflows.invoke('my-workflow', {
+				payload: { key: 'value' },
+				wait: 'result',
+			});
+			expect(result.result).toEqual({ summary: 'done' });
+			expect(result.runId).toBe('run_abc123');
+			expect(seen).toHaveLength(1);
+			const url = new URL(seen[0]!.url);
+			expect(url.pathname).toBe('/workflows/my-workflow');
+			expect(url.searchParams.get('wait')).toBe('result');
 			expect(await seen[0]!.json()).toEqual({ key: 'value' });
 		});
 

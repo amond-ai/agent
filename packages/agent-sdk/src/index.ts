@@ -6,6 +6,7 @@ export type {
 	RunEventsOptions,
 	WorkflowInvokeOptions,
 	WorkflowInvokeResult,
+	WorkflowWaitResult,
 } from './client.ts';
 export { createFlueClient } from './client.ts';
 export { FlueApiError } from './http.ts';
