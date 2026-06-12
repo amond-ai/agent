@@ -227,6 +227,20 @@ export function getModelBinding<TApi extends Api>(
 	return candidate as CloudflareAIBinding;
 }
 
+/**
+ * Read AI Gateway options off a resolved Model, or `undefined` if none are
+ * attached.
+ */
+export function getModelGateway<TApi extends Api>(
+	model: Model<TApi>,
+): CloudflareGatewayOptions | undefined {
+	const candidate = (model as Model<TApi> & { gateway?: unknown }).gateway;
+	if (!candidate || typeof (candidate as { id?: unknown }).id !== 'string') {
+		return undefined;
+	}
+	return candidate as CloudflareGatewayOptions;
+}
+
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
 /** Resolve `'provider-id/model-id'` against the provider registry. */

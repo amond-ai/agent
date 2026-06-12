@@ -25,7 +25,7 @@ import type {
 import { createAssistantMessageEventStream, parseStreamingJson } from '@earendil-works/pi-ai';
 import { convertMessages } from '@earendil-works/pi-ai/openai-completions';
 import { CLOUDFLARE_AI_BINDING_API, type CloudflareAIBindingApi } from '../cloudflare-model.ts';
-import { getModelBinding } from '../runtime/providers.ts';
+import { getModelBinding, getModelGateway } from '../runtime/providers.ts';
 import type { CloudflareGatewayOptions } from './gateway.ts';
 
 // ─── OpenAI-completions compat profile ──────────────────────────────────────
@@ -336,7 +336,7 @@ const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, SimpleSt
 			// arbitrary ids through the unknown-model overload (see RunOverload).
 			// `returnRawResponse: true` + `stream: true` in the payload gives us
 			// the raw SSE Response we parse below.
-			const gateway = (model as { gateway?: CloudflareGatewayOptions }).gateway;
+			const gateway = getModelGateway(model);
 			response = (await (ai.run as unknown as RunOverload)(model.id, finalPayload, {
 				returnRawResponse: true,
 				...(options?.signal ? { signal: options.signal } : {}),
