@@ -33,7 +33,7 @@ describe('createSqlRunStore()', () => {
 	it('preserves absent optional fields when run persistence receives undefined values', async () => {
 		const { sql } = makeFakeSql();
 		const store = createSqlRunStore(sql);
-		const runId = 'workflow:hello:absent';
+		const runId = 'run_01ABSENT';
 		await store.createRun({
 			runId,
 			workflowName: 'hello',
@@ -57,7 +57,7 @@ describe('createSqlRunStore()', () => {
 	it('preserves explicit null values when run persistence receives null', async () => {
 		const { sql } = makeFakeSql();
 		const store = createSqlRunStore(sql);
-		const runId = 'workflow:hello:null';
+		const runId = 'run_01NULL';
 		await store.createRun({
 			runId,
 			workflowName: 'hello',

@@ -40,7 +40,7 @@ describe('createCloudflareRunRegistry()', () => {
 		const registry = createCloudflareRunRegistry(fake.namespace);
 
 		await registry?.recordRunStart({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
@@ -49,7 +49,7 @@ describe('createCloudflareRunRegistry()', () => {
 		expect(fake.requestedIds).toEqual([fake.id]);
 		expect(fake.requests).toHaveLength(1);
 		expect(fake.requests[0]?.url).toBe(
-			'https://flue-registry.local/pointers/workflow%3Adaily-report%3A01/start',
+			'https://flue-registry.local/pointers/run_01DAILYREPORT/start',
 		);
 		expect(fake.requests[0]?.method).toBe('POST');
 		expect(fake.requests[0]?.headers.get('content-type')).toBe('application/json');
@@ -65,7 +65,7 @@ describe('createCloudflareRunRegistry()', () => {
 		const registry = createCloudflareRunRegistry(fake.namespace);
 
 		await registry?.recordRunEnd({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 			endedAt: '2026-06-01T10:05:00.000Z',
@@ -77,7 +77,7 @@ describe('createCloudflareRunRegistry()', () => {
 		expect(fake.requestedIds).toEqual([fake.id]);
 		expect(fake.requests).toHaveLength(1);
 		expect(fake.requests[0]?.url).toBe(
-			'https://flue-registry.local/pointers/workflow%3Adaily-report%3A01/end',
+			'https://flue-registry.local/pointers/run_01DAILYREPORT/end',
 		);
 		expect(fake.requests[0]?.method).toBe('POST');
 		expect(fake.requests[0]?.headers.get('content-type')).toBe('application/json');
@@ -94,12 +94,12 @@ describe('createCloudflareRunRegistry()', () => {
 		const fake = createNamespace(() => new Response('missing', { status: 404 }));
 		const registry = createCloudflareRunRegistry(fake.namespace);
 
-		expect(await registry?.lookupRun('workflow:daily-report:missing')).toBeNull();
+		expect(await registry?.lookupRun('run_01MISSING')).toBeNull();
 		expect(fake.instanceNames).toEqual(['default']);
 		expect(fake.requestedIds).toEqual([fake.id]);
 		expect(fake.requests).toHaveLength(1);
 		expect(fake.requests[0]?.url).toBe(
-			'https://flue-registry.local/pointers/workflow%3Adaily-report%3Amissing',
+			'https://flue-registry.local/pointers/run_01MISSING',
 		);
 		expect(fake.requests[0]?.method).toBe('GET');
 	});
@@ -111,7 +111,7 @@ describe('createCloudflareRunRegistry()', () => {
 					JSON.stringify({
 						runs: [
 							{
-								runId: 'workflow:daily report:01',
+								runId: 'run_01DAILYREPORT',
 								workflowName: 'daily report',
 								status: 'errored',
 								startedAt: '2026-06-01T10:00:00.000Z',
@@ -134,7 +134,7 @@ describe('createCloudflareRunRegistry()', () => {
 		).toEqual({
 			runs: [
 				{
-					runId: 'workflow:daily report:01',
+					runId: 'run_01DAILYREPORT',
 					workflowName: 'daily report',
 					status: 'errored',
 					startedAt: '2026-06-01T10:00:00.000Z',
@@ -157,18 +157,18 @@ describe('createCloudflareRunRegistry()', () => {
 
 		await expect(
 			registry?.recordRunStart({
-				runId: 'workflow:daily-report:01',
+				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
 			}),
 		).rejects.toThrow(
-			'[flue] FlueRegistry POST /pointers/workflow%3Adaily-report%3A01/start failed: 503 storage unavailable',
+			'[flue] FlueRegistry POST /pointers/run_01DAILYREPORT/start failed: 503 storage unavailable',
 		);
 		expect(fake.instanceNames).toEqual(['default']);
 		expect(fake.requestedIds).toEqual([fake.id]);
 		expect(fake.requests).toHaveLength(1);
 		expect(fake.requests[0]?.url).toBe(
-			'https://flue-registry.local/pointers/workflow%3Adaily-report%3A01/start',
+			'https://flue-registry.local/pointers/run_01DAILYREPORT/start',
 		);
 		expect(fake.requests[0]?.method).toBe('POST');
 	});
@@ -178,7 +178,7 @@ describe('createCloudflareRunRegistry()', () => {
 			if (request.method === 'GET') {
 				return new Response(
 					JSON.stringify({
-						runId: 'workflow:daily report/id?#fragment',
+						runId: 'run_01 colon:slash/id?#fragment',
 						workflowName: 'daily report',
 						status: 'active',
 						startedAt: '2026-06-01T10:00:00.000Z',
@@ -190,19 +190,19 @@ describe('createCloudflareRunRegistry()', () => {
 		});
 		const registry = createCloudflareRunRegistry(fake.namespace);
 
-		expect(await registry?.lookupRun('workflow:daily report/id?#fragment')).toEqual({
-			runId: 'workflow:daily report/id?#fragment',
+		expect(await registry?.lookupRun('run_01 colon:slash/id?#fragment')).toEqual({
+			runId: 'run_01 colon:slash/id?#fragment',
 			workflowName: 'daily report',
 			status: 'active',
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
 		await registry?.recordRunStart({
-			runId: 'workflow:daily report/id?#fragment',
+			runId: 'run_01 colon:slash/id?#fragment',
 			workflowName: 'daily report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
 		await registry?.recordRunEnd({
-			runId: 'workflow:daily report/id?#fragment',
+			runId: 'run_01 colon:slash/id?#fragment',
 			workflowName: 'daily report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 			endedAt: '2026-06-01T10:05:00.000Z',
@@ -213,9 +213,9 @@ describe('createCloudflareRunRegistry()', () => {
 		expect(fake.instanceNames).toEqual(['default', 'default', 'default']);
 		expect(fake.requestedIds).toEqual([fake.id, fake.id, fake.id]);
 		expect(fake.requests.map((request) => request.url)).toEqual([
-			'https://flue-registry.local/pointers/workflow%3Adaily%20report%2Fid%3F%23fragment',
-			'https://flue-registry.local/pointers/workflow%3Adaily%20report%2Fid%3F%23fragment/start',
-			'https://flue-registry.local/pointers/workflow%3Adaily%20report%2Fid%3F%23fragment/end',
+			'https://flue-registry.local/pointers/run_01%20colon%3Aslash%2Fid%3F%23fragment',
+			'https://flue-registry.local/pointers/run_01%20colon%3Aslash%2Fid%3F%23fragment/start',
+			'https://flue-registry.local/pointers/run_01%20colon%3Aslash%2Fid%3F%23fragment/end',
 		]);
 		expect(fake.requests.map((request) => request.method)).toEqual(['GET', 'POST', 'POST']);
 	});

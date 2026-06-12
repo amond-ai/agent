@@ -2,7 +2,7 @@
  * Durable event stream store — async interface and SQLite implementation.
  *
  * Stores append-only JSON event streams. Each stream is identified by a path
- * (e.g. `agents/my-agent/instance-1` or `runs/wf_abc123`). Events get
+ * (e.g. `agents/my-agent/instance-1` or `runs/run_01JX...`). Events get
  * monotonically increasing integer offsets formatted as `<readSeq>_<seq>` —
  * two 16-digit zero-padded integers separated by an underscore, matching the
  * DS reference server's offset format. The first component is always `0`

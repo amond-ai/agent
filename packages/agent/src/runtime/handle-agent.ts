@@ -163,7 +163,7 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 		eventStreamStore,
 	} = opts;
 	const startWorkflowAdmission = opts.startWorkflowAdmission ?? defaultStartWorkflowAdmission;
-	const runId = opts.runId ?? generateWorkflowRunId(workflowName);
+	const runId = opts.runId ?? generateWorkflowRunId();
 
 	try {
 		const payload = await parseJsonBody(request);

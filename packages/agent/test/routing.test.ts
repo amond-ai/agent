@@ -394,12 +394,12 @@ describe('flue()', () => {
 	it('applies workflow middleware to run stream reads', async () => {
 		const runRegistry = new InMemoryRunRegistry();
 		await runRegistry.recordRunStart({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
 		const store = createTestEventStreamStore();
-		await store.createStream('runs/workflow:daily-report:01');
+		await store.createStream('runs/run_01DAILYREPORT');
 		configureFlueRuntime({
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
@@ -412,7 +412,7 @@ describe('flue()', () => {
 		const app = new Hono();
 		app.route('/api', flue());
 
-		const response = await app.fetch(new Request('http://localhost/api/runs/workflow%3Adaily-report%3A01'));
+		const response = await app.fetch(new Request('http://localhost/api/runs/run_01DAILYREPORT'));
 
 		expect(response.status).toBe(401);
 		expect(await response.json()).toEqual({ blocked: true });
@@ -578,7 +578,7 @@ describe('flue()', () => {
 		const body = (await response.json()) as { result: unknown; _meta: { runId: string } };
 		expect(body).toEqual({
 			result: { payload: {} },
-			_meta: { runId: expect.stringMatching(/^workflow:daily-report:/) },
+			_meta: { runId: expect.stringMatching(/^run_[0-9A-HJKMNP-TV-Z]{26}$/) },
 		});
 		expect(response.headers.get('x-flue-run-id')).toBe(body._meta.runId);
 	});

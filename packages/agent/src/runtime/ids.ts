@@ -1,16 +1,12 @@
 import { ulid } from 'ulidx';
 
-function generateRunNonce(): string {
-	return ulid();
-}
-
-export function generateWorkflowRunId(workflowName: string): string {
-	if (!workflowName || workflowName.includes(':')) {
-		throw new Error(
-			'[flue] Workflow names used in run ids must be non-empty and must not contain ":".',
-		);
-	}
-	return `workflow:${workflowName}:${generateRunNonce()}`;
+/**
+ * Workflow run ids are opaque: nothing may parse structure out of them. The
+ * owning workflow is resolved through the run registry (`runId` →
+ * `workflowName`).
+ */
+export function generateWorkflowRunId(): string {
+	return `run_${ulid()}`;
 }
 
 export function generateSessionAffinityKey(): string {

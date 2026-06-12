@@ -85,7 +85,7 @@ describe('workflow invocation', () => {
 
 			expect(response.status).toBe(202);
 			expect(body).toEqual({ status: 'accepted', runId: expect.any(String) });
-			expect(runId).toMatch(/^workflow:daily-report:[^:]+$/);
+			expect(runId).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
 			expect((await runStore.getRun(runId))?.status).toBe('active');
 		} finally {
 			release();
@@ -113,7 +113,7 @@ describe('workflow invocation', () => {
 
 		expect(response.status).toBe(200);
 		expect(body).toEqual({ result: { delivered: true }, _meta: { runId: expect.any(String) } });
-		expect(body._meta.runId).toMatch(/^workflow:daily-report:[^:]+$/);
+		expect(body._meta.runId).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(response.headers.get('x-flue-run-id')).toBe(body._meta.runId);
 	});
 
@@ -142,7 +142,7 @@ describe('workflow invocation', () => {
 				details: 'This endpoint requires the generated runtime to be configured with a run store.',
 			},
 		});
-		expect(response.headers.get('x-flue-run-id')).toMatch(/^workflow:daily-report:[^:]+$/);
+		expect(response.headers.get('x-flue-run-id')).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(executions).toBe(0);
 	});
 
@@ -179,7 +179,7 @@ describe('workflow invocation', () => {
 					details: 'The server encountered an unexpected error while handling this request.',
 				},
 			});
-			expect(response.headers.get('x-flue-run-id')).toMatch(/^workflow:daily-report:[^:]+$/);
+			expect(response.headers.get('x-flue-run-id')).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
 			expect(executions).toBe(0);
 		} finally {
 			consoleError.mockRestore();
@@ -294,7 +294,7 @@ describe('workflow run lifecycle', () => {
 					details: 'The server encountered an unexpected error while handling this request.',
 				},
 			});
-			expect(runId).toMatch(/^workflow:daily-report:[^:]+$/);
+			expect(runId).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
 			const runRecord = await runStore.getRun(runId!);
 			expect(runRecord).toEqual({
 				runId,
@@ -357,7 +357,7 @@ describe('workflow run lifecycle', () => {
 	it('derives recovery event indexes from the stream head, not the event count', async () => {
 		const db = new DatabaseSync(':memory:');
 		const eventStreamStore = createTestEventStreamStore(db);
-		const runId = 'workflow:report:01TESTRECOVERY';
+		const runId = 'run_01TESTRECOVERY';
 		const streamPath = `runs/${runId}`;
 		await eventStreamStore.createStream(streamPath);
 		for (let index = 0; index < 3; index++) {

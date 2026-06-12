@@ -121,12 +121,12 @@ describe('admin()', () => {
 	it('lists workflow run pointers when the mounted admin app receives a runs request', async () => {
 		const runRegistry = new InMemoryRunRegistry();
 		await runRegistry.recordRunStart({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
 		await runRegistry.recordRunEnd({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 			endedAt: '2026-06-01T10:05:00.000Z',
@@ -143,7 +143,7 @@ describe('admin()', () => {
 		expect(await response.json()).toEqual({
 			items: [
 				{
-					runId: 'workflow:daily-report:01',
+					runId: 'run_01DAILYREPORT',
 					workflowName: 'daily-report',
 					status: 'completed',
 					startedAt: '2026-06-01T10:00:00.000Z',
@@ -182,12 +182,12 @@ describe('admin()', () => {
 	it('resolves a workflow run record when the mounted admin app receives a run detail request', async () => {
 		const runRegistry = new InMemoryRunRegistry();
 		await runRegistry.recordRunStart({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
 		await runRegistry.recordRunEnd({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 			endedAt: '2026-06-01T10:05:00.000Z',
@@ -196,13 +196,13 @@ describe('admin()', () => {
 		});
 		const runStore = new InMemoryRunStore();
 		await runStore.createRun({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 			payload: { report: 'weekly' },
 		});
 		await runStore.endRun({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			endedAt: '2026-06-01T10:05:00.000Z',
 			durationMs: 300_000,
 			isError: false,
@@ -213,12 +213,12 @@ describe('admin()', () => {
 		app.route('/inspection', admin());
 
 		const response = await app.fetch(
-			new Request('http://localhost/inspection/runs/workflow%3Adaily-report%3A01'),
+			new Request('http://localhost/inspection/runs/run_01DAILYREPORT'),
 		);
 
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			status: 'completed',
 			startedAt: '2026-06-01T10:00:00.000Z',
@@ -233,13 +233,13 @@ describe('admin()', () => {
 	it('forwards Cloudflare admin run detail requests through the internal metadata path', async () => {
 		const runRegistry = new InMemoryRunRegistry();
 		await runRegistry.recordRunStart({
-			runId: 'workflow:daily-report:01',
+			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
 		});
 		const routeRunRequest = vi.fn(async (request: Request) => {
 			expect(new URL(request.url).pathname).toBe('/__flue/internal/run-metadata');
-			return Response.json({ runId: 'workflow:daily-report:01', status: 'completed' });
+			return Response.json({ runId: 'run_01DAILYREPORT', status: 'completed' });
 		});
 		configureFlueRuntime({
 			target: 'cloudflare',
@@ -251,11 +251,11 @@ describe('admin()', () => {
 		app.route('/inspection', admin());
 
 		const response = await app.fetch(
-			new Request('http://localhost/inspection/runs/workflow%3Adaily-report%3A01'),
+			new Request('http://localhost/inspection/runs/run_01DAILYREPORT'),
 		);
 
 		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ runId: 'workflow:daily-report:01', status: 'completed' });
+		expect(await response.json()).toEqual({ runId: 'run_01DAILYREPORT', status: 'completed' });
 		expect(routeRunRequest).toHaveBeenCalledOnce();
 	});
 
@@ -283,7 +283,7 @@ describe('admin()', () => {
 		app.route('/inspection', admin());
 
 		const response = await app.fetch(
-			new Request('http://localhost/inspection/runs/workflow%3Adaily-report%3A01'),
+			new Request('http://localhost/inspection/runs/run_01DAILYREPORT'),
 		);
 
 		expect(response.status).toBe(501);

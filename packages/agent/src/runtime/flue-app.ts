@@ -476,7 +476,7 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 			c.env,
 			{
 				workflowName: name,
-				instanceId: generateWorkflowRunId(name),
+				instanceId: generateWorkflowRunId(),
 			},
 		);
 		if (response) return response;
