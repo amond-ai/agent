@@ -104,7 +104,7 @@ describe('createSandboxSessionEnv()', () => {
 		expect(rm).toHaveBeenCalledWith('/shared/cache', { recursive: true, force: true });
 	});
 
-	it('passes command cwd env timeout and signal when an adapted environment executes a command', async () => {
+	it('passes command cwd env timeoutMs and signal when an adapted environment executes a command', async () => {
 		const exec = vi.fn(async () => ({ stdout: 'done', stderr: '', exitCode: 0 }));
 		const env = createSandboxSessionEnv(createSandboxApi({ exec }), '/workspace/project');
 		const controller = new AbortController();
@@ -113,7 +113,7 @@ describe('createSandboxSessionEnv()', () => {
 			env.exec('npm test', {
 				cwd: '/workspace/check',
 				env: { NODE_ENV: 'test' },
-				timeout: 12,
+				timeoutMs: 12_000,
 				signal: controller.signal,
 			}),
 		).resolves.toEqual({ stdout: 'done', stderr: '', exitCode: 0 });
@@ -121,7 +121,7 @@ describe('createSandboxSessionEnv()', () => {
 		expect(exec).toHaveBeenCalledWith('npm test', {
 			cwd: '/workspace/check',
 			env: { NODE_ENV: 'test' },
-			timeout: 12,
+			timeoutMs: 12_000,
 			signal: controller.signal,
 		});
 	});
@@ -139,7 +139,7 @@ describe('createSandboxSessionEnv()', () => {
 		expect(exec).toHaveBeenCalledWith('ls', {
 			cwd: '/workspace/project/data',
 			env: undefined,
-			timeout: undefined,
+			timeoutMs: undefined,
 			signal: undefined,
 		});
 	});
@@ -157,7 +157,7 @@ describe('createSandboxSessionEnv()', () => {
 		expect(exec).toHaveBeenCalledWith('pwd', {
 			cwd: '/workspace/project',
 			env: undefined,
-			timeout: undefined,
+			timeoutMs: undefined,
 			signal: undefined,
 		});
 	});
@@ -204,7 +204,7 @@ describe('createSandboxSessionEnv()', () => {
 		expect(exec).toHaveBeenCalledWith('npm test', {
 			cwd: '/workspace/project',
 			env: undefined,
-			timeout: undefined,
+			timeoutMs: undefined,
 			signal: controller.signal,
 		});
 	});

@@ -15,7 +15,7 @@ describe('createTools()', () => {
 		await grep?.execute('second', { pattern: 'match', include: '*.ts' });
 
 		expect(exec).toHaveBeenCalledTimes(3);
-		expect(exec).toHaveBeenNthCalledWith(1, 'rg --version', { timeout: 10 });
+		expect(exec).toHaveBeenNthCalledWith(1, 'rg --version', { timeoutMs: 10_000 });
 		expect(exec.mock.calls[1]?.[0]).toContain('rg --line-number --with-filename --color never');
 		expect(exec.mock.calls[1]?.[0]).toContain("--glob '*.ts' -- 'match' '.'");
 		expect(exec.mock.calls[2]?.[0]).toContain('rg --line-number --with-filename --color never');

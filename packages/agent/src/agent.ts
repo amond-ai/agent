@@ -216,9 +216,11 @@ function createBashTool(env: SessionEnv): AgentTool<typeof BashParams> {
 		async execute(_toolCallId: string, params: Static<typeof BashParams>, signal?: AbortSignal) {
 			throwIfAborted(signal);
 
-			// Two layers cooperate to enforce `params.timeout`:
+			// Two layers cooperate to enforce `params.timeout` (the
+			// model-facing parameter stays in seconds, matching bash-tool
+			// convention; it is converted to milliseconds here):
 			//
-			//   1. Pass `timeout` to env.exec as a hint. Sandbox connectors
+			//   1. Pass `timeoutMs` to env.exec as a hint. Sandbox connectors
 			//      forward it to their provider's native timeout option
 			//      (E2B `timeoutMs`, Daytona `timeout`, etc.) so signal-
 			//      blind providers still observe the deadline with full
@@ -235,8 +237,8 @@ function createBashTool(env: SessionEnv): AgentTool<typeof BashParams> {
 			// Programmatic callers express timeouts via AbortSignal.timeout(...) and
 			// accept abort semantics; the model can only emit JSON, so it
 			// needs `params.timeout` and a recoverable shape on timeout.
-			const timeoutSignal =
-				typeof params.timeout === 'number' ? AbortSignal.timeout(params.timeout * 1000) : undefined;
+			const timeoutMs = typeof params.timeout === 'number' ? params.timeout * 1000 : undefined;
+			const timeoutSignal = timeoutMs !== undefined ? AbortSignal.timeout(timeoutMs) : undefined;
 			const execSignal =
 				signal && timeoutSignal
 					? AbortSignal.any([signal, timeoutSignal])
@@ -253,7 +255,7 @@ function createBashTool(env: SessionEnv): AgentTool<typeof BashParams> {
 				);
 			try {
 				const result = await env.exec(params.command, {
-					timeout: params.timeout,
+					timeoutMs,
 					signal: execSignal,
 				});
 				// Some connectors don't observe the signal mid-flight and
@@ -402,7 +404,7 @@ function resolveGrepBackend(env: SessionEnv): Promise<'rg' | 'grep'> {
 		// operation abort mid-probe would poison the cache with 'grep'. A
 		// short deadline keeps a hung exec from wedging the first search.
 		backend = env
-			.exec('rg --version', { timeout: 10 })
+			.exec('rg --version', { timeoutMs: 10_000 })
 			.then((result) => (result.exitCode === 0 ? 'rg' : 'grep'))
 			.catch(() => 'grep');
 		grepBackends.set(env, backend);

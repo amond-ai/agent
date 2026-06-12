@@ -922,6 +922,7 @@ export class Session implements FlueSession {
 					const result = await this.env.exec(command, {
 						env: options?.env,
 						cwd: options?.cwd,
+						timeoutMs: options?.timeoutMs,
 						signal,
 					});
 					const shellResult: ShellResult = {

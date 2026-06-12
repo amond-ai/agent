@@ -97,21 +97,21 @@ export async function cfSandboxToSessionEnv(
 			execOpts?: {
 				cwd?: string;
 				env?: Record<string, string>;
-				timeout?: number;
+				timeoutMs?: number;
 				signal?: AbortSignal;
 			},
 		): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 			// The Cloudflare sandbox API has no signal param, so we rely on
-			// `timeout` for deadline enforcement and only observe `signal`
+			// `timeoutMs` for deadline enforcement and only observe `signal`
 			// before and after the remote call.
 			const externalSignal = execOpts?.signal;
 			if (externalSignal?.aborted) throw abortErrorFor(externalSignal);
 
-			const timeoutMs = typeof execOpts?.timeout === 'number' ? execOpts.timeout * 1000 : undefined;
 			const result = await sandbox.exec(command, {
 				cwd: execOpts?.cwd,
 				env: execOpts?.env,
-				timeout: timeoutMs,
+				// The Cloudflare sandbox `timeout` option is in milliseconds.
+				timeout: execOpts?.timeoutMs,
 			});
 
 			if (externalSignal?.aborted) throw abortErrorFor(externalSignal);

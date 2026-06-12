@@ -150,23 +150,25 @@ export interface SessionEnv {
 			cwd?: string;
 			env?: Record<string, string>;
 			/**
-			 * Wall-clock deadline hint in seconds. Forwarded to the underlying
-			 * sandbox connector's native timeout option (E2B `timeoutMs`,
-			 * Daytona `timeout`, etc.) so signal-blind providers still observe
-			 * the deadline with full fidelity.
+			 * Wall-clock deadline hint in milliseconds. Forwarded to the
+			 * underlying sandbox connector's native timeout option (E2B
+			 * `timeoutMs`, Daytona `timeout`, etc.) so signal-blind providers
+			 * still observe the deadline with full fidelity. Connectors whose
+			 * provider only supports a coarser granularity may round the value
+			 * up, never down.
 			 *
 			 * Independent of `signal`. Callers that have a deadline AND want
-			 * mid-flight cancellation should pass both: `timeout` for
+			 * mid-flight cancellation should pass both: `timeoutMs` for
 			 * provider-native enforcement, `signal` for ad-hoc abort. The
 			 * bash tool does this when the model emits a `timeout` parameter.
 			 */
-			timeout?: number;
+			timeoutMs?: number;
 			/**
 			 * Cancel the in-flight command. Aborting rejects with an
 			 * `AbortError`. Connectors that wrap a signal-aware SDK observe
 			 * this mid-flight; others see it only before/after the remote
-			 * call returns. Use `timeout` for guaranteed deadline enforcement
-			 * on signal-blind connectors.
+			 * call returns. Use `timeoutMs` for guaranteed deadline
+			 * enforcement on signal-blind connectors.
 			 */
 			signal?: AbortSignal;
 		},
@@ -812,6 +814,11 @@ export interface ShellOptions {
 	env?: Record<string, string>;
 	/** Working directory supplied to the command. */
 	cwd?: string;
+	/**
+	 * Wall-clock deadline in milliseconds, forwarded to the sandbox
+	 * connector. See `SessionEnv.exec`.
+	 */
+	timeoutMs?: number;
 	/** Cancel this call. See `CallHandle`. */
 	signal?: AbortSignal;
 }

@@ -35,7 +35,7 @@ export function createCwdSessionEnv(parentEnv: SessionEnv, cwd: string): Session
 			parentEnv.exec(cmd, {
 				cwd: opts?.cwd !== undefined ? resolvePath(opts.cwd) : scopedCwd,
 				env: opts?.env,
-				timeout: opts?.timeout,
+				timeoutMs: opts?.timeoutMs,
 				signal: opts?.signal,
 			}),
 		readFile: (p) => parentEnv.readFile(resolvePath(p)),
@@ -70,12 +70,12 @@ function createBashSessionEnv(bash: BashLike): SessionEnv {
 				options?: { cwd?: string; env?: Record<string, string>; signal?: AbortSignal },
 			) => Promise<ShellResult>;
 
-			// Just-bash has no native timeout option. Translate `timeout`
+			// Just-bash has no native timeout option. Translate `timeoutMs`
 			// into an AbortSignal and compose with the caller's signal so
 			// bash factories observe deadlines with the same fidelity as
 			// signal-aware sandbox connectors.
 			const timeoutSignal =
-				typeof opts?.timeout === 'number' ? AbortSignal.timeout(opts.timeout * 1000) : undefined;
+				typeof opts?.timeoutMs === 'number' ? AbortSignal.timeout(opts.timeoutMs) : undefined;
 			const mergedSignal =
 				opts?.signal && timeoutSignal
 					? AbortSignal.any([opts.signal, timeoutSignal])
@@ -142,18 +142,19 @@ function assertBashLike(value: unknown): asserts value is BashLike {
  * Interface that remote sandbox providers must implement.
  *
  * `exec()` cancellation is expressed two ways. Connectors should honor at
- * least one — preferably `timeout`, since most provider SDKs expose a
+ * least one — preferably `timeoutMs`, since most provider SDKs expose a
  * native timeout option but few support mid-flight cancellation:
  *
- *   - `timeout?: number` (seconds): the **primary** cancellation contract.
- *     Forward to the provider's native timeout option (E2B `timeoutMs`,
- *     Daytona `timeout`, Modal `timeout`, etc.). Required for parity with
- *     the LLM bash tool, which always passes a `timeout` hint when the
- *     model requests one.
+ *   - `timeoutMs?: number` (milliseconds): the **primary** cancellation
+ *     contract. Forward to the provider's native timeout option (E2B
+ *     `timeoutMs`, Daytona `timeout`, Modal `timeout`, etc.). Providers
+ *     with coarser granularity may round the value up, never down.
+ *     Required for parity with the LLM bash tool, which always passes a
+ *     deadline hint when the model requests one.
  *   - `signal?: AbortSignal` (optional): for connectors whose SDK supports
  *     mid-flight cancellation (Mirage's executor, in-process bash). Lets
  *     Programmatic callers do ad-hoc `abort()`. Connectors that can't honor it
- *     should ignore it; the deadline is still enforced via `timeout`.
+ *     should ignore it; the deadline is still enforced via `timeoutMs`.
  *
  * Connectors that support both should observe whichever fires first.
  */
@@ -171,7 +172,7 @@ export interface SandboxApi {
 		options?: {
 			cwd?: string;
 			env?: Record<string, string>;
-			timeout?: number;
+			timeoutMs?: number;
 			signal?: AbortSignal;
 		},
 	): Promise<ShellResult>;
@@ -191,7 +192,7 @@ export function createSandboxSessionEnv(api: SandboxApi, cwd: string): SessionEn
 			options?: {
 				cwd?: string;
 				env?: Record<string, string>;
-				timeout?: number;
+				timeoutMs?: number;
 				signal?: AbortSignal;
 			},
 		): Promise<ShellResult> {
@@ -208,7 +209,7 @@ export function createSandboxSessionEnv(api: SandboxApi, cwd: string): SessionEn
 			const result = await api.exec(command, {
 				cwd: options?.cwd !== undefined ? resolvePath(options.cwd) : cwd,
 				env: options?.env,
-				timeout: options?.timeout,
+				timeoutMs: options?.timeoutMs,
 				signal,
 			});
 			if (signal?.aborted) throw abortErrorFor(signal);

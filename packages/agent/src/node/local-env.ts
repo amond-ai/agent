@@ -241,11 +241,11 @@ export function createLocalSessionEnv(options: LocalSessionEnvOptions = {}): Ses
 			const signal = opts?.signal;
 			if (signal?.aborted) throw abortErrorFor(signal);
 
-			// Compose timeout (seconds) with the caller's signal so signal-blind
+			// Compose timeoutMs with the caller's signal so signal-blind
 			// callers still observe deadlines and signal-aware ones can abort
 			// mid-flight. Mirrors the bashFactory adapter's behavior.
 			const timeoutSignal =
-				typeof opts?.timeout === 'number' ? AbortSignal.timeout(opts.timeout * 1000) : undefined;
+				typeof opts?.timeoutMs === 'number' ? AbortSignal.timeout(opts.timeoutMs) : undefined;
 			const mergedSignal =
 				signal && timeoutSignal
 					? AbortSignal.any([signal, timeoutSignal])

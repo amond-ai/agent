@@ -121,7 +121,7 @@ describe('cfSandboxToSessionEnv()', () => {
 		});
 	});
 
-	it('forwards command cwd and env and converts timeout seconds to milliseconds when a wrapped command executes', async () => {
+	it('forwards command cwd env and millisecond timeout when a wrapped command executes', async () => {
 		const exec = vi.fn(async () => ({ stdout: 'done', stderr: 'warning', exitCode: 3 }));
 		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
 
@@ -129,7 +129,7 @@ describe('cfSandboxToSessionEnv()', () => {
 			env.exec('pnpm test', {
 				cwd: '/workspace/check',
 				env: { NODE_ENV: 'test' },
-				timeout: 12,
+				timeoutMs: 12_000,
 			}),
 		).resolves.toEqual({ stdout: 'done', stderr: 'warning', exitCode: 3 });
 
