@@ -25,6 +25,21 @@ export interface ExtractedImages<T> {
 	chunks: PersistedImageChunk[];
 }
 
+/**
+ * Operation entry points (prompt/skill/task) call this before any history
+ * mutation so oversized images are rejected identically across session store
+ * adapters, instead of failing later inside SQL persistence and leaving an
+ * unsaveable entry in in-memory history. The check inside
+ * `extractImageBlocks` remains as a persistence-layer invariant.
+ */
+export function assertImagesWithinLimit(images: readonly PromptImage[] | undefined): void {
+	for (const image of images ?? []) {
+		if (image.data.length > MAX_IMAGE_DATA_LENGTH) {
+			throw new Error(`[flue] Image data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`);
+		}
+	}
+}
+
 export function extractSessionEntryImages(entry: SessionEntry): ExtractedImages<SessionEntry> {
 	if (entry.type !== 'message' || !isMessageWithImageContent(entry.message)) {
 		return { value: entry, chunks: [] };

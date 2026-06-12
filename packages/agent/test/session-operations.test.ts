@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAgent, defineAgentProfile } from '../src/index.ts';
 import { createFlueContext, InMemorySessionStore } from '../src/internal.ts';
+import { MAX_IMAGE_DATA_LENGTH } from '../src/persisted-images.ts';
 import type { SessionData, SessionEnv, SessionStore } from '../src/types.ts';
 import { createNoopSessionEnv } from './fixtures/session-env.ts';
 
@@ -108,6 +109,41 @@ describe('session.prompt()', () => {
 
 		await expect(session.prompt('Review this workspace.')).rejects.toThrow('persist failed');
 		expect(provider.state.callCount).toBe(0);
+	});
+
+	it('rejects an oversized image without invoking the provider or poisoning the session when prompt() receives image data over the persistence limit', async () => {
+		const provider = createProvider([{ id: 'reviewer' }]);
+		const store = new RecordingSessionStore();
+		provider.setResponses([fauxAssistantMessage('Reviewed workspace.')]);
+		const ctx = createContext(provider, { store });
+		const harness = await ctx.init(
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
+		);
+		const session = await harness.session();
+
+		await expect(
+			session.prompt('Describe this image.', {
+				images: [
+					{
+						type: 'image',
+						data: 'a'.repeat(MAX_IMAGE_DATA_LENGTH + 1),
+						mimeType: 'image/png',
+					},
+				],
+			}),
+		).rejects.toThrow(`Image data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`);
+		expect(provider.state.callCount).toBe(0);
+
+		const response = await session.prompt('Review this workspace.');
+		expect(response.text).toBe('Reviewed workspace.');
+		const data = [...store.records.values()].at(-1);
+		expect(data?.entries).not.toContainEqual(
+			expect.objectContaining({
+				message: expect.objectContaining({
+					content: expect.arrayContaining([expect.objectContaining({ type: 'image' })]),
+				}),
+			}),
+		);
 	});
 
 	it('does not duplicate a user checkpoint when the first save fails and the failure turn saves later', async () => {

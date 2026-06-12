@@ -46,6 +46,7 @@ import {
 } from './compaction.ts';
 import { isWorkspaceSkill, skillsDirIn } from './context.ts';
 import { IMAGE_DATA_OMITTED, redactEventImages } from './event-redaction.ts';
+import { assertImagesWithinLimit } from './persisted-images.ts';
 import {
 	buildPackagedSkillPrompt,
 	buildPromptText,
@@ -1365,6 +1366,9 @@ export class Session implements FlueSession {
 		if (this.taskDepth >= MAX_TASK_DEPTH) {
 			throw new Error(`[flue] Maximum task depth (${MAX_TASK_DEPTH}) exceeded.`);
 		}
+		// Reject oversized images before creating the child session so a
+		// rejected task() call stays side-effect-free.
+		assertImagesWithinLimit(options?.images);
 		if (signal?.aborted) throw abortErrorFor(signal);
 
 		const taskId = crypto.randomUUID();
@@ -2238,6 +2242,7 @@ export class Session implements FlueSession {
 		activePackagedSkills?: Record<string, PackagedSkillDirectory>;
 		signal: AbortSignal;
 	}): Promise<PromptResponse | PromptResultResponse<unknown>> {
+		assertImagesWithinLimit(args.images);
 		const resultBundle = args.schema ? createResultTools(args.schema) : undefined;
 
 		return this.withCallOverrides(
