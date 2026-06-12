@@ -343,21 +343,31 @@ describe('createFlueClient', () => {
 	});
 
 	describe('workflows.invoke()', () => {
-		it('POSTs to workflow route and returns runId + streamUrl', async () => {
+		it('POSTs to workflow route and returns the server-provided run stream coordinates', async () => {
 			const seen: Request[] = [];
 			const client = createFlueClient({
 				baseUrl: 'https://flue.test',
 				fetch: async (input, init) => {
 					seen.push(new Request(input, init));
-					return Response.json({ status: 'accepted', runId: 'wf_abc123' }, { status: 202 });
+					return Response.json(
+						{
+							runId: 'run_abc123',
+							streamUrl: 'https://flue.test/runs/run_abc123',
+							offset: '-1',
+						},
+						{ status: 202 },
+					);
 				},
 			});
 
 			const result = await client.workflows.invoke('my-workflow', {
 				payload: { key: 'value' },
 			});
-			expect(result.runId).toBe('wf_abc123');
-			expect(result.streamUrl).toBe('https://flue.test/runs/wf_abc123');
+			expect(result.runId).toBe('run_abc123');
+			// The streamUrl/offset come from the server response verbatim —
+			// the SDK must not fabricate stream coordinates.
+			expect(result.streamUrl).toBe('https://flue.test/runs/run_abc123');
+			expect(result.offset).toBe('-1');
 			expect(seen).toHaveLength(1);
 			expect(new URL(seen[0]!.url).pathname).toBe('/workflows/my-workflow');
 			expect(seen[0]!.method).toBe('POST');
@@ -368,12 +378,15 @@ describe('createFlueClient', () => {
 			const client = createFlueClient({
 				baseUrl: 'https://flue.test',
 				fetch: async () =>
-					Response.json({ status: 'accepted', runId: 'wf_xyz' }, { status: 202 }),
+					Response.json(
+						{ runId: 'run_xyz', streamUrl: 'https://flue.test/runs/run_xyz', offset: '-1' },
+						{ status: 202 },
+					),
 			});
 
 			const result = await client.workflows.invoke('simple-workflow');
-			expect(result.runId).toBe('wf_xyz');
-			expect(result.streamUrl).toBe('https://flue.test/runs/wf_xyz');
+			expect(result.runId).toBe('run_xyz');
+			expect(result.streamUrl).toBe('https://flue.test/runs/run_xyz');
 		});
 	});
 

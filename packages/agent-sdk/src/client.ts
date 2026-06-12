@@ -23,12 +23,17 @@ export interface WorkflowInvokeOptions {
 	signal?: AbortSignal;
 }
 
-/** Result of starting a workflow run. */
+/** Result of starting a workflow run. All fields are server-provided. */
 export interface WorkflowInvokeResult {
 	/** The workflow run ID. */
 	runId: string;
 	/** Fully resolved DS-compatible stream URL for observing run events. */
 	streamUrl: string;
+	/**
+	 * Opaque DS stream offset captured at admission. Reading `streamUrl` from
+	 * this offset yields the run's events from the start.
+	 */
+	offset: string;
 }
 
 /** Options for creating a client for deployed Flue application routes. */
@@ -55,7 +60,7 @@ export interface FlueClient {
 	};
 	/** Start workflow runs. */
 	workflows: {
-		/** Start a workflow run. Returns the run ID and stream URL. */
+		/** Start a workflow run. Returns the run ID and its server-provided stream coordinates. */
 		invoke(name: string, options?: WorkflowInvokeOptions): Promise<WorkflowInvokeResult>;
 	};
 }
@@ -108,18 +113,16 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 
 		},
 		workflows: {
-			invoke: async (name, opts) => {
-				const body = await http.json<{ status: string; runId: string }>({
+			// The admission envelope IS the result: the server owns stream-URL
+			// and offset derivation (DS offsets are opaque tokens clients must
+			// not construct).
+			invoke: (name, opts) =>
+				http.json<WorkflowInvokeResult>({
 					method: 'POST',
 					path: `/workflows/${encodeURIComponent(name)}`,
 					body: opts?.payload,
 					signal: opts?.signal,
-				});
-				return {
-					runId: body.runId,
-					streamUrl: http.url(`/runs/${encodeURIComponent(body.runId)}`),
-				};
-			},
+				}),
 		},
 	};
 }
