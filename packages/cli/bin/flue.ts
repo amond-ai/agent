@@ -88,8 +88,8 @@ async function resolveApplicationCommand(
 
 // ─── Arg Parsing ────────────────────────────────────────────────────────────
 
-function printUsage() {
-	console.error(
+function printUsage(log: (message: string) => void = console.error) {
+	log(
 		'Usage:\n' +
 			'  flue dev   [--target <node|cloudflare>] [--root <path>] [--output <path>] [--config <path>] [--port <number>] [--env <path>]\n' +
 			'  flue run     <workflow> [--target node] [--payload <json>] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
@@ -643,6 +643,21 @@ function parseInitArgs(rest: string[]): InitArgs {
 
 function parseArgs(argv: string[]): ParsedArgs {
 	const [command, ...rest] = argv;
+
+	if (command === '--help' || command === '-h' || command === 'help') {
+		printUsage(console.log);
+		process.exit(0);
+	}
+
+	if (command === '--version' || command === '-v') {
+		// Resolved relative to this module: both `bin/` (source) and `dist/`
+		// (compiled) sit one level under the package root.
+		const pkg = JSON.parse(
+			fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+		) as { version: string };
+		console.log(pkg.version);
+		process.exit(0);
+	}
 
 	if (command === 'add') {
 		return parseAddArgs(rest);
