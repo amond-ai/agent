@@ -566,18 +566,36 @@ const runStreamReadHandler: MiddlewareHandler = async (c) => {
 
 	// Hono's `:runId` pattern never matches an empty segment.
 	const runId = c.req.param('runId') ?? '';
-	const streamPath = runStreamPath(runId);
-	const pointer = await lookupRunPointer(rt, c.env, runId);
 
-	return runAttachedMiddleware(c, rt.workflowRouteMiddleware?.[pointer.workflowName], async () => {
+	// Resolve the owning workflow before responding, but emit no
+	// existence-derived response yet: per-workflow route middleware is the
+	// user's auth boundary for run reads, so it must run before this route
+	// discloses whether a run exists. Runs whose pointer is missing — or
+	// whose workflow is no longer part of the current build — are uniformly
+	// not servable: a stale pointer must not bypass the middleware of the
+	// workflow that guarded it when the run was recorded.
+	const pointer = await findRunPointer(rt, c.env, runId);
+	const workflowName =
+		pointer && isRegisteredWorkflow(rt, pointer.workflowName) ? pointer.workflowName : undefined;
+	const middleware =
+		workflowName === undefined ? undefined : rt.workflowRouteMiddleware?.[workflowName];
+
+	return runAttachedMiddleware(c, middleware, async () => {
+		if (workflowName === undefined) throw new RunNotFoundError({ runId });
+
+		// `?meta` selects the run-record view of the same resource: plain
+		// `RunRecord` JSON with no Durable Streams headers. Stream params
+		// (`offset`, `live`) are ignored on this view.
+		const wantsMeta = method === 'GET' && new URL(c.req.url).searchParams.has('meta');
+
 		if (rt.target === 'node') {
-			return nodeStreamReadResponse(rt, method, streamPath, c.req.raw);
+			if (wantsMeta) {
+				return handleRunRouteRequest({ runStore: rt.runStore, workflowName, runId });
+			}
+			return nodeStreamReadResponse(rt, method, runStreamPath(runId), c.req.raw);
 		}
 
-		const response = await rt.routeRunRequest?.(c.req.raw, c.env, {
-			workflowName: pointer.workflowName,
-			runId,
-		});
+		const response = await rt.routeRunRequest?.(c.req.raw, c.env, { workflowName, runId });
 		if (response) return response;
 		throw new RouteNotFoundError({ method, path: new URL(c.req.url).pathname });
 	});
@@ -590,11 +608,12 @@ export async function handleRunById(opts: {
 	runId: string;
 }): Promise<Response> {
 	const { rt, request, env, runId } = opts;
-	const pointer = await lookupRunPointer(rt, env, runId);
+	const pointer = await findRunPointer(rt, env, runId);
+	if (!pointer) throw new RunNotFoundError({ runId });
 
 	if (rt.target === 'cloudflare') {
 		const response = await rt.routeRunRequest!(
-			normalizeRunMetadataRequest(request),
+			runMetaRequest(request, runId),
 			env,
 			{ workflowName: pointer.workflowName, runId },
 		);
@@ -664,34 +683,39 @@ function nodeStreamReadResponse(
 	return handleStreamRead({ store, path: streamPath, request });
 }
 
-async function lookupRunPointer(rt: FlueRuntime, env: unknown, runId: string): Promise<RunPointer> {
+/**
+ * Resolve a run pointer from the configured store/index, or `null` when no
+ * run with this id is recorded. Throws {@link RunStoreUnavailableError} when
+ * the runtime has no run store configured (a wiring problem, not a
+ * resource-existence outcome).
+ */
+async function findRunPointer(
+	rt: FlueRuntime,
+	env: unknown,
+	runId: string,
+): Promise<RunPointer | null> {
 	if (rt.target === 'cloudflare') {
 		if (!rt.createRunIndexForRequest || !rt.routeRunRequest) {
 			throw new RunStoreUnavailableError();
 		}
 		const index = rt.createRunIndexForRequest(env);
 		if (!index) throw new RunStoreUnavailableError();
-		const pointer = await index.lookupRun(runId);
-		if (!pointer) throw new RunNotFoundError({ runId });
-		return pointer;
+		return index.lookupRun(runId);
 	}
 	if (!rt.runStore) throw new RunStoreUnavailableError();
-	const pointer = await rt.runStore.lookupRun(runId);
-	if (!pointer) throw new RunNotFoundError({ runId });
-	return pointer;
+	return rt.runStore.lookupRun(runId);
 }
 
-/**
- * Internal path the CF workflow DO uses to distinguish admin metadata
- * fetches from public DS stream reads on `/runs/:runId`. Cannot collide
- * with user traffic (follows the agent internal-dispatch-path precedent).
- */
-export const CLOUDFLARE_WORKFLOW_INTERNAL_METADATA_PATH = '/__flue/internal/run-metadata';
-
-function normalizeRunMetadataRequest(request: Request): Request {
+/** Rewrite a request to the `?meta` (run record) view of `/runs/:runId`. */
+function runMetaRequest(request: Request, runId: string): Request {
 	const url = new URL(request.url);
-	url.pathname = CLOUDFLARE_WORKFLOW_INTERNAL_METADATA_PATH;
+	url.pathname = `/runs/${encodeURIComponent(runId)}`;
+	url.search = '?meta';
 	return new Request(url, request);
+}
+
+function isRegisteredWorkflow(rt: FlueRuntime, workflowName: string): boolean {
+	return (rt.manifest?.workflows ?? []).some((workflow) => workflow.name === workflowName);
 }
 
 function requiredRuntime(): FlueRuntime {

@@ -25,7 +25,6 @@ export {
 	CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH,
 	createCloudflareAgentRuntime,
 } from './cloudflare/agent-coordinator.ts';
-export { CLOUDFLARE_WORKFLOW_INTERNAL_METADATA_PATH } from './runtime/flue-app.ts';
 export { createSqlSessionStore } from './cloudflare/agent-execution-store.ts';
 export { createSqlRunStore } from './sql-run-store.ts';
 export { createNodeAgentCoordinator, createNodeDispatchQueue } from './node/agent-coordinator.ts';

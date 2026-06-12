@@ -418,6 +418,118 @@ describe('flue()', () => {
 		expect(await response.json()).toEqual({ blocked: true });
 	});
 
+	it('serves the run record as plain JSON when GET /runs/:runId?meta is requested', async () => {
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
+			runId: 'run_01DAILYREPORT',
+			workflowName: 'daily-report',
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: { report: 'weekly' },
+		});
+		await runStore.endRun({
+			runId: 'run_01DAILYREPORT',
+			endedAt: '2026-06-01T10:05:00.000Z',
+			durationMs: 300_000,
+			isError: false,
+			result: { delivered: true },
+		});
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
+			runStore,
+			eventStreamStore: createTestEventStreamStore(),
+		});
+		const app = new Hono();
+		app.route('/api', flue());
+
+		// Stream params are ignored on the `?meta` view.
+		const response = await app.fetch(
+			new Request('http://localhost/api/runs/run_01DAILYREPORT?meta&offset=-1&live=long-poll'),
+		);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('content-type')).toBe('application/json');
+		// The run-record view carries no Durable Streams headers.
+		expect(response.headers.get('stream-next-offset')).toBeNull();
+		expect(response.headers.get('stream-up-to-date')).toBeNull();
+		expect(response.headers.get('stream-closed')).toBeNull();
+		expect(await response.json()).toEqual({
+			runId: 'run_01DAILYREPORT',
+			workflowName: 'daily-report',
+			status: 'completed',
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: { report: 'weekly' },
+			endedAt: '2026-06-01T10:05:00.000Z',
+			isError: false,
+			durationMs: 300_000,
+			result: { delivered: true },
+		});
+	});
+
+	it('applies workflow middleware to ?meta reads', async () => {
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
+			runId: 'run_01DAILYREPORT',
+			workflowName: 'daily-report',
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
+		});
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
+			runStore,
+			workflowRouteMiddleware: {
+				'daily-report': async (c) => c.json({ blocked: true }, 401),
+			},
+		});
+		const app = new Hono();
+		app.route('/api', flue());
+
+		const response = await app.fetch(
+			new Request('http://localhost/api/runs/run_01DAILYREPORT?meta'),
+		);
+
+		expect(response.status).toBe(401);
+		expect(await response.json()).toEqual({ blocked: true });
+	});
+
+	it('returns 404 for run reads when the recorded workflow is not in the current manifest', async () => {
+		// A durable run pointer can outlive its workflow (rename/removal).
+		// Stale runs must not be served without the middleware that guarded
+		// them, so they are treated as not found.
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
+			runId: 'run_01DAILYREPORT',
+			workflowName: 'daily-report',
+			startedAt: '2026-06-01T10:00:00.000Z',
+			payload: {},
+		});
+		configureFlueRuntime({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'daily-report-v2', transports: { http: true } }] },
+			runStore,
+			eventStreamStore: createTestEventStreamStore(),
+		});
+		const app = new Hono();
+		app.route('/api', flue());
+
+		const streamRead = await app.fetch(
+			new Request('http://localhost/api/runs/run_01DAILYREPORT'),
+		);
+		expect(streamRead.status).toBe(404);
+		expect(((await streamRead.json()) as { error: { type: string } }).error.type).toBe(
+			'run_not_found',
+		);
+
+		const metaRead = await app.fetch(
+			new Request('http://localhost/api/runs/run_01DAILYREPORT?meta'),
+		);
+		expect(metaRead.status).toBe(404);
+		expect(((await metaRead.json()) as { error: { type: string } }).error.type).toBe(
+			'run_not_found',
+		);
+	});
+
 	it('returns an authored middleware response without invoking the handler when middleware short-circuits', async () => {
 		const handlerCalls = 0;
 		configureFlueRuntime({

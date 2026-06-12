@@ -215,7 +215,7 @@ describe('admin()', () => {
 		});
 	});
 
-	it('forwards Cloudflare admin run detail requests through the internal metadata path', async () => {
+	it('forwards Cloudflare admin run detail requests as public ?meta reads', async () => {
 		const runIndex = new InMemoryRunStore();
 		await runIndex.createRun({
 			runId: 'run_01DAILYREPORT',
@@ -224,7 +224,9 @@ describe('admin()', () => {
 			payload: {},
 		});
 		const routeRunRequest = vi.fn(async (request: Request) => {
-			expect(new URL(request.url).pathname).toBe('/__flue/internal/run-metadata');
+			const url = new URL(request.url);
+			expect(url.pathname).toBe('/runs/run_01DAILYREPORT');
+			expect(url.searchParams.has('meta')).toBe(true);
 			return Response.json({ runId: 'run_01DAILYREPORT', status: 'completed' });
 		});
 		configureFlueRuntime({
