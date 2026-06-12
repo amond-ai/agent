@@ -95,7 +95,7 @@ export type StartWorkflowAdmissionFn = (
 export interface HandleAgentOptions {
 	request: Request;
 	id: string;
-	agentName?: string;
+	agentName: string;
 	eventStreamStore: EventStreamStore;
 	admitAttachedSubmission: AttachedAgentSubmissionAdmission;
 }
@@ -126,7 +126,6 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 		const rawPayload = await parseJsonBody(request);
 		const payload = parseDirectAgentPayload(rawPayload);
 		const directOptions: DirectAttachedOptions = {
-			id,
 			payload,
 			admitAttachedSubmission: opts.admitAttachedSubmission,
 		};
@@ -138,10 +137,8 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 		// Creating it here would leave a phantom open stream behind when
 		// admission fails, breaking the documented 404-until-first-prompt
 		// contract for stream reads.
-		const streamPath = opts.agentName ? agentStreamPath(opts.agentName, id) : undefined;
-		const offset = streamPath
-			? (await opts.eventStreamStore.getStreamMeta(streamPath))?.nextOffset ?? '-1'
-			: '-1';
+		const streamPath = agentStreamPath(opts.agentName, id);
+		const offset = (await opts.eventStreamStore.getStreamMeta(streamPath))?.nextOffset ?? '-1';
 		if (new URL(request.url).searchParams.get('wait') === 'result') {
 			return runDirectSyncMode(directOptions, streamUrl, offset);
 		}
@@ -212,7 +209,6 @@ export interface InvokeWorkflowAttachedOptions {
 }
 
 export interface DirectAttachedOptions {
-	id: string;
 	payload: DirectAgentPayload;
 	admitAttachedSubmission: AttachedAgentSubmissionAdmission;
 	onEvent?: AttachedAgentEventCallback;
