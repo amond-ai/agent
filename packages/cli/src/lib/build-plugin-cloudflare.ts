@@ -148,8 +148,6 @@ import {
   Bash,
   InMemoryFs,
   createFlueContext,
-  InMemorySessionStore,
-  InMemoryRunStore,
   createSqlRunStore,
   CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH,
   createCloudflareAgentRuntime,
@@ -248,8 +246,6 @@ async function createDefaultEnv() {
   }));
 }
 
-const memoryWorkflowSessionStore = new InMemorySessionStore();
-const memoryRunStore = new InMemoryRunStore();
 const INTERNAL_DISPATCH_PATH = CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH;
 const dispatchQueue = {
   async enqueue(input) {
@@ -301,18 +297,18 @@ function createAgentContextForRequest(executionStore, id, payload, doInstance, r
 }
 
 function createWorkflowContextForRequest(id, runId, payload, doInstance, req, initialEventIndex, dispatchId) {
-  const storage = doInstance?.ctx?.storage;
-  const defaultStore = storage?.sql ? createSqlSessionStore(storage) : memoryWorkflowSessionStore;
+  const defaultStore = createSqlSessionStore(doInstance.ctx.storage);
   return createContextForRequest(id, runId, payload, doInstance, req, defaultStore, initialEventIndex, dispatchId);
 }
 
 function createRunStoreForRequest(doInstance) {
   // Composite run store: per-workflow-DO records plus the FlueRegistry
   // index DO for cross-deployment lookup/listing.
-  const records = doInstance?.ctx?.storage?.sql
-    ? createSqlRunStore(doInstance.ctx.storage.sql)
-    : memoryRunStore;
-  return createCloudflareRunStore(records, doInstance?.env?.FLUE_REGISTRY);
+  const sql = doInstance?.ctx?.storage?.sql;
+  if (!sql) {
+    throw new Error('[flue] Durable Object SQLite storage is unavailable — cannot create the run store. Flue Durable Object classes require SQLite-backed storage.');
+  }
+  return createCloudflareRunStore(createSqlRunStore(sql), doInstance?.env?.FLUE_REGISTRY);
 }
 
 // Falls back to the worker-level env so ambient callers (the listRuns()/
