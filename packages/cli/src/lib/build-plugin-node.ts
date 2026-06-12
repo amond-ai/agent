@@ -300,7 +300,7 @@ function startLocalWorkflow(name) {
       sendLocalMessage(ipcErrorMessage(error));
       return;
     }
-    const runId = generateWorkflowRunId(name);
+    const runId = generateWorkflowRunId();
     sendLocalMessage({ type: 'started', requestId: message.requestId, runId });
     void invokeWorkflowAttached({
       workflowName: name,
