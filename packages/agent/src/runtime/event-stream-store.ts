@@ -14,6 +14,7 @@
  * listener registration and stays synchronous.
  */
 
+import { clampLimit } from '../adapter-helpers.ts';
 import { ensureFlueSchemaVersion } from '../schema-version.ts';
 import type { SqlStorage } from '../sql-storage.ts';
 
@@ -124,7 +125,8 @@ CREATE TABLE IF NOT EXISTS flue_event_stream_entries (
   PRIMARY KEY (path, seq)
 )`;
 
-const DEFAULT_READ_LIMIT = 100;
+export const DEFAULT_READ_LIMIT = 100;
+export const MAX_READ_LIMIT = 1000;
 
 /**
  * SQLite-backed {@link EventStreamStore}.
@@ -210,7 +212,7 @@ export class SqliteEventStreamStore implements EventStreamStore {
 		}
 
 		const rawOffset = opts?.offset ?? '-1';
-		const limit = Math.min(opts?.limit ?? DEFAULT_READ_LIMIT, 1000);
+		const limit = clampLimit(opts?.limit, DEFAULT_READ_LIMIT, MAX_READ_LIMIT);
 
 		let startAfter: number;
 		if (rawOffset === '-1') {

@@ -13,6 +13,7 @@ import {
 	type RunRecord,
 	type RunStore,
 } from '../runtime/run-store.ts';
+import { clampLimit } from '../adapter-helpers.ts';
 
 export class InMemoryRunStore implements RunStore {
 	private runs = new Map<string, RunRecord>();
@@ -53,7 +54,7 @@ export class InMemoryRunStore implements RunStore {
 	}
 
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {
-		const limit = clampLimit(opts.limit);
+		const limit = clampLimit(opts.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
 		const cursor = decodeRunCursor(opts.cursor);
 		const all = [...this.runs.values()]
 			.filter((record) => matchesListFilter(record, opts))
@@ -96,9 +97,4 @@ function isAfterCursor(pointer: RunPointer, cursor: CursorTuple): boolean {
 	if (pointer.startedAt < cursor.startedAt) return true;
 	if (pointer.startedAt > cursor.startedAt) return false;
 	return pointer.runId < cursor.runId;
-}
-
-function clampLimit(limit: number | undefined): number {
-	if (!limit || !Number.isFinite(limit) || limit <= 0) return DEFAULT_LIST_LIMIT;
-	return Math.min(limit, MAX_LIST_LIMIT);
 }

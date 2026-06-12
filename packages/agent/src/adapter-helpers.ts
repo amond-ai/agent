@@ -131,3 +131,22 @@ export function deduplicateSessionDeletion(
 	void deletion.then(clear, clear);
 	return deletion;
 }
+
+// ─── Limit clamping ──────────────────────────────────────────────────────────
+
+/**
+ * Clamp a caller-supplied page/chunk limit to a safe range.
+ *
+ * Invalid, non-finite, and non-positive values fall back to `defaultLimit`;
+ * valid values are capped at `maxLimit`. Used by run listings
+ * (`DEFAULT_LIST_LIMIT`/`MAX_LIST_LIMIT`) and event stream reads
+ * (`DEFAULT_READ_LIMIT`/`MAX_READ_LIMIT`).
+ */
+export function clampLimit(
+	limit: number | undefined,
+	defaultLimit: number,
+	maxLimit: number,
+): number {
+	if (!limit || !Number.isFinite(limit) || limit <= 0) return defaultLimit;
+	return Math.min(limit, maxLimit);
+}

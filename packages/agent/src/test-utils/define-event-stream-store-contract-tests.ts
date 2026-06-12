@@ -109,6 +109,21 @@ export function defineEventStreamStoreContractTests(
 			});
 		});
 
+		it('falls back to the default read limit when limit is non-positive', async () => {
+			const store = await create();
+			await store.createStream('runs/test');
+			for (let index = 0; index < 3; index++) {
+				await store.appendEvent('runs/test', { index });
+			}
+
+			const result = await store.readEvents('runs/test', { offset: '-1', limit: 0 });
+			expect(result).toMatchObject({
+				events: [{ data: { index: 0 } }, { data: { index: 1 } }, { data: { index: 2 } }],
+				nextOffset: '0000000000000000_0000000000000002',
+				upToDate: true,
+			});
+		});
+
 		it('returns null metadata for missing streams', async () => {
 			const store = await create();
 			expect(await store.getStreamMeta('runs/missing')).toBeNull();

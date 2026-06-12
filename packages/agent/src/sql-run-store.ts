@@ -20,6 +20,7 @@ import {
 	type RunStatus,
 	type RunStore,
 } from './runtime/run-store.ts';
+import { clampLimit } from './adapter-helpers.ts';
 import { ensureFlueSchemaVersion } from './schema-version.ts';
 import type { SqlStorage } from './sql-storage.ts';
 
@@ -85,7 +86,7 @@ class SqlRunStore implements RunStore {
 	}
 
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {
-		const limit = clampLimit(opts.limit);
+		const limit = clampLimit(opts.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
 		const cursor = decodeRunCursor(opts.cursor);
 		const wheres: string[] = [];
 		const bindings: unknown[] = [];
@@ -176,9 +177,4 @@ function rowToRunPointer(row: SqlRow): RunPointer {
 		isError:
 			row.is_error === null || row.is_error === undefined ? undefined : Boolean(row.is_error),
 	};
-}
-
-function clampLimit(limit: number | undefined): number {
-	if (!limit || !Number.isFinite(limit) || limit <= 0) return DEFAULT_LIST_LIMIT;
-	return Math.min(limit, MAX_LIST_LIMIT);
 }

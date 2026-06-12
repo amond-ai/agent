@@ -67,6 +67,7 @@ export type { DispatchInput } from './runtime/dispatch-queue.ts';
 // ─── Adapter helper functions ───────────────────────────────────────────────
 
 export {
+	clampLimit,
 	deduplicateSessionDeletion,
 	isSubmissionPayload,
 	parseAcceptedAt,
@@ -100,7 +101,7 @@ export { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, encodeRunCursor, decodeRunCursor } 
 // ─── Event stream store ─────────────────────────────────────────────────────
 
 export type { EventStreamStore, EventStreamMeta, EventStreamReadResult } from './runtime/event-stream-store.ts';
-export { formatOffset, parseOffset } from './runtime/event-stream-store.ts';
+export { DEFAULT_READ_LIMIT, formatOffset, MAX_READ_LIMIT, parseOffset } from './runtime/event-stream-store.ts';
 
 // ─── Re-export session types needed for SessionStore implementations ────────
 
