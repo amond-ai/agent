@@ -61,12 +61,25 @@ export function runStreamPath(runId: string): string {
 
 export interface EventStreamReadResult {
 	events: Array<{ data: unknown; offset: string }>;
+	/**
+	 * Resume cursor: the offset of the last event delivered in this read, or
+	 * the caller's effective start offset when no events were returned. Pass
+	 * it back as `offset` to continue reading strictly after it. This is NOT
+	 * the next sequence number to be assigned — the name follows the Durable
+	 * Streams `Stream-Next-Offset` wire field, "the offset to use for the
+	 * next read".
+	 */
 	nextOffset: string;
 	upToDate: boolean;
 	closed: boolean;
 }
 
 export interface EventStreamMeta {
+	/**
+	 * Resume cursor: the offset of the last appended event, or `"-1"` when
+	 * the stream is empty. Pass it back as `offset` to read strictly after
+	 * it. This is NOT the next sequence number to be assigned.
+	 */
 	nextOffset: string;
 	closed: boolean;
 }
