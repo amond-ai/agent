@@ -23,6 +23,8 @@ export interface AgentSendResult {
 	 * this offset yields exactly this prompt's events.
 	 */
 	offset: string;
+	/** Correlates the admitted prompt with its attached agent events. */
+	submissionId: string;
 }
 
 /** Result of one agent prompt that waited for the terminal result. */

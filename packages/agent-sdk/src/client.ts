@@ -108,7 +108,8 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 					fetch: http.fetchWithHeaders.bind(http),
 				}),
 			events: async (runId, opts) => {
-				const url = http.url(`/runs/${encodeURIComponent(runId)}`);
+				const url = new URL(http.url(`/runs/${encodeURIComponent(runId)}`));
+				if (opts?.tail !== undefined) url.searchParams.set('tail', String(opts.tail));
 				const events: FlueEvent[] = [];
 				let offset = opts?.offset ?? '-1';
 				// The DS client makes exactly one request per `live: false` stream,
@@ -116,7 +117,7 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 				// remains (no Stream-Up-To-Date header). Loop until up-to-date.
 				for (;;) {
 					const res = await dsStream<FlueEvent>({
-						url,
+						url: url.toString(),
 						offset,
 						live: false,
 						json: true,

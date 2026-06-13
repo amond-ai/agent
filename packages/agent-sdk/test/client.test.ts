@@ -83,6 +83,24 @@ describe('createFlueClient', () => {
 			expect(parsed.searchParams.get('offset')).toBe('0000000000000000_0000000000000042');
 		});
 
+		it('preserves tail alongside Durable Streams query parameters', async () => {
+			let url = '';
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test/api',
+				fetch: async (input) => {
+					url = typeof input === 'string' ? input : new Request(input).url;
+					return dsJsonResponse([]);
+				},
+			});
+
+			for await (const _ of client.agents.stream('agent', 'id', { offset: '-1', tail: 100, live: false })) {
+			}
+
+			const parsed = new URL(url);
+			expect(parsed.searchParams.get('tail')).toBe('100');
+			expect(parsed.searchParams.get('offset')).toBe('-1');
+		});
+
 		it('passes auth headers to the DS stream via fetch wrapper', async () => {
 			const seenHeaders: Record<string, string>[] = [];
 			const client = createFlueClient({
@@ -331,6 +349,32 @@ describe('createFlueClient', () => {
 			expect(events[1]).toMatchObject({ type: 'run_end' });
 		});
 
+		it('preserves tail across catch-up reads', async () => {
+			const urls: URL[] = [];
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test',
+				fetch: async (input) => {
+					const url = new URL(typeof input === 'string' ? input : new Request(input).url);
+					urls.push(url);
+					if (url.searchParams.get('offset') === '-1') {
+						return dsJsonResponse([{ type: 'run_start', runId: 'r1' }], {
+							upToDate: false,
+							nextOffset: '0000000000000000_0000000000000001',
+						});
+					}
+					return dsJsonResponse([], { closed: true });
+				},
+			});
+
+			await client.runs.events('r1', { tail: 25 });
+
+			expect(urls.map((url) => url.searchParams.get('tail'))).toEqual(['25', '25']);
+			expect(urls.map((url) => url.searchParams.get('offset'))).toEqual([
+				'-1',
+				'0000000000000000_0000000000000001',
+			]);
+		});
+
 		it('returns the full history when the server splits catch-up into multiple batches', async () => {
 			const offsets: Array<string | null> = [];
 			const client = createFlueClient({
@@ -441,6 +485,35 @@ describe('createFlueClient', () => {
 	});
 
 	describe('URL resolution', () => {
+		it('resolves relative base URLs against the browser origin', async () => {
+			const original = Object.getOwnPropertyDescriptor(globalThis, 'location');
+			Object.defineProperty(globalThis, 'location', {
+				configurable: true,
+				value: { origin: 'https://app.test' },
+			});
+			try {
+				let url = '';
+				const client = createFlueClient({
+					baseUrl: '/api',
+					fetch: async (input) => {
+						url = typeof input === 'string' ? input : new Request(input).url;
+						return Response.json({ runId: 'run-1' });
+					},
+				});
+				await client.runs.get('run-1');
+				expect(url).toBe('https://app.test/api/runs/run-1?meta');
+			} finally {
+				if (original) Object.defineProperty(globalThis, 'location', original);
+				else Reflect.deleteProperty(globalThis, 'location');
+			}
+		});
+
+		it('rejects relative base URLs outside a browser', () => {
+			expect(() => createFlueClient({ baseUrl: '/api' })).toThrow(
+				'relative baseUrl requires a browser; pass an absolute URL',
+			);
+		});
+
 		it('resolves public HTTP routes beneath the base URL pathname', async () => {
 			const requests: Request[] = [];
 			const client = createFlueClient({

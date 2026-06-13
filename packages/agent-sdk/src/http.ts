@@ -45,7 +45,7 @@ export class HttpClient {
 	private token: string | undefined;
 
 	constructor(options: HttpClientOptions) {
-		this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+		this.baseUrl = resolveBaseUrl(options.baseUrl).replace(/\/+$/, '');
 		this.fetchImpl = options.fetch ?? fetch;
 		this.headers = options.headers;
 		this.token = options.token;
@@ -102,6 +102,18 @@ export class HttpClient {
 			...base,
 			...extra,
 		};
+	}
+}
+
+function resolveBaseUrl(baseUrl: string): string {
+	try {
+		return new URL(baseUrl).toString();
+	} catch {
+		const origin = globalThis.location?.origin;
+		if (!origin) {
+			throw new TypeError('relative baseUrl requires a browser; pass an absolute URL');
+		}
+		return new URL(baseUrl, origin).toString();
 	}
 }
 

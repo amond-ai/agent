@@ -59,6 +59,13 @@ export type LlmTextContent = {
 	textSignature?: string;
 };
 
+/** Normalized image content emitted with model-turn events. */
+export type LlmImageContent = {
+	type: 'image';
+	data: string;
+	mimeType: string;
+};
+
 /** Normalized reasoning content emitted with model-turn events. */
 export type LlmThinkingContent = {
 	type: 'thinking';
@@ -76,11 +83,29 @@ export type LlmToolCall = {
 	thoughtSignature?: string;
 };
 
+/** Normalized user message emitted with model-turn events. */
+export type LlmUserMessage = {
+	role: 'user';
+	content: string | (LlmTextContent | LlmImageContent)[];
+};
+
 /** Normalized assistant message emitted with model-turn events. */
 export type LlmAssistantMessage = {
 	role: 'assistant';
 	content: (LlmTextContent | LlmThinkingContent | LlmToolCall)[];
 };
+
+/** Normalized tool-result message emitted with model-turn events. */
+export type LlmToolResultMessage = {
+	role: 'toolResult';
+	toolCallId: string;
+	toolName: string;
+	content: (LlmTextContent | LlmImageContent)[];
+	isError: boolean;
+};
+
+/** Normalized message snapshot emitted with model-turn events. */
+export type LlmMessage = LlmUserMessage | LlmAssistantMessage | LlmToolResultMessage;
 
 /** Purpose of a model turn emitted with model-turn events. */
 export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
@@ -119,9 +144,9 @@ export type FlueEvent = (
 			message: unknown;
 			toolResults: unknown[];
 	  }
-	| { type: 'message_start'; message: unknown }
-	| { type: 'message_update'; message: unknown }
-	| { type: 'message_end'; message: unknown }
+	| { type: 'message_start'; message: LlmMessage; turnId: string }
+	| { type: 'message_update'; message: LlmMessage; turnId: string }
+	| { type: 'message_end'; message: LlmMessage; turnId: string }
 	| { type: 'text_delta'; text: string }
 	| { type: 'thinking_start' }
 	| { type: 'thinking_delta'; delta: string }
@@ -219,6 +244,7 @@ export type FlueEvent = (
 	runId?: string;
 	instanceId?: string;
 	dispatchId?: string;
+	submissionId?: string;
 	session?: string;
 	parentSession?: string;
 	taskId?: string;

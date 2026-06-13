@@ -14,6 +14,8 @@ import type { FlueEvent } from '../types.ts';
 export interface FlueStreamOptions {
 	/** Starting offset. Defaults to `'-1'` (full history). */
 	offset?: string;
+	/** Limit an `offset: '-1'` read to at most the most recent number of events. */
+	tail?: number;
 	/** Live tailing mode. Defaults to `true` (long-poll). */
 	live?: LiveMode;
 	/** Abort signal to cancel the stream. */
@@ -75,16 +77,19 @@ export function createFlueEventStream<T = FlueEvent>(
 	// closure scope on long-lived AbortSignals).
 	let removeExternalAbortListener: (() => void) | undefined;
 	if (streamOpts.signal) {
-		if (streamOpts.signal.aborted) {
-			abortController.abort(streamOpts.signal.reason);
+		const signal = streamOpts.signal;
+		if (signal.aborted) {
+			abortController.abort(signal.reason);
 		} else {
-			const onAbort = () => abortController.abort(streamOpts.signal!.reason);
-			streamOpts.signal.addEventListener('abort', onAbort, { once: true });
-			removeExternalAbortListener = () => streamOpts.signal!.removeEventListener('abort', onAbort);
+			const onAbort = () => abortController.abort(signal.reason);
+			signal.addEventListener('abort', onAbort, { once: true });
+			removeExternalAbortListener = () => signal.removeEventListener('abort', onAbort);
 		}
 	}
 
 	const fetch = connectionOpts.fetch ?? globalThis.fetch;
+	const url = new URL(connectionOpts.url);
+	if (streamOpts.tail !== undefined) url.searchParams.set('tail', String(streamOpts.tail));
 
 	let connectOffset = streamOpts.offset ?? '-1';
 	let responsePromise: Promise<Awaited<ReturnType<typeof stream<T>>>> | undefined;
@@ -94,7 +99,7 @@ export function createFlueEventStream<T = FlueEvent>(
 			return Promise.reject(abortController.signal.reason ?? new DOMException('Aborted', 'AbortError'));
 		}
 		responsePromise = stream<T>({
-			url: connectionOpts.url,
+			url: url.toString(),
 			offset: connectOffset,
 			live: streamOpts.live ?? true,
 			json: true,
