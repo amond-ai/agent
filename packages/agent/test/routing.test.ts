@@ -80,7 +80,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (id) => async (payload) => ({ instanceId: id, payload }),
+				assistant: (id) => async (payload) => ({ submissionId: 'submission-1', result: { instanceId: id, payload } }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -100,6 +100,7 @@ describe('flue()', () => {
 		expect(await response.json()).toEqual({
 			streamUrl: 'http://localhost/api/agents/assistant/customer-123',
 			offset: '-1',
+			submissionId: 'submission-1',
 		});
 		// 202 admissions mirror the DS stream-creation convention.
 		expect(response.headers.get('location')).toBe('http://localhost/api/agents/assistant/customer-123');
@@ -110,7 +111,7 @@ describe('flue()', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: { agents: [{ name: 'assistant', transports: { http: true }, created: true }] },
-			createAdmission: { assistant: () => async (payload) => payload },
+			createAdmission: { assistant: () => async (payload) => ({ submissionId: 'submission-1', result: payload }) },
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
 		});
@@ -136,7 +137,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (id) => async (payload) => ({ instanceId: id, payload }),
+				assistant: (id) => async (payload) => ({ submissionId: 'submission-1', result: { instanceId: id, payload } }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -157,6 +158,7 @@ describe('flue()', () => {
 			result: { instanceId: 'customer-123', payload: { message: 'hello' } },
 			streamUrl: 'http://localhost/api/agents/assistant/customer-123',
 			offset: '-1',
+			submissionId: 'submission-1',
 		});
 	});
 
@@ -210,7 +212,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (id) => async (payload) => ({ instanceId: id, payload }),
+				assistant: (id) => async (payload) => ({ submissionId: 'submission-1', result: { instanceId: id, payload } }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -273,7 +275,7 @@ describe('flue()', () => {
 						type: 'message',
 						text: (payload as { message: string }).message,
 					});
-					return undefined;
+					return { submissionId: `submission-${(payload as { message: string }).message}` };
 				},
 			},
 			createContext: createTestContext,
@@ -468,7 +470,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (_id) => async (payload) => ({ payload }),
+				assistant: (_id) => async (payload) => ({ submissionId: 'submission-1', result: { payload } }),
 			},
 			agentRouteMiddleware: {
 				assistant: async (c, next) => {
@@ -496,6 +498,7 @@ describe('flue()', () => {
 		expect(await response.json()).toEqual({
 			streamUrl: 'http://localhost/api/agents/assistant/customer-123',
 			offset: '-1',
+			submissionId: 'submission-1',
 		});
 		expect(inspected).toBe('Bearer test-token:/api/agents/assistant/customer-123');
 	});
@@ -715,7 +718,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (_id) => async (payload) => ({ message: payload.message }),
+				assistant: (_id) => async (payload) => ({ submissionId: 'submission-1', result: { message: payload.message } }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -749,7 +752,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (_id) => async (payload) => ({ message: payload.message }),
+				assistant: (_id) => async (payload) => ({ submissionId: 'submission-1', result: { message: payload.message } }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -814,7 +817,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (_id) => async (payload) => ({ message: payload.message }),
+				assistant: (_id) => async (payload) => ({ submissionId: 'submission-1', result: { message: payload.message } }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -848,7 +851,7 @@ describe('flue()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: () => async (payload) => payload,
+				assistant: () => async (payload) => ({ submissionId: 'submission-1', result: payload }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -916,7 +919,7 @@ describe('createDefaultFlueApp()', () => {
 				agents: [{ name: 'assistant', transports: { http: true }, created: true }],
 			},
 			createAdmission: {
-				assistant: (id) => async (payload) => ({ instanceId: id, payload }),
+				assistant: (id) => async (payload) => ({ submissionId: 'submission-1', result: { instanceId: id, payload } }),
 			},
 			createContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -935,6 +938,7 @@ describe('createDefaultFlueApp()', () => {
 		expect(await response.json()).toEqual({
 			streamUrl: 'http://localhost/agents/assistant/customer-123',
 			offset: '-1',
+			submissionId: 'submission-1',
 		});
 	});
 

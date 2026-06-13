@@ -1004,9 +1004,9 @@ type FlueEventVariant = (
 			message: AgentMessage;
 			toolResults: AgentMessage[];
 	  }
-	| { type: 'message_start'; message: AgentMessage }
-	| { type: 'message_update'; message: AgentMessage }
-	| { type: 'message_end'; message: AgentMessage }
+	| { type: 'message_start'; message: AgentMessage; turnId: string }
+	| { type: 'message_update'; message: AgentMessage; turnId: string }
+	| { type: 'message_end'; message: AgentMessage; turnId: string }
 	| { type: 'text_delta'; text: string }
 	| { type: 'thinking_start' }
 	| { type: 'thinking_delta'; delta: string }
@@ -1115,6 +1115,7 @@ export type FlueEventInput = FlueEventVariant & {
 	runId?: string;
 	instanceId?: string;
 	dispatchId?: string;
+	submissionId?: string;
 	session?: string;
 	parentSession?: string;
 	taskId?: string;

@@ -502,7 +502,7 @@ export function createNodeAgentCoordinator(options: {
 				payload: DirectAgentPayload,
 				onEvent?: (event: AttachedAgentEvent) => Promise<void> | void,
 				waitForResult = true,
-			): Promise<unknown> => {
+			) => {
 				if (stopping) throw new Error('[flue] Coordinator is shutting down.');
 				const agent = agents[agentName];
 				if (!agent) {
@@ -518,8 +518,8 @@ export function createNodeAgentCoordinator(options: {
 					// resolves when processSubmission settles or fails this submission.
 					ensureClaimLoop();
 					wake();
-					if (!waitForResult) return undefined;
-					return await attachment.completion;
+					if (!waitForResult) return { submissionId: input.submissionId };
+					return { submissionId: input.submissionId, result: await attachment.completion };
 				} catch (error) {
 					// If admission itself fails (before the claim loop could
 					// pick it up), fail the observer so the caller doesn't hang.

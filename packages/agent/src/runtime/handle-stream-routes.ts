@@ -9,7 +9,7 @@
  */
 
 import { InvalidRequestError, RunNotFoundError, StreamNotFoundError, toHttpResponse } from '../errors.ts';
-import type { EventStreamReadResult, EventStreamStore } from './event-stream-store.ts';
+import { formatOffset, parseOffset, type EventStreamReadResult, type EventStreamStore } from './event-stream-store.ts';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -37,6 +37,10 @@ const CURSOR_EPOCH_MS = 1728432000000;
 const CURSOR_INTERVAL_MS = 20_000;
 
 // ─── Cursor generation ──────────────────────────────────────────────────────
+
+function maxBigInt(left: bigint, right: bigint): bigint {
+	return left > right ? left : right;
+}
 
 function generateCursor(clientCursor?: string): string {
 	const currentInterval = Math.floor((Date.now() - CURSOR_EPOCH_MS) / CURSOR_INTERVAL_MS);
@@ -121,11 +125,19 @@ export async function handleStreamRead(opts: HandleStreamReadOptions): Promise<R
 
 	const offsetValues = url.searchParams.getAll('offset');
 	const offsetParam = offsetValues[0] ?? '-1';
+	const tailValues = url.searchParams.getAll('tail');
 	const liveRaw = url.searchParams.get('live');
 	const cursor = url.searchParams.get('cursor') ?? undefined;
 
 	if (offsetValues.length > 1) {
 		return streamErrorResponse(new InvalidRequestError({ reason: 'Duplicate offset parameters are not allowed.' }));
+	}
+	if (tailValues.length > 1) {
+		return streamErrorResponse(new InvalidRequestError({ reason: 'Duplicate tail parameters are not allowed.' }));
+	}
+	const tailParam = tailValues[0];
+	if (tailParam !== undefined && !/^[1-9]\d*$/.test(tailParam)) {
+		return streamErrorResponse(new InvalidRequestError({ reason: 'Tail must be an integer greater than or equal to 1.' }));
 	}
 
 	if (liveRaw !== null && offsetValues.length === 0) {
@@ -149,7 +161,11 @@ export async function handleStreamRead(opts: HandleStreamReadOptions): Promise<R
 		return streamErrorResponse(streamNotFoundError(path));
 	}
 
-	const readOffset = offsetParam === 'now' && live !== null ? meta.nextOffset : offsetParam;
+	const readOffset = offsetParam === 'now' && live !== null
+		? meta.nextOffset
+		: offsetParam === '-1' && tailParam !== undefined
+			? formatOffset(Number(maxBigInt(-1n, BigInt(parseOffset(meta.nextOffset)) - BigInt(tailParam))))
+			: offsetParam;
 
 	if (live === 'sse') {
 		return handleSseMode(store, path, readOffset, request.signal);
@@ -159,10 +175,10 @@ export async function handleStreamRead(opts: HandleStreamReadOptions): Promise<R
 	const result = await store.readEvents(path, { offset: readOffset });
 
 	if (live === 'long-poll') {
-		return handleLongPollMode(store, path, readOffset, offsetParam, cursor, result, request.signal);
+		return handleLongPollMode(store, path, readOffset, readOffset, cursor, result, request.signal);
 	}
 
-	return handleCatchUpMode(request, path, offsetParam, result);
+	return handleCatchUpMode(request, path, readOffset, result);
 }
 
 // ─── Catch-up mode ──────────────────────────────────────────────────────────

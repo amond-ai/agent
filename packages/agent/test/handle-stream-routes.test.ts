@@ -64,6 +64,108 @@ describe('handleStreamRead()', () => {
 		expect((await response.json() as { error: { type: string } }).error.type).toBe('invalid_request');
 	});
 
+	it('returns only the requested trailing events when tail modifies offset=-1', async () => {
+		const store = createStore();
+		await store.createStream('runs/test');
+		for (let index = 0; index < 105; index++) await store.appendEvent('runs/test', { index });
+
+		const first = await handleStreamRead({
+			store,
+			path: 'runs/test',
+			request: new Request('http://localhost/runs/test?offset=-1&tail=3'),
+		});
+
+		expect(first.status).toBe(200);
+		expect(await first.json()).toEqual([{ index: 102 }, { index: 103 }, { index: 104 }]);
+		expect(first.headers.get('stream-up-to-date')).toBe('true');
+	});
+
+	it('clamps tail to full history when it exceeds the stream length or the stream is empty', async () => {
+		const store = createStore();
+		await store.createStream('runs/full');
+		await store.appendEvent('runs/full', { index: 0 });
+		await store.appendEvent('runs/full', { index: 1 });
+		await store.createStream('runs/empty');
+
+		const full = await handleStreamRead({
+			store,
+			path: 'runs/full',
+			request: new Request('http://localhost/runs/full?tail=9007199254740991'),
+		});
+		const empty = await handleStreamRead({
+			store,
+			path: 'runs/empty',
+			request: new Request('http://localhost/runs/empty?tail=5'),
+		});
+
+		expect(await full.json()).toEqual([{ index: 0 }, { index: 1 }]);
+		expect(await empty.json()).toEqual([]);
+		expect(empty.headers.get('stream-next-offset')).toBe('-1');
+	});
+
+	it('ignores tail with concrete and now offsets', async () => {
+		const store = createStore();
+		await store.createStream('runs/test');
+		const firstOffset = await store.appendEvent('runs/test', { index: 0 });
+		await store.appendEvent('runs/test', { index: 1 });
+		await store.appendEvent('runs/test', { index: 2 });
+
+		const concrete = await handleStreamRead({
+			store,
+			path: 'runs/test',
+			request: new Request(`http://localhost/runs/test?offset=${firstOffset}&tail=1`),
+		});
+		const now = await handleStreamRead({
+			store,
+			path: 'runs/test',
+			request: new Request('http://localhost/runs/test?offset=now&tail=1'),
+		});
+
+		expect(await concrete.json()).toEqual([{ index: 1 }, { index: 2 }]);
+		expect(await now.json()).toEqual([]);
+	});
+
+	it('rejects invalid and duplicate tail parameters', async () => {
+		const store = createStore();
+		await store.createStream('runs/test');
+
+		for (const query of ['tail=0', 'tail=-1', 'tail=1.5', 'tail=abc', 'tail=1&tail=2']) {
+			const response = await handleStreamRead({
+				store,
+				path: 'runs/test',
+				request: new Request(`http://localhost/runs/test?${query}`),
+			});
+			expect(response.status).toBe(400);
+			expect((await response.json() as { error: { type: string } }).error.type).toBe('invalid_request');
+		}
+	});
+
+	it('applies tail to the initial read in long-poll and SSE live modes', async () => {
+		const store = createStore();
+		await store.createStream('runs/long-poll');
+		await store.appendEvent('runs/long-poll', { index: 0 });
+		await store.appendEvent('runs/long-poll', { index: 1 });
+		await store.createStream('runs/sse');
+		await store.appendEvent('runs/sse', { index: 0 });
+		await store.appendEvent('runs/sse', { index: 1 });
+		await store.closeStream('runs/sse');
+
+		const longPoll = await handleStreamRead({
+			store,
+			path: 'runs/long-poll',
+			request: new Request('http://localhost/runs/long-poll?offset=-1&tail=1&live=long-poll'),
+		});
+		const sse = await handleStreamRead({
+			store,
+			path: 'runs/sse',
+			request: new Request('http://localhost/runs/sse?offset=-1&tail=1&live=sse'),
+		});
+		const frames = parseSseFrames(await sse.text());
+
+		expect(await longPoll.json()).toEqual([{ index: 1 }]);
+		expect(JSON.parse(frames[0]!.data)).toEqual([{ index: 1 }]);
+	});
+
 	it('omits ETag for offset=now catch-up reads', async () => {
 		const store = createStore();
 		await store.createStream('runs/test');

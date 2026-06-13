@@ -122,11 +122,16 @@ interface AgentSubmissionObserverRegistry {
 	fail(submissionId: string, error: unknown): void;
 }
 
+interface AttachedAgentSubmissionReceipt {
+	readonly submissionId: string;
+	readonly result?: unknown;
+}
+
 export type AttachedAgentSubmissionAdmission = (
 	payload: DirectAgentPayload,
 	onEvent?: (event: AttachedAgentEvent) => Promise<void> | void,
 	waitForResult?: boolean,
-) => Promise<unknown>;
+) => Promise<AttachedAgentSubmissionReceipt>;
 
 export function createDispatchAgentSubmissionInput(input: DispatchInput): DispatchAgentSubmissionInput {
 	return { ...input, kind: 'dispatch', submissionId: input.dispatchId };
@@ -319,6 +324,7 @@ export async function reconcileInterruptedSubmission(
 	const payload = agentSubmissionPayload(input);
 	const dispatchId = agentSubmissionDispatchId(input);
 	const ctx = createContext(payload, dispatchId);
+	if (submission.kind === 'direct') ctx.setSubmissionId?.(submission.submissionId);
 	const inspected = (await createAgentSubmissionSessionHandler(agent, input, (s) => {
 		const state = s.inspectSubmissionInput(input);
 		return {
@@ -409,6 +415,7 @@ export async function reconcileInterruptedSubmission(
 		const streamKey = journal.streamKey;
 		const turnCheckpointLeafId = journal.checkpointLeafId;
 		const recoveryCtx = createContext(payload, dispatchId);
+		if (submission.kind === 'direct') recoveryCtx.setSubmissionId?.(submission.submissionId);
 		const recovered = (await createAgentSubmissionSessionHandler(
 			agent,
 			input,
@@ -456,6 +463,7 @@ export async function reconcileInterruptedSubmission(
 		journal.toolRequest
 	) {
 		const repairCtx = createContext(payload, dispatchId);
+		if (submission.kind === 'direct') repairCtx.setSubmissionId?.(submission.submissionId);
 		const repairedLeafId = (await createAgentSubmissionSessionHandler(
 			agent,
 			input,
@@ -516,7 +524,7 @@ function createSubmissionEventCallback(
 ): (event: Record<string, unknown>) => Promise<void> | void {
 	return (event) => {
 		if (event.type === 'run_start' || event.type === 'run_end') return;
-		const attachedEvent = { ...event, instanceId } as AttachedAgentEvent & { runId?: string };
+		const attachedEvent = { ...event, instanceId, submissionId } as AttachedAgentEvent & { runId?: string };
 		delete attachedEvent.runId;
 		return publish(submissionId, attachedEvent);
 	};
@@ -592,6 +600,7 @@ export async function processSubmission(opts: ProcessSubmissionOptions): Promise
 	const ctx = opts.createContext(agentSubmissionPayload(input), agentSubmissionDispatchId(input));
 
 	if (submission.kind === 'direct') {
+		ctx.setSubmissionId?.(submission.submissionId);
 		ctx.setEventCallback(
 			createSubmissionEventCallback(submission.submissionId, input.id, (sid, event) =>
 				observers.publish(sid, event),
@@ -680,6 +689,7 @@ async function failInterruptedSubmission(
 	const payload = agentSubmissionPayload(input);
 	const dispatchId = agentSubmissionDispatchId(input);
 	const ctx = createContext(payload, dispatchId);
+	if (submission.kind === 'direct') ctx.setSubmissionId?.(submission.submissionId);
 	// The terminal message is a best-effort diagnostic recorded in the
 	// session. If it fails (e.g., disk full, SQLite corruption), proceed
 	// to settle the submission anyway — a persistent save failure must
@@ -750,7 +760,7 @@ function submissionAttemptRef(submission: AgentSubmission): SubmissionAttemptRef
 async function openAgentSubmissionSession(
 	ctx: FlueContextInternal,
 	agent: CreatedAgent,
-	input: AgentSubmissionInput,
+	_input: AgentSubmissionInput,
 ): Promise<AgentSubmissionSession> {
 	const harness = await ctx.initializeCreatedAgent(agent, undefined);
 	// External submissions always target the default session of the default

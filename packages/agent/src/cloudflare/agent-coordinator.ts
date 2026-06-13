@@ -554,15 +554,15 @@ class CloudflareAgentCoordinator {
 		payload: DirectAgentPayload,
 		onEvent?: (event: AttachedAgentEvent) => Promise<void> | void,
 		waitForResult = true,
-	): Promise<unknown> {
+	) {
 		const input = createDirectAgentSubmissionInput({ agent: this.agentName, id: this.instance.name, payload });
 		const attachment = this.observers.attach(input.submissionId, { onEvent });
 		try {
 			await this.armSubmissionWake();
 			await this.submissions.admitDirect(input);
 			await this.reconcileSubmissions({ driverAlreadyArmed: true });
-			if (!waitForResult) return undefined;
-			return await attachment.completion;
+			if (!waitForResult) return { submissionId: input.submissionId };
+			return { submissionId: input.submissionId, result: await attachment.completion };
 		} catch (error) {
 			// If admission or reconciliation fails before the claim loop
 			// could pick up this submission, fail the observer so the

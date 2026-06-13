@@ -61,12 +61,14 @@ export interface FlueContextInternal extends FlueContext {
 	emitEvent(event: FlueEventInput): FlueEvent;
 	subscribeEvent(callback: FlueEventCallback): () => void;
 	setEventCallback(callback: FlueEventCallback | undefined): void;
+	setSubmissionId(submissionId: string | undefined): void;
 }
 
 export function createFlueContext(config: FlueContextConfig): FlueContextInternal {
 	const subscribers = new Set<FlueEventCallback>();
 	let handlerUnsubscribe: (() => void) | undefined;
 	let eventIndex = config.initialEventIndex ?? 0;
+	let submissionId: string | undefined;
 	const initializedHarnessNames = new Set<string>();
 
 	const emitEvent = (event: FlueEventInput): FlueEvent => {
@@ -74,6 +76,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 			...event,
 			...(config.runId === undefined ? { instanceId: config.id } : { runId: config.runId }),
 			...(config.dispatchId === undefined ? {} : { dispatchId: config.dispatchId }),
+			...(submissionId === undefined ? {} : { submissionId }),
 			v: 1,
 			eventIndex: eventIndex++,
 			timestamp: new Date().toISOString(),
@@ -249,6 +252,10 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 		setEventCallback(callback: FlueEventCallback | undefined): void {
 			handlerUnsubscribe?.();
 			handlerUnsubscribe = callback ? ctx.subscribeEvent(callback) : undefined;
+		},
+
+		setSubmissionId(value: string | undefined): void {
+			submissionId = value;
 		},
 	};
 

@@ -171,8 +171,8 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 		if (new URL(request.url).searchParams.get('wait') === 'result') {
 			return runDirectSyncMode(directOptions, streamUrl, offset);
 		}
-		await opts.admitAttachedSubmission(payload, undefined, false);
-		return admissionResponse({ streamUrl, offset }, streamUrl, offset);
+		const receipt = await opts.admitAttachedSubmission(payload, undefined, false);
+		return admissionResponse({ streamUrl, offset, submissionId: receipt.submissionId }, streamUrl, offset);
 	} catch (err) {
 		return toHttpResponse(err);
 	}
@@ -481,13 +481,20 @@ function findTerminalRunEvent(
 }
 
 async function runDirectSyncMode(opts: DirectAttachedOptions, streamUrl: string, offset: string): Promise<Response> {
-	const result = await invokeDirectAttached(opts);
-	return new Response(JSON.stringify({ result: result === undefined ? null : result, streamUrl, offset }), {
+	const receipt = await invokeDirectAttached(opts);
+	return new Response(JSON.stringify({
+		result: receipt.result === undefined ? null : receipt.result,
+		streamUrl,
+		offset,
+		submissionId: receipt.submissionId,
+	}), {
 		headers: { 'content-type': 'application/json' },
 	});
 }
 
-export async function invokeDirectAttached(opts: DirectAttachedOptions): Promise<unknown> {
+export async function invokeDirectAttached(
+	opts: DirectAttachedOptions,
+): ReturnType<AttachedAgentSubmissionAdmission> {
 	return opts.admitAttachedSubmission(opts.payload, opts.onEvent);
 }
 

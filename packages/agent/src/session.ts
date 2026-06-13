@@ -519,21 +519,27 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					break;
 				case 'turn_start':
 					this.turnStartTime = Date.now();
-					this.activeTurnId = generateTurnId();
+					this.activeTurnId ??= generateTurnId();
 					this.activeTurnCanCommitJournal = false;
 					this.emit({ type: 'turn_start', turnId: this.activeTurnId, purpose: 'agent' });
 					break;
-				case 'message_start':
-					this.emit({ type: 'message_start', message: event.message });
+				case 'message_start': {
+					const turnId = this.activeTurnId ?? generateTurnId();
+					this.activeTurnId = turnId;
+					this.emit({ type: 'message_start', message: event.message, turnId });
 					break;
+				}
 				case 'message_update': {
 					// The raw pi-ai assistant event feeds the durable chunk
 					// segments used for interrupted-stream recovery; the public
 					// message_update event carries only the partial message.
 					this.activeStreamChunkWriter?.write(event.assistantMessageEvent);
+					const turnId = this.activeTurnId ?? generateTurnId();
+					this.activeTurnId = turnId;
 					this.emit({
 						type: 'message_update',
 						message: event.message,
+						turnId,
 					});
 					const aEvent = event.assistantMessageEvent;
 					if (aEvent.type === 'text_delta') {
@@ -547,7 +553,9 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					}
 					break;
 				}
-				case 'message_end':
+				case 'message_end': {
+					const turnId = this.activeTurnId ?? generateTurnId();
+					this.activeTurnId = turnId;
 					if (event.message.role === 'assistant') {
 						const toolCalls = event.message.content.filter((content) => content.type === 'toolCall');
 						if (toolCalls.length > 0) {
@@ -561,8 +569,9 @@ export class Session implements FlueSession, AgentSubmissionSession {
 						}
 					}
 					if (event.message.role === 'user') await this.checkpointHarnessMessages();
-					this.emit({ type: 'message_end', message: event.message });
+					this.emit({ type: 'message_end', message: event.message, turnId });
 					break;
+				}
 				case 'tool_execution_start':
 					this.toolStartTimes.set(event.toolCallId, Date.now());
 					this.emit({

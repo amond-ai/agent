@@ -1782,9 +1782,10 @@ leaseExpiresAt: 1,
 			const { coordinator, executionStore } = await createFauxCoordinator(dbPath, provider);
 
 			const admit = coordinator.createAdmission('assistant', 'instance-1');
-			const result = await admit({ message: 'Hello from direct prompt' });
+			const receipt = await admit({ message: 'Hello from direct prompt' });
 
-			expect(result).toBeDefined();
+			expect(receipt.submissionId).toEqual(expect.any(String));
+			expect(receipt.result).toBeDefined();
 			// The submission should be settled in the store.
 			expect(await executionStore.submissions.hasUnsettledSubmissions()).toBe(false);
 		});
@@ -1815,12 +1816,18 @@ leaseExpiresAt: 1,
 
 			// Should have received at least one event during processing.
 			expect(events.length).toBeGreaterThan(0);
-			// Events should have instanceId set and no runId.
+			const submissionIds = new Set<string>();
 			for (const event of events) {
 				const e = event as Record<string, unknown>;
 				expect(e.instanceId).toBe('instance-1');
 				expect(e).not.toHaveProperty('runId');
+				expect(e.submissionId).toEqual(expect.any(String));
+				submissionIds.add(e.submissionId as string);
+				if (e.type === 'message_start' || e.type === 'message_update' || e.type === 'message_end') {
+					expect(e.turnId).toEqual(expect.any(String));
+				}
 			}
+			expect(submissionIds.size).toBe(1);
 		});
 
 		it('resolves the waiting direct prompt with the real result when completion settlement loses the attempt CAS', async () => {
@@ -1835,9 +1842,9 @@ leaseExpiresAt: 1,
 			executionStore.submissions.completeSubmission = async () => false;
 
 			const admit = coordinator.createAdmission('assistant', 'instance-1');
-			const result = await admit({ message: 'Hello superseded' });
+			const receipt = await admit({ message: 'Hello superseded' });
 
-			expect(result).toMatchObject({ text: 'Superseded but real reply.' });
+			expect(receipt.result).toMatchObject({ text: 'Superseded but real reply.' });
 		});
 
 		it('queues concurrent same-session direct prompts instead of rejecting', async () => {
@@ -2019,9 +2026,9 @@ leaseExpiresAt: 1,
 			};
 
 			const admit = coordinator.createAdmission('assistant', 'instance-1');
-			const result = await admit({ message: 'Hello reconciled' });
+			const receipt = await admit({ message: 'Hello reconciled' });
 
-			expect(result).toMatchObject({
+			expect(receipt.result).toMatchObject({
 				text: 'Completed canonical response.',
 				model: { provider: 'test', id: 'test-model' },
 			});
@@ -2033,7 +2040,7 @@ leaseExpiresAt: 1,
 				.map((event) => event.data as Record<string, unknown>)
 				.filter((event) => event.type === 'submission_settled');
 			expect(settledEvents).toMatchObject([
-				{ outcome: 'completed', submissionId: expect.any(String) },
+				{ outcome: 'completed', submissionId: receipt.submissionId },
 			]);
 		});
 
@@ -2100,6 +2107,7 @@ leaseExpiresAt: 1,
 			expect(settledEvents).toMatchObject([
 				{ outcome: 'failed', submissionId: expect.any(String) },
 			]);
+			expect(settledEvents[0]).toHaveProperty('submissionId');
 		});
 
 		it('silently recovers a direct prompt after restart with no attached observer', async () => {
