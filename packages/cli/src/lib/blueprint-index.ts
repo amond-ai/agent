@@ -37,16 +37,18 @@ export function validateBlueprintBody(source: string, file: string, version: num
 
 	for (const [index, line] of lines.entries()) {
 		const fenceMatch = line.match(/^\s*(`{3,}|~{3,})/);
-		if (fenceMatch) {
-			const marker = fenceMatch[1]![0]!;
+		const marker = fenceMatch?.[1]?.[0];
+		if (marker) {
 			if (!fence) fence = marker;
 			else if (fence === marker) fence = undefined;
 			continue;
 		}
 		if (fence) continue;
 		const headingMatch = line.match(/^(#{2,3})\s+(.+?)\s*$/);
-		if (headingMatch) {
-			headings.push({ level: headingMatch[1]!.length, text: headingMatch[2]!, line: index });
+		const hashes = headingMatch?.[1];
+		const text = headingMatch?.[2];
+		if (hashes && text) {
+			headings.push({ level: hashes.length, text, line: index });
 		}
 	}
 
@@ -56,7 +58,10 @@ export function validateBlueprintBody(source: string, file: string, version: num
 	if (upgradeGuides.length !== 1) {
 		throw new Error(`[blueprints] ${file}: body must contain exactly one "## Upgrade Guide".`);
 	}
-	const upgradeGuide = upgradeGuides[0]!;
+	const [upgradeGuide] = upgradeGuides;
+	if (!upgradeGuide) {
+		throw new Error(`[blueprints] ${file}: body must contain exactly one "## Upgrade Guide".`);
+	}
 	const lastH2 = headings.filter((heading) => heading.level === 2).at(-1);
 	if (lastH2 !== upgradeGuide) {
 		throw new Error(`[blueprints] ${file}: "## Upgrade Guide" must be the final H2 section.`);
@@ -68,9 +73,8 @@ export function validateBlueprintBody(source: string, file: string, version: num
 			`[blueprints] ${file}: Upgrade Guide must contain exactly ${version} version entries.`,
 		);
 	}
-	for (let index = 0; index < entries.length; index++) {
+	for (const [index, entry] of entries.entries()) {
 		const expectedVersion = index + 1;
-		const entry = entries[index]!;
 		if (!new RegExp(`^Version ${expectedVersion} — \\d{4}-\\d{2}-\\d{2}$`).test(entry.text)) {
 			throw new Error(
 				`[blueprints] ${file}: Upgrade Guide entries must be contiguous and use "### Version N — YYYY-MM-DD" headings; expected Version ${expectedVersion}.`,
@@ -86,14 +90,15 @@ export function validateBlueprintBody(source: string, file: string, version: num
 			}
 		} else {
 			const diff = /```diff[^\n]*\n([\s\S]*?)\n```/g;
-			let match: RegExpExecArray | null;
+			let match = diff.exec(body);
 			let hasUnifiedDiff = false;
-			while ((match = diff.exec(body))) {
-				const diffBody = match[1]!;
-				if (/^--- .+$/m.test(diffBody) && /^\+\+\+ .+$/m.test(diffBody)) {
+			while (match) {
+				const diffBody = match[1];
+				if (diffBody && /^--- .+$/m.test(diffBody) && /^\+\+\+ .+$/m.test(diffBody)) {
 					hasUnifiedDiff = true;
 					break;
 				}
+				match = diff.exec(body);
 			}
 			if (!hasUnifiedDiff) {
 				throw new Error(

@@ -301,10 +301,8 @@ test('handles redirects without crashing', async () => {
 	// receives the request. The security guidance is to use the final
 	// HTTPS URL directly; redirect rejection is no longer enforced.
 	// We keep the test to verify the CLI doesn't crash on redirects.
-	let redirectTargetHit = false;
 	await withServer(
 		(_request, response) => {
-			redirectTargetHit = true;
 			runMetaJson(response, 'completed');
 		},
 		async (redirectServer) => {
