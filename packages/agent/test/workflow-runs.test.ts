@@ -307,7 +307,8 @@ describe('workflow run lifecycle', () => {
 			});
 			const runId = (await runStore.listRuns()).runs[0]?.runId;
 			expect(runId).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
-			const runRecord = await runStore.getRun(runId!);
+			if (!runId) throw new Error('Expected an errored run record.');
+			const runRecord = await runStore.getRun(runId);
 			expect(runRecord).toEqual({
 				runId,
 				workflowName: 'daily-report',

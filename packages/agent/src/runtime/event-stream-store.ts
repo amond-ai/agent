@@ -43,10 +43,11 @@ export function formatOffset(seq: number): string {
 export function parseOffset(offset: string): number {
 	if (offset === '-1') return -1;
 	const match = /^\d+_(\d+)$/.exec(offset);
-	if (!match) {
+	const sequence = match?.[1];
+	if (!sequence) {
 		throw new Error(`[flue] Invalid stream offset: "${offset}".`);
 	}
-	return parseInt(match[1]!, 10);
+	return parseInt(sequence, 10);
 }
 
 export function agentStreamPath(agentName: string, instanceId: string): string {
@@ -197,7 +198,9 @@ export class SqliteEventStreamStore implements EventStreamStore {
 			throw new Error(`[flue] Event stream "${path}" is closed.`);
 		}
 
-		const offset = (updated[0]!.next_offset as number) - 1;
+		const [updatedRow] = updated;
+		if (!updatedRow) throw new Error(`[flue] Event stream "${path}" could not be updated.`);
+		const offset = (updatedRow.next_offset as number) - 1;
 
 		this.sql.exec(
 			`INSERT INTO flue_event_stream_entries (path, seq, data) VALUES (?, ?, ?)`,
@@ -256,7 +259,8 @@ export class SqliteEventStreamStore implements EventStreamStore {
 			offset: formatOffset(row.seq as number),
 		}));
 
-		const lastSeq = events.length > 0 ? (page[page.length - 1]!.seq as number) : -1;
+		const lastRow = page.at(-1);
+		const lastSeq = lastRow ? (lastRow.seq as number) : -1;
 		const upToDate = rows.length <= limit;
 
 		const nextOffset = events.length > 0
@@ -289,8 +293,8 @@ export class SqliteEventStreamStore implements EventStreamStore {
 			)
 			.toArray();
 
-		if (rows.length === 0) return null;
-		const row = rows[0]!;
+		const [row] = rows;
+		if (!row) return null;
 		const writeHead = row.next_offset as number;
 		return {
 			nextOffset: formatOffset(writeHead - 1),
@@ -305,9 +309,10 @@ export class SqliteEventStreamStore implements EventStreamStore {
 			this.listeners.set(path, bucket);
 		}
 		bucket.add(listener);
+		const subscribedBucket = bucket;
 		return () => {
-			bucket!.delete(listener);
-			if (bucket!.size === 0) {
+			subscribedBucket.delete(listener);
+			if (subscribedBucket.size === 0) {
 				this.listeners.delete(path);
 			}
 		};

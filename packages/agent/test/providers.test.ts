@@ -78,7 +78,9 @@ describe('registerProvider()', () => {
 		const response = await session.prompt('Say hello.');
 
 		expect(seen).toHaveLength(1);
-		const url = new URL(seen[0]!.url);
+		const [request] = seen;
+		if (!request) throw new Error('Expected a provider request.');
+		const url = new URL(request.url);
 		expect(url.origin).toBe('http://providers.test');
 		expect(url.pathname).toBe('/v1/chat/completions');
 		expect(response.text).toBe('Hello from the registered provider.');
@@ -101,8 +103,10 @@ describe('registerProvider()', () => {
 		await session.prompt('Say hello.');
 
 		expect(seen).toHaveLength(1);
-		expect(seen[0]!.headers.get('authorization')).toBe('Bearer sk-secret');
-		expect(seen[0]!.headers.get('x-gateway-tenant')).toBe('acme');
+		const [request] = seen;
+		if (!request) throw new Error('Expected a provider request.');
+		expect(request.headers.get('authorization')).toBe('Bearer sk-secret');
+		expect(request.headers.get('x-gateway-tenant')).toBe('acme');
 	});
 
 	it('preserves catalog model metadata when a catalog provider id is registered with transport overrides', () => {

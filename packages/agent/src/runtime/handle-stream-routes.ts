@@ -73,7 +73,7 @@ function generateETag(
 
 function encodeSseData(payload: string): string {
 	const lines = payload.split(/\r\n|\r|\n/);
-	return lines.map((line) => `data:${line}`).join('\n') + '\n\n';
+	return `${lines.map((line) => `data:${line}`).join('\n')}\n\n`;
 }
 
 // ─── HEAD handler ───────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export async function handleStreamHead(store: EventStreamStore, path: string): P
 		headers[STREAM_CLOSED] = 'true';
 	}
 
-	headers['etag'] = generateETag(path, '-1', meta.nextOffset, meta.closed);
+	headers.etag = generateETag(path, '-1', meta.nextOffset, meta.closed);
 
 	return new Response(null, { status: 200, headers });
 }

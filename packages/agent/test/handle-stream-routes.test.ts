@@ -163,7 +163,10 @@ describe('handleStreamRead()', () => {
 		const frames = parseSseFrames(await sse.text());
 
 		expect(await longPoll.json()).toEqual([{ index: 1 }]);
-		expect(JSON.parse(frames[0]!.data)).toEqual([{ index: 1 }]);
+		expect(frames).toHaveLength(2);
+		const [dataFrame] = frames;
+		if (!dataFrame) throw new Error('Expected an SSE data frame.');
+		expect(JSON.parse(dataFrame.data)).toEqual([{ index: 1 }]);
 	});
 
 	it('omits ETag for offset=now catch-up reads', async () => {
@@ -265,12 +268,13 @@ describe('handleStreamRead()', () => {
 		expect(first.status).toBe(200);
 		const etag = first.headers.get('etag');
 		expect(etag).toBeTruthy();
+		if (!etag) throw new Error('Expected an ETag header.');
 
 		const replay = await handleStreamRead({
 			store,
 			path: 'runs/test',
 			request: new Request('http://localhost/runs/test?offset=-1', {
-				headers: { 'if-none-match': etag! },
+				headers: { 'if-none-match': etag },
 			}),
 		});
 
@@ -348,8 +352,10 @@ describe('handleStreamRead()', () => {
 		const frames = parseSseFrames(body);
 
 		expect(frames.map((frame) => frame.event)).toEqual(['data', 'control']);
-		expect(JSON.parse(frames[0]!.data)).toEqual([{ n: 1 }, { n: 2 }]);
-		expect(JSON.parse(frames[1]!.data)).toEqual({
+		const [dataFrame, controlFrame] = frames;
+		if (!dataFrame || !controlFrame) throw new Error('Expected SSE data and control frames.');
+		expect(JSON.parse(dataFrame.data)).toEqual([{ n: 1 }, { n: 2 }]);
+		expect(JSON.parse(controlFrame.data)).toEqual({
 			streamNextOffset: lastOffset,
 			streamClosed: true,
 		});

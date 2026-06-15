@@ -171,10 +171,11 @@ export function defineStoreContractTests(
 
 			it('replaces existing session entries when session data is overwritten', async () => {
 				const store = await create();
-				await store.sessions.save('s1', sessionData());
+				const data = sessionData();
+				await store.sessions.save('s1', data);
 				const updated = {
-					...sessionData(),
-					entries: [sessionData().entries[0]!],
+					...data,
+					entries: data.entries.slice(0, 1),
 					leafId: 'entry-1',
 					updatedAt: '2026-06-04T00:00:00.000Z',
 				};
@@ -770,7 +771,10 @@ export function defineStoreContractTests(
 				expect(markers).toEqual([
 					{ submissionId: 'dispatch-1', attemptId: 'attempt-1', createdAt: expect.any(Number) },
 				]);
-				expect(markers[0]!.createdAt).toBeGreaterThanOrEqual(before);
+				const [marker] = markers;
+				expect(marker).toBeDefined();
+				if (!marker) throw new Error('Expected an attempt marker.');
+				expect(marker.createdAt).toBeGreaterThanOrEqual(before);
 			});
 
 			it('keeps one marker with the original timestamp when the same attempt is inserted twice', async () => {
