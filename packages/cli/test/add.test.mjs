@@ -44,6 +44,9 @@ before(async () => {
 		const slug = /^\/([^/]+)\.md$/.exec(request.url ?? '')?.[1];
 		const files = {
 			channel: 'channel.md',
+			tooling: 'tooling.md',
+			braintrust: 'tooling--braintrust.md',
+			sentry: 'tooling--sentry.md',
 			github: 'channel--github.md',
 			stripe: 'channel--stripe.md',
 			notion: 'channel--notion.md',
@@ -162,9 +165,15 @@ describe('flue add', () => {
 		assert.match(result.stderr, /flue add database supabase\s+database\s+https:\/\/supabase\.com/);
 		assert.match(result.stderr, /flue add database turso\s+database\s+https:\/\/turso\.tech/);
 		assert.match(result.stderr, /flue add database valkey\s+database\s+https:\/\/valkey\.io/);
+		assert.match(
+			result.stderr,
+			/flue add tooling braintrust\s+tooling\s+https:\/\/www\.braintrust\.dev/,
+		);
+		assert.match(result.stderr, /flue add tooling sentry\s+tooling\s+https:\/\/sentry\.io/);
 		assert.ok(result.stderr.includes('flue add sandbox <url>'));
 		assert.ok(result.stderr.includes('flue add channel <url>'));
 		assert.ok(result.stderr.includes('flue add database <url>'));
+		assert.ok(result.stderr.includes('flue add tooling <url>'));
 	});
 
 	it('prints sandbox blueprint paths under sandboxes when a provider is selected', async () => {
@@ -471,6 +480,32 @@ describe('flue add', () => {
 		}
 	});
 
+	it('prints the Braintrust tooling blueprint with target-agnostic tracing', async () => {
+		const result = await runCli(['add', 'tooling', 'braintrust', '--print']);
+
+		assert.equal(result.code, 0);
+		assert.ok(result.stdout.includes('braintrust@3.17.0'));
+		assert.ok(result.stdout.includes('braintrustFlueObserver'));
+		assert.ok(result.stdout.includes("event.type === 'tool'"));
+		assert.ok(result.stdout.includes("type: 'tool_call'"));
+		assert.ok(result.stdout.includes("event.type === 'run_resume'"));
+		assert.ok(result.stdout.includes('// flue-blueprint: tooling/braintrust@1'));
+		assert.ok(result.stdout.includes('Node.js and Cloudflare'));
+		assert.ok(result.stdout.includes('This comparison is required when the marker is missing.'));
+	});
+
+	it('prints the Sentry tooling blueprint with target-specific integration paths', async () => {
+		const result = await runCli(['add', 'tooling', 'sentry', '--print']);
+
+		assert.equal(result.code, 0);
+		assert.ok(result.stdout.includes('@sentry/node'));
+		assert.ok(result.stdout.includes('@sentry/cloudflare'));
+		assert.ok(result.stdout.includes('instrumentDurableObjectWithSentry'));
+		assert.ok(result.stdout.includes("{ types: ['run_start', 'run_resume', 'run_end', 'log'] }"));
+		assert.ok(result.stdout.includes('// flue-blueprint: tooling/sentry@1'));
+		assert.ok(result.stdout.includes('This comparison is required when the marker is missing.'));
+	});
+
 	it('substitutes any absolute research URL into the generic kind blueprint', async () => {
 		const url = 'git+ssh://git@example.test/provider.git';
 		const result = await runCli(['add', 'channel', url, '--print']);
@@ -490,7 +525,7 @@ describe('flue add', () => {
 	it('rejects an unknown kind with every known kind in the guidance', async () => {
 		const result = await runCli(['add', 'unknown', 'https://docs.example.test', '--print']);
 		assert.equal(result.code, 1);
-		assert.ok(result.stderr.includes('Known kinds: channel, database, sandbox'));
+		assert.ok(result.stderr.includes('Known kinds: channel, database, sandbox, tooling'));
 	});
 
 	it('rejects the removed category flag', async () => {
@@ -578,6 +613,24 @@ describe('flue update', () => {
 			assert.equal(updated.stdout, added.stdout);
 			assert.ok(updated.stdout.includes(`// flue-blueprint: database/${name}@1`));
 		}
+	});
+
+	it('prints the exact same Braintrust blueprint as flue add', async () => {
+		const added = await runCli(['add', 'tooling', 'braintrust', '--print']);
+		const updated = await runCli(['update', 'tooling', 'braintrust', '--print']);
+
+		assert.equal(updated.code, 0);
+		assert.equal(updated.stdout, added.stdout);
+		assert.ok(updated.stdout.includes('// flue-blueprint: tooling/braintrust@1'));
+	});
+
+	it('prints the exact same Sentry blueprint as flue add', async () => {
+		const added = await runCli(['add', 'tooling', 'sentry', '--print']);
+		const updated = await runCli(['update', 'tooling', 'sentry', '--print']);
+
+		assert.equal(updated.code, 0);
+		assert.equal(updated.stdout, added.stdout);
+		assert.ok(updated.stdout.includes('// flue-blueprint: tooling/sentry@1'));
 	});
 
 	it('prints the exact same URL-substituted blueprint as flue add', async () => {

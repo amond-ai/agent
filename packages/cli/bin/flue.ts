@@ -1745,6 +1745,7 @@ const blueprintResultByKind: Record<string, string> = {
 	sandbox: 'sandbox adapter',
 	database: 'database adapter',
 	channel: 'channel',
+	tooling: 'tooling integration',
 };
 
 function kindRootHint(): string {
