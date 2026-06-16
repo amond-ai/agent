@@ -200,7 +200,7 @@ describe('flue add', () => {
 
 		assert.equal(result.code, 0);
 		assert.ok(result.stdout.includes('@flue/stripe'));
-		assert.ok(result.stdout.includes('stripe@^22.2.0'));
+		assert.ok(result.stdout.includes('stripe@^22.2.1'));
 		assert.ok(result.stdout.includes('/channels/stripe/webhook'));
 		assert.ok(result.stdout.includes('Stripe.createFetchHttpClient()'));
 		assert.ok(result.stdout.includes("eventPayload: 'thin'"));
@@ -212,7 +212,7 @@ describe('flue add', () => {
 
 		assert.equal(result.code, 0);
 		assert.ok(result.stdout.includes('@flue/notion'));
-		assert.ok(result.stdout.includes('@notionhq/client@5.22.0'));
+		assert.ok(result.stdout.includes('@notionhq/client@^5.22.0'));
 		assert.ok(result.stdout.includes('/channels/notion/webhook'));
 		assert.ok(result.stdout.includes('verification_token'));
 		assert.ok(result.stdout.includes('X-Notion-Signature'));
@@ -224,7 +224,7 @@ describe('flue add', () => {
 
 		assert.equal(result.code, 0);
 		assert.ok(result.stdout.includes('@flue/resend'));
-		assert.ok(result.stdout.includes('resend@6.12.4'));
+		assert.ok(result.stdout.includes('resend@^6.12.4'));
 		assert.ok(result.stdout.includes('@types/node'));
 		assert.ok(result.stdout.includes('@types/react'));
 		assert.ok(result.stdout.includes('/channels/resend/webhook'));
@@ -240,7 +240,7 @@ describe('flue add', () => {
 
 		assert.equal(result.code, 0);
 		assert.ok(result.stdout.includes('@flue/shopify'));
-		assert.ok(result.stdout.includes('@shopify/admin-api-client@1.1.2'));
+		assert.ok(result.stdout.includes('@shopify/admin-api-client@^1.1.2'));
 		assert.ok(result.stdout.includes('@types/node'));
 		assert.ok(result.stdout.includes('/channels/shopify/webhook'));
 		assert.ok(result.stdout.includes('apiVersion: ADMIN_API_VERSION'));
@@ -257,7 +257,7 @@ describe('flue add', () => {
 
 		assert.equal(result.code, 0);
 		assert.ok(result.stdout.includes('@flue/intercom'));
-		assert.ok(result.stdout.includes('intercom-client@7.0.3'));
+		assert.ok(result.stdout.includes('intercom-client@^7.0.3'));
 		assert.ok(result.stdout.includes('/channels/intercom/webhook'));
 		assert.ok(result.stdout.includes('HEAD'));
 		assert.ok(result.stdout.includes('X-Hub-Signature'));
@@ -271,7 +271,7 @@ describe('flue add', () => {
 
 		assert.equal(result.code, 0);
 		assert.ok(result.stdout.includes('@flue/zendesk'));
-		assert.ok(result.stdout.includes('lossless-json@4.3.0'));
+		assert.ok(result.stdout.includes('lossless-json@^4.3.0'));
 		assert.ok(result.stdout.includes('/channels/zendesk/webhook'));
 		assert.ok(result.stdout.includes('X-Zendesk-Webhook-Signature'));
 		assert.ok(result.stdout.includes('X-Zendesk-Webhook-Signature-Timestamp'));
@@ -356,7 +356,7 @@ describe('flue add', () => {
 		assert.ok(result.stdout.includes('export const channel'));
 		assert.ok(result.stdout.includes('export const client'));
 		assert.ok(result.stdout.includes('/channels/telegram/webhook'));
-		assert.ok(result.stdout.includes('grammy@^1.43.0'));
+		assert.ok(result.stdout.includes('grammy@^1.44.0'));
 		assert.ok(result.stdout.includes('nodejs_compat'));
 	});
 
@@ -502,7 +502,10 @@ describe('flue add', () => {
 		assert.ok(result.stdout.includes('@sentry/node'));
 		assert.ok(result.stdout.includes('@sentry/cloudflare'));
 		assert.ok(result.stdout.includes('instrumentDurableObjectWithSentry'));
-		assert.ok(result.stdout.includes("{ types: ['run_start', 'run_resume', 'run_end', 'log'] }"));
+		assert.match(
+			result.stdout,
+			/types:\s*\[[^\]]*'operation'[^\]]*'submission_settled'[^\]]*'log'[^\]]*\]/s,
+		);
 		assert.ok(result.stdout.includes('// flue-blueprint: tooling/sentry@1'));
 		assert.ok(result.stdout.includes('This comparison is required when the marker is missing.'));
 	});
