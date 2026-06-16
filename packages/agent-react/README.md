@@ -59,12 +59,12 @@ interface UseFlueAgentOptions {
 
 Connects to one persistent agent instance, reconstructs its transcript, and follows new events.
 
-| Option | Description |
-| --- | --- |
-| `name` | Agent module name. |
-| `id` | Agent instance ID. Omit to keep the hook dormant. |
+| Option    | Description                                                                    |
+| --------- | ------------------------------------------------------------------------------ |
+| `name`    | Agent module name.                                                             |
+| `id`      | Agent instance ID. Omit to keep the hook dormant.                              |
 | `history` | Positive integer event limit. Defaults to `100`; use `'all'` for full history. |
-| `client` | SDK client override. |
+| `client`  | SDK client override.                                                           |
 
 ```ts
 interface UseFlueAgentResult {
@@ -78,21 +78,16 @@ interface SendMessageOptions {
   images?: AgentPromptImage[];
 }
 
-type AgentStatus =
-  | 'idle'
-  | 'connecting'
-  | 'submitted'
-  | 'streaming'
-  | 'error';
+type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error';
 ```
 
-| Status | Meaning |
-| --- | --- |
-| `idle` | No local prompt is active, or a new instance has no stream. |
+| Status       | Meaning                                                                  |
+| ------------ | ------------------------------------------------------------------------ |
+| `idle`       | No local prompt is active, or a new instance has no stream.              |
 | `connecting` | Initial connection or retry. `error` holds the latest retryable failure. |
-| `submitted` | A prompt is being admitted or awaits attributable assistant activity. |
-| `streaming` | Assistant activity for this client's submission is arriving. |
-| `error` | Prompt admission or stream observation failed terminally. |
+| `submitted`  | A prompt is being admitted or awaits attributable assistant activity.    |
+| `streaming`  | Assistant activity for this client's submission is arriving.             |
+| `error`      | Prompt admission or stream observation failed terminally.                |
 
 ### `sendMessage()`
 
@@ -149,7 +144,7 @@ type UIMessagePart =
   | { type: 'file'; mediaType: string; url: string };
 ```
 
-Message snapshots are authoritative for text and reasoning. Tool calls progress from input to output or error; tool input arrives complete, so there is no `input-streaming` state.
+Streaming deltas provide best-effort live text and reasoning progress; `message_end` is the authoritative completed assistant message. A hook that attaches after generation starts may miss earlier partial output until `message_end` arrives. This does not affect the runtime's internal interrupted-turn recovery. Tool calls progress from input to output or error; tool input arrives complete, so there is no `input-streaming` state.
 
 Durable events omit image bytes, so replayed file parts contain a non-renderable redaction sentinel in `url`. Images sent by the current client retain their usable data URLs when reconciled. Message IDs remain stable across replay: assistant IDs derive from `turnId`, and direct user IDs from `submissionId`.
 
@@ -166,10 +161,10 @@ interface UseFlueWorkflowOptions {
 
 Replays and follows one workflow run. Invoke the workflow separately through `useFlueClient()` or another SDK client.
 
-| Option | Description |
-| --- | --- |
-| `runId` | Workflow run ID. Omit to keep the hook dormant. |
-| `client` | SDK client override. |
+| Option   | Description                                     |
+| -------- | ----------------------------------------------- |
+| `runId`  | Workflow run ID. Omit to keep the hook dormant. |
+| `client` | SDK client override.                            |
 
 ```ts
 interface UseFlueWorkflowResult {
@@ -180,25 +175,19 @@ interface UseFlueWorkflowResult {
   error: unknown;
 }
 
-type WorkflowStatus =
-  | 'idle'
-  | 'connecting'
-  | 'running'
-  | 'completed'
-  | 'errored'
-  | 'disconnected';
+type WorkflowStatus = 'idle' | 'connecting' | 'running' | 'completed' | 'errored' | 'disconnected';
 ```
 
 The hook replays the complete bounded run stream. `events` is uncapped, `logs` contains its log events, and `result` and workflow errors come from `run_end`. A successful run without a result returns `null`.
 
-| Status | Meaning |
-| --- | --- |
-| `idle` | No `runId` is present. |
-| `connecting` | Initial connection or retry. `error` holds the latest retryable transport failure. |
-| `running` | A `run_start` or `run_resume` event was observed. |
-| `completed` | `run_end` reported success. |
-| `errored` | `run_end` reported a workflow failure. |
-| `disconnected` | Observation ended without `run_end` and will not retry. |
+| Status         | Meaning                                                                            |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `idle`         | No `runId` is present.                                                             |
+| `connecting`   | Initial connection or retry. `error` holds the latest retryable transport failure. |
+| `running`      | A `run_start` or `run_resume` event was observed.                                  |
+| `completed`    | `run_end` reported success.                                                        |
+| `errored`      | `run_end` reported a workflow failure.                                             |
+| `disconnected` | Observation ended without `run_end` and will not retry.                            |
 
 Transient failures remain `connecting` and retry from the durable checkpoint. `401`, `403`, `404`, and stream closure without `run_end` become `disconnected`. Completed and errored runs are terminal.
 

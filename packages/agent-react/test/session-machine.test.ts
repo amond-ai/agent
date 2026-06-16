@@ -172,7 +172,9 @@ describe('AgentSession', () => {
 		);
 		session.start();
 		await session.sendMessage('hello');
-		initial.fail(new FetchError(404, 'not found', undefined, {}, 'https://flue.test/agents/agent/id'));
+		initial.fail(
+			new FetchError(404, 'not found', undefined, {}, 'https://flue.test/agents/agent/id'),
+		);
 		await settle();
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -196,7 +198,11 @@ describe('AgentSession', () => {
 			'offset-active',
 		);
 		const replacement = pendingStream<AttachedAgentEvent>('offset-active');
-		const stream = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(active).mockReturnValueOnce(replacement);
+		const stream = vi
+			.fn()
+			.mockReturnValueOnce(stale)
+			.mockReturnValueOnce(active)
+			.mockReturnValueOnce(replacement);
 		const session = new AgentSession(
 			client({ agents: { stream } as unknown as FlueClient['agents'] }),
 			'agent',
@@ -236,6 +242,56 @@ describe('AgentSession', () => {
 		session.dispose();
 	});
 
+	it('does not duplicate an interrupted turn when its partial batch is redelivered', async () => {
+		vi.useFakeTimers();
+		const start = {
+			v: 1,
+			type: 'message_start',
+			message: { role: 'assistant', content: [] },
+			eventIndex: 1,
+			timestamp: '2026-06-12T00:00:00.000Z',
+			instanceId: 'id',
+			submissionId: 'submission-1',
+			turnId: 'turn-1',
+		} as const satisfies AttachedAgentEvent;
+		const delta = {
+			v: 1,
+			type: 'text_delta',
+			text: 'partial',
+			eventIndex: 2,
+			timestamp: '2026-06-12T00:00:00.001Z',
+			instanceId: 'id',
+			submissionId: 'submission-1',
+			turnId: 'turn-1',
+		} as const satisfies AttachedAgentEvent;
+		const stream = vi
+			.fn()
+			.mockReturnValueOnce(streamThenFail(start, new TypeError('offline'), '-1'))
+			.mockReturnValueOnce(streamThenFail(delta, new TypeError('offline'), '-1'))
+			.mockReturnValueOnce(streamFrom([start, delta], 'offset-2'))
+			.mockReturnValueOnce(pendingStream<AttachedAgentEvent>('offset-2'));
+		const session = new AgentSession(
+			client({ agents: { stream } as unknown as FlueClient['agents'] }),
+			'agent',
+			'id',
+		);
+		session.start();
+		await settle();
+		await vi.advanceTimersByTimeAsync(1001);
+		await vi.advanceTimersByTimeAsync(1001);
+		await vi.advanceTimersByTimeAsync(2001);
+
+		expect(session.getSnapshot().messages).toEqual([
+			{
+				id: 'turn:turn-1',
+				role: 'assistant',
+				metadata: undefined,
+				parts: [{ type: 'text', text: 'partial', state: 'streaming' }],
+			},
+		]);
+		session.dispose();
+	});
+
 	it('short-circuits reconnect backoff when a message is sent', async () => {
 		vi.useFakeTimers();
 		const stream = vi
@@ -267,7 +323,10 @@ describe('AgentSession', () => {
 describe('WorkflowRun', () => {
 	it('restarts after a StrictMode setup cleanup setup cycle', async () => {
 		const stream = vi.fn(() => pendingStream<FlueEvent>());
-		const run = new WorkflowRun(client({ runs: { stream } as unknown as FlueClient['runs'] }), 'run-1');
+		const run = new WorkflowRun(
+			client({ runs: { stream } as unknown as FlueClient['runs'] }),
+			'run-1',
+		);
 
 		run.start();
 		run.dispose();
@@ -296,8 +355,15 @@ describe('WorkflowRun', () => {
 			'offset-active',
 		);
 		const replacement = pendingStream<FlueEvent>('offset-active');
-		const stream = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(active).mockReturnValueOnce(replacement);
-		const run = new WorkflowRun(client({ runs: { stream } as unknown as FlueClient['runs'] }), 'run-1');
+		const stream = vi
+			.fn()
+			.mockReturnValueOnce(stale)
+			.mockReturnValueOnce(active)
+			.mockReturnValueOnce(replacement);
+		const run = new WorkflowRun(
+			client({ runs: { stream } as unknown as FlueClient['runs'] }),
+			'run-1',
+		);
 
 		run.start();
 		run.dispose();
@@ -313,7 +379,10 @@ describe('WorkflowRun', () => {
 	it('does not reconnect after a clean stream closure without run_end', async () => {
 		vi.useFakeTimers();
 		const stream = vi.fn(() => streamFrom<FlueEvent>([], 'offset-closed'));
-		const run = new WorkflowRun(client({ runs: { stream } as unknown as FlueClient['runs'] }), 'run-1');
+		const run = new WorkflowRun(
+			client({ runs: { stream } as unknown as FlueClient['runs'] }),
+			'run-1',
+		);
 		run.start();
 		await settle();
 		await vi.runAllTimersAsync();
@@ -333,7 +402,10 @@ describe('WorkflowRun', () => {
 			runId: 'run-1',
 		} as const;
 		const stream = vi.fn(() => pendingStream<FlueEvent>('offset-1'));
-		const run = new WorkflowRun(client({ runs: { stream } as unknown as FlueClient['runs'] }), 'run-1');
+		const run = new WorkflowRun(
+			client({ runs: { stream } as unknown as FlueClient['runs'] }),
+			'run-1',
+		);
 		run.start();
 		await settle();
 		const active = stream.mock.results[0]?.value as FlueEventStream<FlueEvent> & {
@@ -354,11 +426,17 @@ describe('WorkflowRun', () => {
 			.fn()
 			.mockReturnValueOnce(failedStream<FlueEvent>(new TypeError('offline'), 'offset-7'))
 			.mockReturnValueOnce(pendingStream<FlueEvent>('offset-7'));
-		const run = new WorkflowRun(client({ runs: { stream } as unknown as FlueClient['runs'] }), 'run-1');
+		const run = new WorkflowRun(
+			client({ runs: { stream } as unknown as FlueClient['runs'] }),
+			'run-1',
+		);
 		run.start();
 		await settle();
 
-		expect(run.getSnapshot()).toMatchObject({ status: 'connecting', error: new TypeError('offline') });
+		expect(run.getSnapshot()).toMatchObject({
+			status: 'connecting',
+			error: new TypeError('offline'),
+		});
 		await vi.advanceTimersByTimeAsync(1001);
 
 		expect(stream).toHaveBeenCalledTimes(2);

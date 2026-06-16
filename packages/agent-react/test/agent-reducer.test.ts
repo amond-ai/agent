@@ -8,51 +8,179 @@ const base = {
 	timestamp: '2026-06-12T00:00:00.000Z',
 };
 
-function snapshot(
-	type: 'message_start' | 'message_update' | 'message_end',
-	message: LlmMessage,
+function message(
+	type: 'message_start' | 'message_end',
+	value: LlmMessage,
 	extra: Partial<AttachedAgentEvent & { submissionId?: string }> = {},
 ): AttachedAgentEvent & { submissionId?: string } {
-	return { ...base, type, message, eventIndex: 1, ...extra } as AttachedAgentEvent & {
+	return { ...base, type, message: value, eventIndex: 1, ...extra } as AttachedAgentEvent & {
 		submissionId?: string;
 	};
 }
 
 describe('reduceAgentEvent()', () => {
-	it('uses message snapshots and ignores paired deltas when streaming text', () => {
-		const started = reduceAgentEvent(
-		emptyAgentState,
-		snapshot('message_start', { role: 'assistant', content: [] }, { turnId: 'turn-1' }),
+	it('builds text and thinking parts from ordered deltas when a message has started', () => {
+		let state = reduceAgentEvent(
+			emptyAgentState,
+			message('message_start', { role: 'assistant', content: [] }, { turnId: 'turn-1' }),
 		);
-		const delta = reduceAgentEvent(started, {
+		state = reduceAgentEvent(state, {
 			...base,
-			type: 'text_delta',
-			text: 'ignored',
+			type: 'thinking_start',
 			eventIndex: 2,
 			turnId: 'turn-1',
 		});
-		const updated = reduceAgentEvent(
-			delta,
-			snapshot(
-				'message_update',
-				{ role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
-				{ eventIndex: 3, turnId: 'turn-1' },
-			),
-		);
+		state = reduceAgentEvent(state, {
+			...base,
+			type: 'thinking_delta',
+			delta: 'consider',
+			eventIndex: 3,
+			turnId: 'turn-1',
+		});
+		state = reduceAgentEvent(state, {
+			...base,
+			type: 'thinking_end',
+			content: 'consider carefully',
+			eventIndex: 4,
+			turnId: 'turn-1',
+		});
+		state = reduceAgentEvent(state, {
+			...base,
+			type: 'text_delta',
+			text: 'hello',
+			eventIndex: 5,
+			turnId: 'turn-1',
+		});
+		state = reduceAgentEvent(state, {
+			...base,
+			type: 'text_delta',
+			text: ' world',
+			eventIndex: 6,
+			turnId: 'turn-1',
+		});
 
-		expect(delta).toBe(started);
-		expect(updated.messages).toEqual([
+		expect(state.messages).toEqual([
 			{
 				id: 'turn:turn-1',
 				role: 'assistant',
 				metadata: undefined,
-				parts: [{ type: 'text', text: 'hello', state: 'streaming' }],
+				parts: [
+					{ type: 'reasoning', text: 'consider carefully', state: 'done' },
+					{ type: 'text', text: 'hello world', state: 'streaming' },
+				],
 			},
 		]);
 	});
 
-	it('is idempotent when a snapshot is redelivered', () => {
-		const event = snapshot(
+	it('does not duplicate provisional parts when an interrupted partial batch is replayed', () => {
+		const events: AttachedAgentEvent[] = [
+			message(
+				'message_start',
+				{ role: 'assistant', content: [] },
+				{ submissionId: 'submission-1', turnId: 'turn-1', eventIndex: 1 },
+			),
+			{
+				...base,
+				type: 'thinking_start',
+				eventIndex: 2,
+				submissionId: 'submission-1',
+				turnId: 'turn-1',
+			},
+			{
+				...base,
+				type: 'thinking_delta',
+				delta: 'checking',
+				eventIndex: 3,
+				submissionId: 'submission-1',
+				turnId: 'turn-1',
+			},
+			{
+				...base,
+				type: 'text_delta',
+				text: 'partial',
+				eventIndex: 4,
+				submissionId: 'submission-1',
+				turnId: 'turn-1',
+			},
+			{
+				...base,
+				type: 'tool_start',
+				toolName: 'search',
+				toolCallId: 'tool-1',
+				args: { q: 'flue' },
+				eventIndex: 5,
+				submissionId: 'submission-1',
+				turnId: 'turn-1',
+			},
+		] as AttachedAgentEvent[];
+		const once = events.reduce(reduceAgentEvent, emptyAgentState);
+		const replayed = events.reduce(reduceAgentEvent, once);
+
+		expect(replayed.messages).toEqual(once.messages);
+		expect(replayed.messages[0]?.parts).toEqual([
+			{ type: 'reasoning', text: 'checking', state: 'streaming' },
+			{ type: 'text', text: 'partial', state: 'streaming' },
+			{
+				type: 'dynamic-tool',
+				toolName: 'search',
+				toolCallId: 'tool-1',
+				state: 'input-available',
+				input: { q: 'flue' },
+			},
+		]);
+	});
+
+	it('accepts restarted event indexes for distinct direct and dispatched contexts', () => {
+		const direct = message(
+			'message_end',
+			{ role: 'user', content: 'direct' },
+			{ submissionId: 'submission-1', eventIndex: 0 },
+		);
+		const dispatched = message(
+			'message_end',
+			{ role: 'user', content: 'dispatched' },
+			{
+				dispatchId: 'dispatch-1',
+				submissionId: 'dispatch-1',
+				eventIndex: 0,
+				timestamp: '2026-06-12T00:01:00.000Z',
+			},
+		);
+		let state = reduceAgentEvent(emptyAgentState, direct);
+		state = reduceAgentEvent(state, dispatched);
+
+		expect(state.messages.map((item) => item.id)).toEqual([
+			'submission:submission-1:user:0',
+			'submission:dispatch-1:user:0',
+		]);
+	});
+
+	it('reconciles streamed content to the authoritative terminal message', () => {
+		let state = reduceAgentEvent(
+			emptyAgentState,
+			message('message_start', { role: 'assistant', content: [] }, { turnId: 'turn-1' }),
+		);
+		state = reduceAgentEvent(state, {
+			...base,
+			type: 'text_delta',
+			text: 'draft',
+			eventIndex: 2,
+			turnId: 'turn-1',
+		});
+		state = reduceAgentEvent(
+			state,
+			message(
+				'message_end',
+				{ role: 'assistant', content: [{ type: 'text', text: 'final' }] },
+				{ turnId: 'turn-1', eventIndex: 3 },
+			),
+		);
+
+		expect(state.messages[0]?.parts).toEqual([{ type: 'text', text: 'final', state: 'done' }]);
+	});
+
+	it('is idempotent when message_end is redelivered', () => {
+		const event = message(
 			'message_end',
 			{ role: 'assistant', content: [{ type: 'text', text: 'done' }] },
 			{ turnId: 'turn-1' },
@@ -60,32 +188,49 @@ describe('reduceAgentEvent()', () => {
 		const once = reduceAgentEvent(emptyAgentState, event);
 		const twice = reduceAgentEvent(once, event);
 
-		expect(twice.messages).toHaveLength(1);
 		expect(twice.messages).toEqual(once.messages);
+		expect(twice.messages).toHaveLength(1);
 	});
 
-	it('establishes deterministic messages from a truncated update window', () => {
-		const state = reduceAgentEvent(
-			emptyAgentState,
-			snapshot(
-				'message_update',
-				{ role: 'assistant', content: [{ type: 'text', text: 'partial' }] },
-				{ turnId: 'turn-9', eventIndex: 40 },
-			),
-		);
+	it('provisions an assistant message when a late stream begins at tool_start', () => {
+		const state = reduceAgentEvent(emptyAgentState, {
+			...base,
+			type: 'tool_start',
+			toolName: 'search',
+			toolCallId: 'tool-1',
+			args: { q: 'flue' },
+			eventIndex: 20,
+			turnId: 'turn-9',
+		});
 
-		expect(state.messages[0]?.id).toBe('turn:turn-9');
+		expect(state.messages).toEqual([
+			{
+				id: 'turn:turn-9',
+				role: 'assistant',
+				metadata: undefined,
+				parts: [
+					{
+						type: 'dynamic-tool',
+						toolName: 'search',
+						toolCallId: 'tool-1',
+						state: 'input-available',
+						input: { q: 'flue' },
+					},
+				],
+			},
+		]);
 	});
 
-	it('reconciles tools while preserving results across final snapshots', () => {
-		const message = {
-			role: 'assistant' as const,
-			content: [{ type: 'toolCall' as const, id: 'tool-1', name: 'search', arguments: { q: 'flue' } }],
-		};
-		let state = reduceAgentEvent(
-			emptyAgentState,
-			snapshot('message_update', message, { turnId: 'turn-1' }),
-		);
+	it('preserves a late-stream tool result through terminal reconciliation', () => {
+		let state = reduceAgentEvent(emptyAgentState, {
+			...base,
+			type: 'tool_start',
+			toolName: 'search',
+			toolCallId: 'tool-1',
+			args: { q: 'flue' },
+			eventIndex: 20,
+			turnId: 'turn-9',
+		});
 		state = reduceAgentEvent(state, {
 			...base,
 			type: 'tool',
@@ -94,14 +239,101 @@ describe('reduceAgentEvent()', () => {
 			isError: false,
 			result: ['result'],
 			durationMs: 1,
-			eventIndex: 2,
+			eventIndex: 21,
 		});
-		state = reduceAgentEvent(state, snapshot('message_end', message, { turnId: 'turn-1' }));
+		state = reduceAgentEvent(
+			state,
+			message(
+				'message_end',
+				{
+					role: 'assistant',
+					content: [{ type: 'toolCall', id: 'tool-1', name: 'search', arguments: { q: 'flue' } }],
+				},
+				{ turnId: 'turn-9', eventIndex: 22 },
+			),
+		);
 
-		expect(state.messages[0]?.parts[0]).toMatchObject({
+		expect(state.messages[0]?.parts).toEqual([
+			{
+				type: 'dynamic-tool',
+				toolName: 'search',
+				toolCallId: 'tool-1',
+				state: 'output-available',
+				input: { q: 'flue' },
+				output: ['result'],
+				errorText: undefined,
+			},
+		]);
+	});
+
+	it('uses finalized tool input and preserves its result through terminal reconciliation', () => {
+		let state = reduceAgentEvent(
+			emptyAgentState,
+			message('message_start', { role: 'assistant', content: [] }, { turnId: 'turn-1' }),
+		);
+		state = reduceAgentEvent(state, {
+			...base,
+			type: 'tool_start',
+			toolName: 'search',
+			toolCallId: 'tool-1',
+			args: { q: 'flue' },
+			eventIndex: 2,
+			turnId: 'turn-1',
+		});
+		state = reduceAgentEvent(state, {
+			...base,
+			type: 'tool',
+			toolName: 'search',
+			toolCallId: 'tool-1',
+			isError: false,
+			result: ['result'],
+			durationMs: 1,
+			eventIndex: 3,
+		});
+		state = reduceAgentEvent(
+			state,
+			message(
+				'message_end',
+				{
+					role: 'assistant',
+					content: [{ type: 'toolCall', id: 'tool-1', name: 'search', arguments: { q: 'flue' } }],
+				},
+				{ turnId: 'turn-1', eventIndex: 4 },
+			),
+		);
+
+		expect(state.messages[0]?.parts[0]).toEqual({
 			type: 'dynamic-tool',
+			toolName: 'search',
+			toolCallId: 'tool-1',
 			state: 'output-available',
+			input: { q: 'flue' },
 			output: ['result'],
+			errorText: undefined,
+		});
+	});
+
+	it('accepts terminal reconciliation after attaching too late for preceding deltas', () => {
+		let state = reduceAgentEvent(emptyAgentState, {
+			...base,
+			type: 'text_delta',
+			text: 'missed start',
+			eventIndex: 20,
+			turnId: 'turn-9',
+		});
+		expect(state).toBe(emptyAgentState);
+		state = reduceAgentEvent(
+			state,
+			message(
+				'message_end',
+				{ role: 'assistant', content: [{ type: 'text', text: 'complete' }] },
+				{ turnId: 'turn-9', eventIndex: 21 },
+			),
+		);
+
+		expect(state.messages[0]).toMatchObject({
+			id: 'turn:turn-9',
+			parts: [{ type: 'text', text: 'complete', state: 'done' }],
 		});
 	});
 
@@ -118,11 +350,7 @@ describe('reduceAgentEvent()', () => {
 		});
 		state = reduceAgentEvent(
 			state,
-			snapshot(
-				'message_end',
-				{ role: 'user', content: 'same' },
-				{ submissionId: 'submission-1' },
-			),
+			message('message_end', { role: 'user', content: 'same' }, { submissionId: 'submission-1' }),
 		);
 
 		expect(state.messages).toHaveLength(1);
@@ -137,11 +365,7 @@ describe('reduceAgentEvent()', () => {
 		});
 		state = reduceAgentEvent(
 			state,
-			snapshot(
-				'message_end',
-				{ role: 'user', content: 'hello' },
-				{ submissionId: 'submission-1' },
-			),
+			message('message_end', { role: 'user', content: 'hello' }, { submissionId: 'submission-1' }),
 		);
 		expect(state.messages).toHaveLength(2);
 		state = reduceAgentEvent(state, {
@@ -191,9 +415,9 @@ describe('reduceAgentEvent()', () => {
 		});
 		state = reduceAgentEvent(
 			state,
-			snapshot(
-				'message_update',
-				{ role: 'assistant', content: [{ type: 'text', text: 'working' }] },
+			message(
+				'message_start',
+				{ role: 'assistant', content: [] },
 				{ submissionId: 'submission-1', turnId: 'turn-1' },
 			),
 		);

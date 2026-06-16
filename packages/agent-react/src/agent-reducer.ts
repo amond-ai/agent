@@ -24,6 +24,7 @@ export interface AgentState extends AgentSnapshot {
 	pendingSends: PendingSend[];
 	activeSubmissionIds: string[];
 	settledSubmissionIds: string[];
+	recentEventIds: string[];
 }
 
 type StreamAgentEvent = AttachedAgentEvent & { submissionId?: string };
@@ -45,9 +46,24 @@ export const emptyAgentState: AgentState = {
 	pendingSends: [],
 	activeSubmissionIds: [],
 	settledSubmissionIds: [],
+	recentEventIds: [],
 };
 
+const RECENT_EVENT_LIMIT = 1000;
+
 export function reduceAgentEvent(state: AgentState, event: AgentReducerEvent): AgentState {
+	if (!('eventIndex' in event)) return reduceAgentEventOnce(state, event);
+	const id = streamEventId(event);
+	if (state.recentEventIds.includes(id)) return state;
+	const next = reduceAgentEventOnce(state, event);
+	if (next === state) return state;
+	return {
+		...next,
+		recentEventIds: [...state.recentEventIds, id].slice(-RECENT_EVENT_LIMIT),
+	};
+}
+
+function reduceAgentEventOnce(state: AgentState, event: AgentReducerEvent): AgentState {
 	switch (event.type) {
 		case 'local_send_submitted':
 			return {
@@ -67,7 +83,11 @@ export function reduceAgentEvent(state: AgentState, event: AgentReducerEvent): A
 				messages: hasEcho
 					? state.messages.filter((message) => message.id !== event.localId)
 					: state.messages,
-				status: active ? 'streaming' : settled ? statusWithout(event.localId, state.pendingSends) : state.status,
+				status: active
+					? 'streaming'
+					: settled
+						? statusWithout(event.localId, state.pendingSends)
+						: state.status,
 				pendingSends: settled
 					? state.pendingSends.filter((send) => send.localId !== event.localId)
 					: state.pendingSends.map((send) =>
@@ -92,9 +112,17 @@ export function reduceAgentEvent(state: AgentState, event: AgentReducerEvent): A
 		case 'local_stream_failed':
 			return { ...state, status: 'error', error: event.error };
 		case 'message_start':
-		case 'message_update':
+			return reduceMessageBoundary(state, event);
+		case 'text_delta':
+			return reduceTextDelta(state, event);
+		case 'thinking_start':
+			return reduceThinkingStart(state, event);
+		case 'thinking_delta':
+			return reduceThinkingDelta(state, event);
+		case 'thinking_end':
+			return reduceThinkingEnd(state, event);
 		case 'message_end':
-			return reduceMessageSnapshot(state, event);
+			return reduceMessageBoundary(state, event);
 		case 'tool_start':
 			return reduceToolStart(state, event);
 		case 'tool':
@@ -102,12 +130,15 @@ export function reduceAgentEvent(state: AgentState, event: AgentReducerEvent): A
 		case 'turn':
 			return reduceTurn(state, event);
 		case 'submission_settled':
-			return event.outcome === 'failed' && state.pendingSends.some((send) => send.submissionId === event.submissionId)
+			return event.outcome === 'failed' &&
+				state.pendingSends.some((send) => send.submissionId === event.submissionId)
 				? {
 						...state,
 						status: 'error',
 						error: new Error(event.error ?? 'Agent submission failed'),
-						pendingSends: state.pendingSends.filter((send) => send.submissionId !== event.submissionId),
+						pendingSends: state.pendingSends.filter(
+							(send) => send.submissionId !== event.submissionId,
+						),
 					}
 				: state;
 		case 'idle': {
@@ -132,7 +163,10 @@ export function reduceAgentEvent(state: AgentState, event: AgentReducerEvent): A
 	}
 }
 
-function reduceMessageSnapshot(state: AgentState, event: StreamAgentEvent & { message: LlmMessage }): AgentState {
+function reduceMessageBoundary(
+	state: AgentState,
+	event: StreamAgentEvent & { message: LlmMessage },
+): AgentState {
 	if (event.message.role === 'toolResult') return state;
 	const id = messageId(event, event.message.role);
 	const existing = state.messages.find((message) => message.id === id);
@@ -142,7 +176,12 @@ function reduceMessageSnapshot(state: AgentState, event: StreamAgentEvent & { me
 	const optimistic = local
 		? state.messages.find((message) => message.id === local.localId)
 		: undefined;
-	const message = snapshotMessage(id, event.message, event.type === 'message_end', optimistic ?? existing);
+	const message = snapshotMessage(
+		id,
+		event.message,
+		event.type === 'message_end',
+		optimistic ?? existing,
+	);
 	let messages = replaceById(state.messages, id, message);
 	if (local) messages = messages.filter((item) => item.id !== local.localId);
 	const ownAssistant =
@@ -160,31 +199,103 @@ function reduceMessageSnapshot(state: AgentState, event: StreamAgentEvent & { me
 	};
 }
 
+function reduceTextDelta(
+	state: AgentState,
+	event: StreamAgentEvent & { text: string },
+): AgentState {
+	const index = findEventAssistant(state.messages, event);
+	if (index < 0) return state;
+	const current = state.messages[index];
+	if (!current) return state;
+	const parts = [...current.parts];
+	const last = parts.at(-1);
+	if (last?.type === 'text' && last.state !== 'done') {
+		parts[parts.length - 1] = { ...last, text: last.text + event.text, state: 'streaming' };
+	} else {
+		parts.push({ type: 'text', text: event.text, state: 'streaming' });
+	}
+	return replaceMessageAt(state, index, { ...current, parts });
+}
+
+function reduceThinkingStart(state: AgentState, event: StreamAgentEvent): AgentState {
+	const index = findEventAssistant(state.messages, event);
+	if (index < 0) return state;
+	const current = state.messages[index];
+	if (!current) return state;
+	return replaceMessageAt(state, index, {
+		...current,
+		parts: [...current.parts, { type: 'reasoning', text: '', state: 'streaming' }],
+	});
+}
+
+function reduceThinkingDelta(
+	state: AgentState,
+	event: StreamAgentEvent & { delta: string },
+): AgentState {
+	const index = findEventAssistant(state.messages, event);
+	if (index < 0) return state;
+	const current = state.messages[index];
+	if (!current) return state;
+	const reasoning = current.parts.findLastIndex(
+		(part) => part.type === 'reasoning' && part.state !== 'done',
+	);
+	if (reasoning < 0) return state;
+	const part = current.parts[reasoning];
+	if (!part || part.type !== 'reasoning') return state;
+	const parts = [...current.parts];
+	parts[reasoning] = { ...part, text: part.text + event.delta, state: 'streaming' };
+	return replaceMessageAt(state, index, { ...current, parts });
+}
+
+function reduceThinkingEnd(
+	state: AgentState,
+	event: StreamAgentEvent & { content: string },
+): AgentState {
+	const index = findEventAssistant(state.messages, event);
+	if (index < 0) return state;
+	const current = state.messages[index];
+	if (!current) return state;
+	const reasoning = current.parts.findLastIndex((part) => part.type === 'reasoning');
+	if (reasoning < 0) return state;
+	const part = current.parts[reasoning];
+	if (!part || part.type !== 'reasoning') return state;
+	const parts = [...current.parts];
+	parts[reasoning] = { ...part, text: event.content, state: 'done' };
+	return replaceMessageAt(state, index, { ...current, parts });
+}
+
 function reduceToolStart(
 	state: AgentState,
 	event: StreamAgentEvent & { toolName: string; toolCallId: string; args?: unknown },
 ): AgentState {
-	let index = findToolMessage(state.messages, event.toolCallId);
+	let messages = state.messages;
+	let index = findToolMessage(messages, event.toolCallId);
 	if (index < 0 && event.turnId) {
-		index = state.messages.findIndex((message) => message.id === `turn:${event.turnId}`);
+		const id = `turn:${event.turnId}`;
+		index = messages.findIndex((message) => message.id === id);
+		if (index < 0) {
+			messages = [...messages, { id, role: 'assistant', metadata: undefined, parts: [] }];
+			index = messages.length - 1;
+		}
 	}
 	if (index < 0) return state;
-	const current = state.messages[index];
+	const current = messages[index];
 	if (!current) return state;
 	const exists = current.parts.some(
 		(part) => part.type === 'dynamic-tool' && part.toolCallId === event.toolCallId,
 	);
 	const parts: UIMessagePart[] = exists
-		? current.parts.map((part): UIMessagePart =>
-				part.type === 'dynamic-tool' && part.toolCallId === event.toolCallId
-					? {
-							type: 'dynamic-tool',
-							toolName: event.toolName,
-							toolCallId: part.toolCallId,
-							input: event.args ?? part.input,
-							state: 'input-available',
-						}
-					: part,
+		? current.parts.map(
+				(part): UIMessagePart =>
+					part.type === 'dynamic-tool' && part.toolCallId === event.toolCallId
+						? {
+								type: 'dynamic-tool',
+								toolName: event.toolName,
+								toolCallId: part.toolCallId,
+								input: event.args ?? part.input,
+								state: 'input-available',
+							}
+						: part,
 			)
 		: [
 				...current.parts,
@@ -196,7 +307,7 @@ function reduceToolStart(
 					input: event.args,
 				},
 			];
-	return replaceMessageAt(state, index, { ...current, parts });
+	return replaceMessageAt({ ...state, messages }, index, { ...current, parts });
 }
 
 function reduceToolResult(
@@ -215,7 +326,12 @@ function reduceToolResult(
 	const parts = current.parts.map((part) => {
 		if (part.type !== 'dynamic-tool' || part.toolCallId !== event.toolCallId) return part;
 		return event.isError
-			? { ...part, state: 'output-error' as const, output: undefined, errorText: errorText(event.result) }
+			? {
+					...part,
+					state: 'output-error' as const,
+					output: undefined,
+					errorText: errorText(event.result),
+				}
 			: { ...part, state: 'output-available' as const, output: event.result, errorText: undefined };
 	});
 	return replaceMessageAt(state, index, { ...current, parts });
@@ -238,7 +354,9 @@ function reduceTurn(
 	const metadata = {
 		...current.metadata,
 		...(event.usage ? { usage: event.usage } : {}),
-		...(event.model && event.provider ? { model: { provider: event.provider, id: event.model } } : {}),
+		...(event.model && event.provider
+			? { model: { provider: event.provider, id: event.model } }
+			: {}),
 	};
 	return replaceMessageAt(state, index, { ...current, metadata });
 }
@@ -252,9 +370,13 @@ function snapshotMessage(
 	const parts: UIMessagePart[] = [];
 	let previousFileIndex = 0;
 	const previousFiles = previous?.parts.filter((part) => part.type === 'file') ?? [];
-	const content = typeof message.content === 'string' ? [{ type: 'text' as const, text: message.content }] : message.content;
+	const content =
+		typeof message.content === 'string'
+			? [{ type: 'text' as const, text: message.content }]
+			: message.content;
 	for (const block of content) {
-		if (block.type === 'text') parts.push({ type: 'text', text: block.text, state: done ? 'done' : 'streaming' });
+		if (block.type === 'text')
+			parts.push({ type: 'text', text: block.text, state: done ? 'done' : 'streaming' });
 		if (block.type === 'thinking') {
 			parts.push({ type: 'reasoning', text: block.thinking, state: done ? 'done' : 'streaming' });
 		}
@@ -284,7 +406,9 @@ function snapshotMessage(
 	return { id, role: message.role, metadata: previous?.metadata, parts };
 }
 
-function optimisticMessage(event: Extract<LocalAgentEvent, { type: 'local_send_submitted' }>): UIMessage {
+function optimisticMessage(
+	event: Extract<LocalAgentEvent, { type: 'local_send_submitted' }>,
+): UIMessage {
 	return {
 		id: event.localId,
 		role: 'user',
@@ -299,6 +423,13 @@ function optimisticMessage(event: Extract<LocalAgentEvent, { type: 'local_send_s
 	};
 }
 
+function streamEventId(event: StreamAgentEvent): string {
+	const contextId = event.dispatchId ?? event.submissionId;
+	return contextId
+		? `${event.instanceId}:${contextId}:${event.timestamp}:${event.eventIndex}`
+		: `${event.instanceId}:${event.timestamp}:${event.eventIndex}`;
+}
+
 function messageId(event: StreamAgentEvent, role: 'user' | 'assistant'): string {
 	if (role === 'assistant' && event.turnId) return `turn:${event.turnId}`;
 	if (role === 'user' && event.submissionId) return userMessageId(event.submissionId);
@@ -310,7 +441,11 @@ function userMessageId(submissionId: string): string {
 }
 
 function imageUrl(data: string, mimeType: string): string {
-	return data === IMAGE_DATA_OMITTED ? data : data.startsWith('data:') ? data : `data:${mimeType};base64,${data}`;
+	return data === IMAGE_DATA_OMITTED
+		? data
+		: data.startsWith('data:')
+			? data
+			: `data:${mimeType};base64,${data}`;
 }
 
 function replaceById(messages: UIMessage[], id: string, message: UIMessage): UIMessage[] {
@@ -331,6 +466,12 @@ function findToolMessage(messages: UIMessage[], toolCallId: string): number {
 	return messages.findIndex((message) =>
 		message.parts.some((part) => part.type === 'dynamic-tool' && part.toolCallId === toolCallId),
 	);
+}
+
+function findEventAssistant(messages: UIMessage[], event: StreamAgentEvent): number {
+	return event.turnId
+		? messages.findIndex((message) => message.id === `turn:${event.turnId}`)
+		: findLastAssistant(messages);
 }
 
 function findLastAssistant(messages: UIMessage[]): number {

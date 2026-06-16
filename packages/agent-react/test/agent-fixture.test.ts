@@ -11,7 +11,7 @@ function fixtureEvents(): AttachedAgentEvent[] {
 }
 
 describe('reduceAgentEvent() runtime fixture', () => {
-	it('folds paired snapshots, ignored deltas, thinking, parallel tools, and multiple turns', () => {
+	it('folds deltas, thinking, parallel tools, terminal reconciliation, and multiple turns', () => {
 		const events = fixtureEvents();
 		const beforeIdle = events.slice(0, -2).reduce(reduceAgentEvent, emptyAgentState);
 
@@ -50,14 +50,16 @@ describe('reduceAgentEvent() runtime fixture', () => {
 		expect(beforeIdle.status).toBe('idle');
 	});
 
-	it('renders only snapshot content when updates are paired with deltas and thinking events', () => {
+	it('renders thinking and text as their deltas arrive', () => {
 		const events = fixtureEvents();
-		const throughFirstUpdate = events.slice(0, 6).reduce(reduceAgentEvent, emptyAgentState);
-		const throughTextDelta = events.slice(0, 7).reduce(reduceAgentEvent, emptyAgentState);
+		const throughThinking = events.slice(0, 6).reduce(reduceAgentEvent, emptyAgentState);
+		const throughText = events.slice(0, 7).reduce(reduceAgentEvent, emptyAgentState);
 
-		expect(throughTextDelta).toEqual(throughFirstUpdate);
-		expect(throughTextDelta.messages[1]?.parts).toEqual([
-			{ type: 'reasoning', text: 'compare', state: 'streaming' },
+		expect(throughThinking.messages[1]?.parts).toEqual([
+			{ type: 'reasoning', text: 'compare', state: 'done' },
+		]);
+		expect(throughText.messages[1]?.parts).toEqual([
+			{ type: 'reasoning', text: 'compare', state: 'done' },
 			{ type: 'text', text: 'Checking', state: 'streaming' },
 		]);
 	});
@@ -90,9 +92,9 @@ describe('reduceAgentEvent() runtime fixture', () => {
 		]);
 	});
 
-	it('establishes a stable message from a truncated snapshot window and drops leading non-snapshots', () => {
+	it('drops late deltas and tools until terminal reconciliation supplies the message', () => {
 		const events = fixtureEvents();
-		const window = events.slice(3, 13);
+		const window = events.slice(3, 12);
 		const state = window.reduce(reduceAgentEvent, emptyAgentState);
 
 		expect(state.messages).toHaveLength(1);
@@ -100,10 +102,12 @@ describe('reduceAgentEvent() runtime fixture', () => {
 		expect(state.messages[0]?.parts).toHaveLength(4);
 	});
 
-	it('keeps deterministic transcript contents under duplicate replay', () => {
+	it('keeps duplicate terminal reconciliation idempotent', () => {
 		const events = fixtureEvents();
 		const once = events.reduce(reduceAgentEvent, emptyAgentState);
-		const twice = events.reduce(reduceAgentEvent, once);
+		const terminal = events[11];
+		if (!terminal) throw new Error('Fixture has no terminal message');
+		const twice = reduceAgentEvent(once, terminal);
 
 		expect(twice.messages).toEqual(once.messages);
 		expect(twice.messages).toHaveLength(4);
