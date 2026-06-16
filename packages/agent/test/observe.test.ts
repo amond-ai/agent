@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { observe } from '../src/index.ts';
+import { type FlueEvent, observe } from '../src/index.ts';
 import { createFlueContext, InMemorySessionStore } from '../src/internal.ts';
 
 function createContext(id: string) {
@@ -18,7 +18,7 @@ function createContext(id: string) {
 }
 
 describe('observe()', () => {
-	it('receives decorated event snapshots when a runtime context emits events', () => {
+	it('receives decorated events when a runtime context emits events', () => {
 		const events: unknown[] = [];
 		const stopObserving = observe((event, ctx) => {
 			if (ctx.id === 'observe-decorated-event') events.push(event);
@@ -58,36 +58,25 @@ describe('observe()', () => {
 		}
 	});
 
-	it("prevents one subscriber's event mutation from affecting another subscriber when an event is delivered", () => {
+	it('delivers the same event object to every subscriber when an event is emitted', () => {
 		const events: unknown[] = [];
-		const stopMutating = observe((event, ctx) => {
-			if (ctx.id !== 'observe-isolated-snapshot' || event.type !== 'log') return;
-			event.message = 'mutated';
-			(event.attributes?.nested as { value: string }).value = 'mutated';
+		const stopFirst = observe((event, ctx) => {
+			if (ctx.id === 'observe-shared-event') events.push(event);
 		});
-		const stopRecording = observe((event, ctx) => {
-			if (ctx.id === 'observe-isolated-snapshot') events.push(event);
+		const stopSecond = observe((event, ctx) => {
+			if (ctx.id === 'observe-shared-event') events.push(event);
 		});
-		const ctx = createContext('observe-isolated-snapshot');
+		const ctx = createContext('observe-shared-event');
 
 		try {
-			ctx.emitEvent({
-				type: 'log',
-				level: 'info',
-				message: 'original',
-				attributes: { nested: { value: 'original' } },
-			});
+			const event = ctx.emitEvent({ type: 'log', level: 'info', message: 'original' });
 
-			expect(events).toMatchObject([
-				{
-					type: 'log',
-					message: 'original',
-					attributes: { nested: { value: 'original' } },
-				},
-			]);
+			expect(events).toHaveLength(2);
+			expect(events[0]).toBe(event);
+			expect(events[1]).toBe(event);
 		} finally {
-			stopMutating();
-			stopRecording();
+			stopFirst();
+			stopSecond();
 		}
 	});
 
@@ -141,51 +130,43 @@ describe('observe()', () => {
 		}
 	});
 
-	it('delivers only the declared event types when registered with { types }', () => {
+	it('delivers every event type to each subscriber', () => {
 		const events: string[] = [];
-		const stopObserving = observe(
-			(event, ctx) => {
-				if (ctx.id === 'observe-types-filter') events.push(event.type);
-			},
-			{ types: ['log'] },
-		);
-		const ctx = createContext('observe-types-filter');
+		const stopObserving = observe((event, ctx) => {
+			if (ctx.id === 'observe-all-types') events.push(event.type);
+		});
+		const ctx = createContext('observe-all-types');
 
 		try {
 			ctx.emitEvent({ type: 'idle' });
 			ctx.emitEvent({ type: 'log', level: 'info', message: 'kept' });
-			ctx.emitEvent({ type: 'idle' });
 
-			expect(events).toEqual(['log']);
+			expect(events).toEqual(['idle', 'log']);
 		} finally {
 			stopObserving();
 		}
 	});
 
-	it('skips event snapshot serialization when every subscriber filters out the event type', () => {
-		const failure = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-		const events: string[] = [];
-		const stopObserving = observe(
-			(event, ctx) => {
-				if (ctx.id === 'observe-types-lazy-snapshot') events.push(event.type);
-			},
-			{ types: ['idle'] },
-		);
-		const ctx = createContext('observe-types-lazy-snapshot');
+	it('delivers events with circular values when an event is emitted', () => {
+		const events: FlueEvent[] = [];
+		const stopObserving = observe((event, ctx) => {
+			if (ctx.id === 'observe-circular-values') events.push(event);
+		});
+		const ctx = createContext('observe-circular-values');
 		const circular: { self?: unknown } = {};
 		circular.self = circular;
 
 		try {
-			// A circular payload would fail JSON snapshotting; with no subscriber
-			// listening for 'log', the snapshot must never be attempted.
-			ctx.emitEvent({ type: 'log', level: 'info', message: 'skipped', attributes: { circular } });
-			ctx.emitEvent({ type: 'idle' });
+			const event = ctx.emitEvent({
+				type: 'log',
+				level: 'info',
+				message: 'delivered',
+				attributes: { circular },
+			});
 
-			expect(events).toEqual(['idle']);
-			expect(failure).not.toHaveBeenCalled();
+			expect(events).toEqual([event]);
 		} finally {
 			stopObserving();
-			failure.mockRestore();
 		}
 	});
 
