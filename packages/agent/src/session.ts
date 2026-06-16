@@ -87,7 +87,11 @@ import { generateOperationId, generateTurnId } from './runtime/ids.ts';
 import { getRegisteredApiKey, getRegisteredStoreResponses } from './runtime/providers.ts';
 import { reconstructInterruptedStream, StreamChunkWriter } from './runtime/stream-chunks.ts';
 import { createFlueFs } from './sandbox.ts';
-import { createUserContextMessage, renderSignalMessage, SessionHistory } from './session-history.ts';
+import {
+	createUserContextMessage,
+	renderSignalMessage,
+	SessionHistory,
+} from './session-history.ts';
 import { childTaskSessionStorageKey } from './session-identity.ts';
 import { execShellWithEvents, getErrorMessage } from './shell.ts';
 import {
@@ -530,17 +534,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					break;
 				}
 				case 'message_update': {
-					// The raw pi-ai assistant event feeds the durable chunk
-					// segments used for interrupted-stream recovery; the public
-					// message_update event carries only the partial message.
 					this.activeStreamChunkWriter?.write(event.assistantMessageEvent);
-					const turnId = this.activeTurnId ?? generateTurnId();
-					this.activeTurnId = turnId;
-					this.emit({
-						type: 'message_update',
-						message: event.message,
-						turnId,
-					});
 					const aEvent = event.assistantMessageEvent;
 					if (aEvent.type === 'text_delta') {
 						this.emit({ type: 'text_delta', text: aEvent.delta });
@@ -557,7 +551,9 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					const turnId = this.activeTurnId ?? generateTurnId();
 					this.activeTurnId = turnId;
 					if (event.message.role === 'assistant') {
-						const toolCalls = event.message.content.filter((content) => content.type === 'toolCall');
+						const toolCalls = event.message.content.filter(
+							(content) => content.type === 'toolCall',
+						);
 						if (toolCalls.length > 0) {
 							await this.checkpointHarnessMessages();
 							await this.activeJournalCallbacks?.toolRequestRecorded?.({
@@ -726,11 +722,14 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		const assistant = this.history
 			.getActivePathSince(inputEntry.id)
 			.findLast(
-				(entry): entry is MessageEntry => entry.type === 'message' && entry.message.role === 'assistant',
+				(entry): entry is MessageEntry =>
+					entry.type === 'message' && entry.message.role === 'assistant',
 			)?.message as AssistantMessage | undefined;
 		if (!assistant || !isCompletedAssistantResponse(assistant)) return undefined;
 		return {
-			text: assistant.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n'),
+			text: assistant.content
+				.flatMap((block) => (block.type === 'text' ? [block.text] : []))
+				.join('\n'),
 			usage: this.aggregateUsageSince(inputEntry.id),
 			model: { provider: assistant.provider, id: assistant.model },
 		};
@@ -769,9 +768,11 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		if (!inputEntry) return undefined;
 		const following = this.history.getActivePathSince(inputEntry.id);
 		const assistant = following.findLast(
-			(entry): entry is MessageEntry => entry.type === 'message' && entry.message.role === 'assistant',
+			(entry): entry is MessageEntry =>
+				entry.type === 'message' && entry.message.role === 'assistant',
 		);
-		if (!assistant || (assistant.message as AssistantMessage).stopReason !== 'toolUse') return undefined;
+		if (!assistant || (assistant.message as AssistantMessage).stopReason !== 'toolUse')
+			return undefined;
 		return this.appendRepairedToolResultBatch(assistant.id, toolRequest.toolCalls, following);
 	}
 
@@ -847,7 +848,10 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		return this.history.getLeafId() ?? undefined;
 	}
 
-	async recoverInterruptedStream(streamKey: string, turnCheckpointLeafId?: string): Promise<boolean> {
+	async recoverInterruptedStream(
+		streamKey: string,
+		turnCheckpointLeafId?: string,
+	): Promise<boolean> {
 		if (!this.submissionStore) return false;
 		const segments = await this.submissionStore.getStreamChunkSegments(streamKey);
 		const recovered = reconstructInterruptedStream(segments, streamKey);
@@ -1739,8 +1743,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			const overflow =
 				assistant !== undefined &&
 				isContextOverflow(assistant, this.agentLoop.state.model.contextWindow ?? 0);
-			const retryable =
-				!overflow && assistant !== undefined && isRetryableModelError(assistant);
+			const retryable = !overflow && assistant !== undefined && isRetryableModelError(assistant);
 
 			if (turnCompleted && !overflow && !retryable) {
 				// The turn the previous iteration ran settled. This exits before
@@ -2169,7 +2172,11 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			findInput: () => this.history.findDirectSubmissionInput(input.submissionId),
 			persistInput: () =>
 				this.history.appendMessage(
-					createUserContextMessage(input.payload.message, new Date().toISOString(), input.payload.images),
+					createUserContextMessage(
+						input.payload.message,
+						new Date().toISOString(),
+						input.payload.images,
+					),
 					{ directSubmissionId: input.submissionId },
 				),
 			errorLabel: `direct(${input.submissionId})`,
@@ -2183,7 +2190,10 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		});
 	}
 
-	private resolveSubmissionDurability(startedAt?: number, timeoutAt?: number): SubmissionDurability {
+	private resolveSubmissionDurability(
+		startedAt?: number,
+		timeoutAt?: number,
+	): SubmissionDurability {
 		return {
 			maxRetry: this.config.durability?.maxAttempts ?? DURABILITY_DEFAULT_MAX_ATTEMPTS,
 			timeoutAt:

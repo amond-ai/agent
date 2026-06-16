@@ -127,25 +127,23 @@ export interface RunStore {
 }
 
 /**
- * Per-chunk streaming events that are throttle-batched before persistence.
- * These events are delivered to live stream readers but appended to the
- * durable event stream at most once per flush interval (~3 s) to avoid
- * issuing one storage write per streamed chunk.
+ * Per-chunk streaming events that are buffered before persistence.
+ * These events are flushed at most once per interval (~3 s) to avoid
+ * starting one storage write per streamed chunk during generation.
  *
- * Durability is unaffected: interrupted-stream recovery reads the throttled
+ * Interrupted-stream recovery reads the separate throttled
  * StreamChunkWriter segments, and `message_end` carries the complete message
  * for history replay.
  */
-const EPHEMERAL_RUN_EVENT_TYPES: ReadonlySet<FlueEvent['type']> = new Set([
-	'message_update',
+const BUFFERED_RUN_EVENT_TYPES: ReadonlySet<FlueEvent['type']> = new Set([
 	'text_delta',
 	'thinking_start',
 	'thinking_delta',
 	'thinking_end',
 ]);
 
-export function isEphemeralRunEvent(event: FlueEvent): boolean {
-	return EPHEMERAL_RUN_EVENT_TYPES.has(event.type);
+export function isBufferedRunEvent(event: FlueEvent): boolean {
+	return BUFFERED_RUN_EVENT_TYPES.has(event.type);
 }
 
 /**

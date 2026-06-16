@@ -16,12 +16,16 @@ import type {
 } from '../types.ts';
 import type { AttachedAgentSubmissionAdmission } from './agent-submissions.ts';
 import type { DispatchInput } from './dispatch-queue.ts';
-import { agentStreamPath, parseOffset, runStreamPath, type EventStreamStore } from './event-stream-store.ts';
+import {
+	agentStreamPath,
+	type EventStreamStore,
+	parseOffset,
+	runStreamPath,
+} from './event-stream-store.ts';
 
 import { generateWorkflowRunId } from './ids.ts';
-import { isEphemeralRunEvent, isStreamExcludedEvent, type RunStore } from './run-store.ts';
+import { isBufferedRunEvent, isStreamExcludedEvent, type RunStore } from './run-store.ts';
 import { DirectAgentPayloadSchema } from './schemas.ts';
-
 
 export type WorkflowHandler = (ctx: FlueContextInternal) => unknown | Promise<unknown>;
 
@@ -137,7 +141,7 @@ function admissionResponse(
 		status: 202,
 		headers: {
 			'content-type': 'application/json',
-			'Location': streamUrl,
+			Location: streamUrl,
 			'Stream-Next-Offset': offset,
 		},
 	});
@@ -172,21 +176,18 @@ export async function handleAgentRequest(opts: HandleAgentOptions): Promise<Resp
 			return runDirectSyncMode(directOptions, streamUrl, offset);
 		}
 		const receipt = await opts.admitAttachedSubmission(payload, undefined, false);
-		return admissionResponse({ streamUrl, offset, submissionId: receipt.submissionId }, streamUrl, offset);
+		return admissionResponse(
+			{ streamUrl, offset, submissionId: receipt.submissionId },
+			streamUrl,
+			offset,
+		);
 	} catch (err) {
 		return toHttpResponse(err);
 	}
 }
 
 export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promise<Response> {
-	const {
-		request,
-		workflowName,
-		handler,
-		createContext,
-		runStore,
-		eventStreamStore,
-	} = opts;
+	const { request, workflowName, handler, createContext, runStore, eventStreamStore } = opts;
 	const startWorkflowAdmission = opts.startWorkflowAdmission ?? defaultStartWorkflowAdmission;
 	const runId = opts.runId ?? generateWorkflowRunId();
 
@@ -306,8 +307,7 @@ async function prepareWorkflowExecution(
 	});
 	// Capture the stream coordinates at admission, before any run event is
 	// appended, so reading from the returned offset replays the whole run.
-	const offset =
-		(await eventStreamStore.getStreamMeta(runStreamPath(runId)))?.nextOffset ?? '-1';
+	const offset = (await eventStreamStore.getStreamMeta(runStreamPath(runId)))?.nextOffset ?? '-1';
 	return {
 		runId,
 		streamUrl: invocationStreamUrl(request, runId),
@@ -480,16 +480,23 @@ function findTerminalRunEvent(
 		.find((event): event is Extract<FlueEvent, { type: 'run_end' }> => event.type === 'run_end');
 }
 
-async function runDirectSyncMode(opts: DirectAttachedOptions, streamUrl: string, offset: string): Promise<Response> {
+async function runDirectSyncMode(
+	opts: DirectAttachedOptions,
+	streamUrl: string,
+	offset: string,
+): Promise<Response> {
 	const receipt = await invokeDirectAttached(opts);
-	return new Response(JSON.stringify({
-		result: receipt.result === undefined ? null : receipt.result,
-		streamUrl,
-		offset,
-		submissionId: receipt.submissionId,
-	}), {
-		headers: { 'content-type': 'application/json' },
-	});
+	return new Response(
+		JSON.stringify({
+			result: receipt.result === undefined ? null : receipt.result,
+			streamUrl,
+			offset,
+			submissionId: receipt.submissionId,
+		}),
+		{
+			headers: { 'content-type': 'application/json' },
+		},
+	);
 }
 
 export async function invokeDirectAttached(
@@ -679,10 +686,16 @@ async function emitRunEnd(
 	// Append run_end to the durable event stream, then close it.
 	// Each operation is individually guarded so a store failure cannot
 	// prevent RunStore finalization below.
-	try { await eventStreamStore.appendEvent(runStreamPath(runId), decorated); }
-	catch (e) { console.error('[flue:event-stream] appendEvent(run_end) failed:', e); }
-	try { await eventStreamStore.closeStream(runStreamPath(runId)); }
-	catch (e) { console.error('[flue:event-stream] closeStream failed:', e); }
+	try {
+		await eventStreamStore.appendEvent(runStreamPath(runId), decorated);
+	} catch (e) {
+		console.error('[flue:event-stream] appendEvent(run_end) failed:', e);
+	}
+	try {
+		await eventStreamStore.closeStream(runStreamPath(runId));
+	} catch (e) {
+		console.error('[flue:event-stream] closeStream failed:', e);
+	}
 
 	if (runStore)
 		await safeRunStore('endRun', () =>
@@ -697,15 +710,15 @@ async function emitRunEnd(
 		);
 }
 
-const EPHEMERAL_FLUSH_INTERVAL_MS = 3_000;
+const BUFFERED_EVENT_FLUSH_INTERVAL_MS = 3_000;
 
 /**
  * Persist non-terminal events to the event stream store.
  * `run_end` is handled separately by {@link emitRunEnd}.
  *
- * Non-ephemeral events are appended immediately. Ephemeral per-chunk
- * streaming events (see {@link isEphemeralRunEvent}) are batched and
- * flushed at most once per {@link EPHEMERAL_FLUSH_INTERVAL_MS} to avoid
+ * Other events are appended immediately. Per-chunk streaming events (see
+ * {@link isBufferedRunEvent}) are buffered and flushed at most once per
+ * {@link BUFFERED_EVENT_FLUSH_INTERVAL_MS} to avoid
  * issuing one durable storage write per streamed chunk.
  *
  * Because `emitEvent` dispatches to subscribers synchronously (fire-and-forget),
@@ -718,63 +731,62 @@ function subscribeRunFanout(lifecycle: WorkflowRunLifecycle): () => Promise<void
 	const streamPath = runStreamPath(runId);
 	const pending: Promise<void>[] = [];
 
-	// ── Ephemeral event throttle ────────────────────────────────────────
-	let ephemeralBatch: FlueEvent[] = [];
-	let ephemeralTimer: ReturnType<typeof setTimeout> | undefined;
+	// ── Streaming event buffering ────────────────────────────────────────
+	let bufferedEvents: FlueEvent[] = [];
+	let bufferTimer: ReturnType<typeof setTimeout> | undefined;
 
-	function flushEphemeralBatch(): void {
-		if (ephemeralBatch.length === 0) return;
-		const batch = ephemeralBatch;
-		ephemeralBatch = [];
+	function flushBufferedEvents(): void {
+		if (bufferedEvents.length === 0) return;
+		const batch = bufferedEvents;
+		bufferedEvents = [];
 		for (const event of batch) {
 			pending.push(
 				eventStreamStore.appendEvent(streamPath, event).then(
 					() => {},
-					(error) => { console.error('[flue:event-stream] appendEvent failed:', error); },
+					(error) => {
+						console.error('[flue:event-stream] appendEvent failed:', error);
+					},
 				),
 			);
 		}
 	}
 
-	function scheduleEphemeralFlush(): void {
-		if (ephemeralTimer !== undefined) return;
-		ephemeralTimer = setTimeout(() => {
-			ephemeralTimer = undefined;
-			flushEphemeralBatch();
-		}, EPHEMERAL_FLUSH_INTERVAL_MS);
+	function scheduleBufferFlush(): void {
+		if (bufferTimer !== undefined) return;
+		bufferTimer = setTimeout(() => {
+			bufferTimer = undefined;
+			flushBufferedEvents();
+		}, BUFFERED_EVENT_FLUSH_INTERVAL_MS);
 	}
 
 	// ── Subscription ────────────────────────────────────────────────────
 	const unsubscribe = ctx.subscribeEvent((event) => {
 		if (event.type === 'run_end') return;
 		if (isStreamExcludedEvent(event)) return;
-		if (isEphemeralRunEvent(event)) {
-			// Snapshot at emit time: ephemeral events carry live message
-			// objects that the streaming turn keeps mutating in place, so a
-			// buffered reference would serialize content produced after the
-			// event's own timestamp/eventIndex at flush time.
-			ephemeralBatch.push(structuredClone(event));
-			scheduleEphemeralFlush();
+		if (isBufferedRunEvent(event)) {
+			bufferedEvents.push(event);
+			scheduleBufferFlush();
 			return;
 		}
-		// Flush any buffered ephemeral events before a non-ephemeral event
-		// so stream readers see them in emission order.
-		flushEphemeralBatch();
+		// Flush buffered streaming events first to preserve emission order.
+		flushBufferedEvents();
 		pending.push(
 			eventStreamStore.appendEvent(streamPath, event).then(
 				() => {},
-				(error) => { console.error('[flue:event-stream] appendEvent failed:', error); },
+				(error) => {
+					console.error('[flue:event-stream] appendEvent failed:', error);
+				},
 			),
 		);
 	});
 
 	return async () => {
 		unsubscribe();
-		if (ephemeralTimer !== undefined) {
-			clearTimeout(ephemeralTimer);
-			ephemeralTimer = undefined;
+		if (bufferTimer !== undefined) {
+			clearTimeout(bufferTimer);
+			bufferTimer = undefined;
 		}
-		flushEphemeralBatch();
+		flushBufferedEvents();
 		await Promise.all(pending);
 	};
 }
@@ -815,5 +827,3 @@ function serializeError(error: unknown): unknown {
  */
 const defaultStartWorkflowAdmission: StartWorkflowAdmissionFn = (_runId, run) =>
 	Promise.resolve().then(run);
-
-

@@ -7,6 +7,7 @@ export {
 	ModelNotConfiguredError,
 	OperationFailedError,
 	ProviderRegistrationError,
+	SandboxOperationUnsupportedError,
 	SessionAlreadyExistsError,
 	SessionBusyError,
 	SessionDeletedError,

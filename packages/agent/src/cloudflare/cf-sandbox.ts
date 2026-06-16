@@ -1,5 +1,6 @@
 /** Wraps a @cloudflare/sandbox instance (from getSandbox()) into SessionEnv. */
 import { abortErrorFor } from '../abort.ts';
+import { SandboxOperationUnsupportedError } from '../errors.ts';
 import type { SandboxApi } from '../sandbox.ts';
 import { createSandboxSessionEnv } from '../sandbox.ts';
 import type { SandboxFactory, SessionEnv } from '../types.ts';
@@ -132,15 +133,18 @@ export function cfSandboxToSessionEnv(
 		},
 
 		async rm(path: string, opts?: { recursive?: boolean; force?: boolean }): Promise<void> {
-			if (opts?.recursive || opts?.force) {
-				const flags = `-${opts.recursive ? 'r' : ''}${opts.force ? 'f' : ''}`;
-				const result = await sandbox.exec(`rm ${flags} '${path.replace(/'/g, "'\\''")}'`);
-				if (!result.success) {
-					throw new Error(`rm failed for ${path}: ${result.stderr}`);
-				}
-			} else {
-				await sandbox.deleteFile(path);
+			const unsupported = [
+				opts?.recursive ? 'recursive' : undefined,
+				opts?.force ? 'force' : undefined,
+			].filter((option): option is string => option !== undefined);
+			if (unsupported.length > 0) {
+				throw new SandboxOperationUnsupportedError({
+					operation: 'rm',
+					provider: 'Cloudflare Sandbox',
+					options: unsupported,
+				});
 			}
+			await sandbox.deleteFile(path);
 		},
 
 		async exec(

@@ -1823,7 +1823,7 @@ leaseExpiresAt: 1,
 				expect(e).not.toHaveProperty('runId');
 				expect(e.submissionId).toEqual(expect.any(String));
 				submissionIds.add(e.submissionId as string);
-				if (e.type === 'message_start' || e.type === 'message_update' || e.type === 'message_end') {
+				if (e.type === 'message_start' || e.type === 'message_end') {
 					expect(e.turnId).toEqual(expect.any(String));
 				}
 			}

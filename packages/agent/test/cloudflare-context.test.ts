@@ -189,30 +189,34 @@ describe('cloudflareSandbox()', () => {
 		);
 	});
 
-	it('issues a single well-formed rm -rf command when recursive and force are both requested', async () => {
+	it('rejects unsupported rm options before mutating the Cloudflare sandbox', async () => {
 		const exec = vi.fn(async () => ({ success: true, stdout: '', stderr: '' }));
-		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+		const deleteFile = vi.fn(async () => {});
+		const env = await cloudflareSandbox({ exec, deleteFile } as unknown as CloudflareSandboxStub, {
 			cwd: '/workspace/project',
 		}).createSessionEnv({ id: 'agent-1' });
 
-		await env.rm('tmp', { recursive: true, force: true });
-
-		expect(exec).toHaveBeenCalledWith(`rm -rf '/workspace/project/tmp'`);
+		await expect(env.rm('tmp', { recursive: true, force: true })).rejects.toMatchObject({
+			type: 'sandbox_operation_unsupported',
+			meta: {
+				operation: 'rm',
+				provider: 'Cloudflare Sandbox',
+				options: ['recursive', 'force'],
+			},
+		});
+		expect(exec).not.toHaveBeenCalled();
+		expect(deleteFile).not.toHaveBeenCalled();
 	});
 
-	it('rejects when the remote rm command fails', async () => {
-		const exec = vi.fn(async () => ({
-			success: false,
-			stdout: '',
-			stderr: 'rm: cannot remove /workspace/project/tmp: Permission denied',
-		}));
-		const env = await cloudflareSandbox({ exec } as unknown as CloudflareSandboxStub, {
+	it('deletes a path with the Cloudflare filesystem API when no rm options are requested', async () => {
+		const deleteFile = vi.fn(async () => {});
+		const env = await cloudflareSandbox({ deleteFile } as unknown as CloudflareSandboxStub, {
 			cwd: '/workspace/project',
 		}).createSessionEnv({ id: 'agent-1' });
 
-		await expect(env.rm('tmp', { recursive: true })).rejects.toThrow(
-			'rm failed for /workspace/project/tmp: rm: cannot remove /workspace/project/tmp: Permission denied',
-		);
+		await env.rm('tmp');
+
+		expect(deleteFile).toHaveBeenCalledWith('/workspace/project/tmp');
 	});
 
 	it('forwards a signal and rejects when a Cloudflare sandbox is aborted in flight', async () => {

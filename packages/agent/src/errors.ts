@@ -297,7 +297,11 @@ class WorkflowNotFoundError extends FlueHttpError {
 		name,
 		available,
 		notHttp = false,
-	}: { name: string; available: readonly string[]; notHttp?: boolean }) {
+	}: {
+		name: string;
+		available: readonly string[];
+		notHttp?: boolean;
+	}) {
 		super({
 			type: 'workflow_not_found',
 			message: `Workflow "${name}" is not registered.`,
@@ -392,7 +396,13 @@ export class InvalidRequestError extends FlueHttpError {
  * `migrate()`, Durable Object initialization), before any request is served.
  */
 export class PersistedSchemaVersionError extends FlueError {
-	constructor({ storedVersion, supportedVersion }: { storedVersion: string; supportedVersion: number }) {
+	constructor({
+		storedVersion,
+		supportedVersion,
+	}: {
+		storedVersion: string;
+		supportedVersion: number;
+	}) {
 		const numeric = /^[0-9]+$/.test(storedVersion) ? Number(storedVersion) : undefined;
 		const newer = numeric !== undefined && numeric > supportedVersion;
 		super({
@@ -406,6 +416,28 @@ export class PersistedSchemaVersionError extends FlueError {
 				: `The "schema_version" row in the flue_meta table is not a version this runtime recognizes. ` +
 					`Restore the database, or point the runtime at a different one.`,
 			meta: { storedVersion, supportedVersion },
+		});
+	}
+}
+
+// ─── Sandbox error vocabulary ───────────────────────────────────────────────
+
+export class SandboxOperationUnsupportedError extends FlueError {
+	constructor({
+		operation,
+		provider,
+		options,
+	}: {
+		operation: string;
+		provider: string;
+		options: readonly string[];
+	}) {
+		super({
+			type: 'sandbox_operation_unsupported',
+			message: `${provider} does not support ${operation} with ${formatList(options)}.`,
+			details: 'The requested operation was rejected before the filesystem was modified.',
+			dev: 'Use an adapter that implements these options exactly, or issue an operation supported by this provider.',
+			meta: { operation, provider, options: [...options] },
 		});
 	}
 }
@@ -462,7 +494,8 @@ export class SessionDeletedError extends FlueError {
 		super({
 			type: 'session_deleted',
 			message: `Session "${session}" has been deleted.`,
-			details: 'The session and its stored conversation no longer exist. Use a new session to continue.',
+			details:
+				'The session and its stored conversation no longer exist. Use a new session to continue.',
 			dev: '',
 		});
 	}
@@ -539,7 +572,7 @@ export class SubagentNotDeclaredError extends FlueError {
 			details: 'Verify the subagent name is correct.',
 			dev:
 				`Available subagents: ${formatList(available)}.\n` +
-				'Declare subagents in the agent definition\'s `subagents` array.',
+				"Declare subagents in the agent definition's `subagents` array.",
 		});
 	}
 }
@@ -668,7 +701,8 @@ export class SubmissionInterruptedError extends FlueError {
 		if (input.phase === 'retry_exhausted_before_input') {
 			super({
 				type: 'submission_interrupted',
-				message: 'Submission was repeatedly interrupted before input application and exhausted its retry budget.',
+				message:
+					'Submission was repeatedly interrupted before input application and exhausted its retry budget.',
 				details:
 					'Every processing attempt was interrupted before the submission input was applied to the session. ' +
 					'The input was never processed and no model call was started.',
@@ -744,7 +778,7 @@ export class SubmissionTimeoutError extends FlueError {
 			type: 'submission_timeout',
 			message: 'Submission exceeded the configured timeout.',
 			details: 'The operation ran longer than the configured durability timeout.',
-			dev: 'The timeout is configured in milliseconds via the agent definition\'s `durability.timeoutMs`.',
+			dev: "The timeout is configured in milliseconds via the agent definition's `durability.timeoutMs`.",
 		});
 	}
 }

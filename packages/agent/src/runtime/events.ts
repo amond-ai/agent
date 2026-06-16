@@ -14,12 +14,10 @@ export type FlueEventSubscriber = (event: FlueEvent, ctx: FlueContext) => void |
 export interface ObserveOptions {
 	/**
 	 * Restrict delivery to these event types. Subscribers without `types`
-	 * receive every event. Declaring `types` matters for cost, not just
-	 * filtering: each delivered event is serialized to an isolated JSON
-	 * snapshot on the emit path, and high-frequency streaming events such as
-	 * `message_update` carry the full accumulated assistant message on every
-	 * streamed chunk. When no subscriber listens for an event's type, the
-	 * snapshot is never serialized.
+	 * receive every event. Declaring `types` matters for cost and privacy, not
+	 * just filtering: each delivered event is serialized to an isolated JSON
+	 * snapshot on the emit path and exposed to the subscriber. When no
+	 * subscriber listens for an event's type, the snapshot is never serialized.
 	 */
 	types?: readonly FlueEvent['type'][];
 }

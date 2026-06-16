@@ -21,7 +21,6 @@ export const IMAGE_DATA_OMITTED = '[image data omitted from event]';
 export function redactEventImages(event: FlueEventInput): FlueEventInput {
 	switch (event.type) {
 		case 'message_start':
-		case 'message_update':
 		case 'message_end': {
 			const message = redactMessageImages(event.message);
 			return message === event.message ? event : { ...event, message };

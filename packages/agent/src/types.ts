@@ -768,15 +768,17 @@ interface OperationOptions<S extends v.GenericSchema | undefined = undefined> {
 }
 
 /** All option fields are scoped to the duration of the `session.prompt()` call. */
-export interface PromptOptions<S extends v.GenericSchema | undefined = undefined>
-	extends OperationOptions<S> {
+export interface PromptOptions<
+	S extends v.GenericSchema | undefined = undefined,
+> extends OperationOptions<S> {
 	/** Images attached to this user message. Requires a vision-capable model. */
 	images?: PromptImage[];
 }
 
 /** All option fields are scoped to the duration of the `session.skill()` call. */
-export interface SkillOptions<S extends v.GenericSchema | undefined = undefined>
-	extends OperationOptions<S> {
+export interface SkillOptions<
+	S extends v.GenericSchema | undefined = undefined,
+> extends OperationOptions<S> {
 	/** Arguments included with the skill instruction. */
 	args?: Record<string, unknown>;
 	/** Images attached to the skill's user message. Requires a vision-capable model. */
@@ -784,8 +786,9 @@ export interface SkillOptions<S extends v.GenericSchema | undefined = undefined>
 }
 
 /** All option fields are scoped to the duration of the `session.task()` call. */
-export interface TaskOptions<S extends v.GenericSchema | undefined = undefined>
-	extends OperationOptions<S> {
+export interface TaskOptions<
+	S extends v.GenericSchema | undefined = undefined,
+> extends OperationOptions<S> {
 	/** Named subagent profile selected for this delegated task. */
 	agent?: string;
 	/** Working directory for the detached task session. Defaults to the parent session cwd. */
@@ -929,7 +932,7 @@ export type LlmTool = {
 
 export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
 
-type FlueEventVariant = (
+type FlueEventVariant =
 	| {
 			type: 'run_start';
 			runId: string;
@@ -968,7 +971,6 @@ type FlueEventVariant = (
 			toolResults: AgentMessage[];
 	  }
 	| { type: 'message_start'; message: AgentMessage; turnId: string }
-	| { type: 'message_update'; message: AgentMessage; turnId: string }
 	| { type: 'message_end'; message: AgentMessage; turnId: string }
 	| { type: 'text_delta'; text: string }
 	| { type: 'thinking_start' }
@@ -1062,8 +1064,7 @@ type FlueEventVariant = (
 			isError: boolean;
 			error?: unknown;
 			durationMs: number;
-	  }
-);
+	  };
 
 /**
  * Event payload as constructed at an emission site, before runtime decoration.

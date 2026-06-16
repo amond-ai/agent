@@ -2,6 +2,7 @@ import {
 	type FauxModelDefinition,
 	type FauxProviderRegistration,
 	fauxAssistantMessage,
+	fauxThinking,
 	fauxToolCall,
 	registerFauxProvider,
 } from '@earendil-works/pi-ai';
@@ -179,6 +180,60 @@ describe('session.prompt()', () => {
 			data?.entries.filter((entry) => entry.type === 'message' && entry.message.role === 'assistant'),
 		).toHaveLength(1);
 		expect(provider.state.callCount).toBe(0);
+	});
+
+	it('emits streaming deltas and final messages without public message updates when a prompt streams text and thinking', async () => {
+		const provider = createProvider([{ id: 'reviewer' }]);
+		provider.setResponses([
+			fauxAssistantMessage([
+				fauxThinking('Inspect inputs'),
+				{ type: 'text', text: 'Reviewed workspace.' },
+			]),
+		]);
+		const ctx = createContext(provider);
+		const events: Array<{ type: string; eventIndex: number; [key: string]: unknown }> = [];
+		ctx.subscribeEvent((event) => {
+			events.push(event);
+		});
+		const harness = await ctx.init(
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
+		);
+		const session = await harness.session();
+
+		await session.prompt('Review this workspace.');
+
+		expect(events.some((event) => event.type === 'message_update')).toBe(false);
+		expect(
+			events
+				.filter((event) => event.type === 'thinking_delta')
+				.map((event) => event.delta)
+				.join(''),
+		).toBe('Inspect inputs');
+		expect(
+			events
+				.filter((event) => event.type === 'text_delta')
+				.map((event) => event.text)
+				.join(''),
+		).toBe('Reviewed workspace.');
+		const assistantMessageEnd = events.find(
+			(event) =>
+				event.type === 'message_end' && (event.message as { role?: string }).role === 'assistant',
+		);
+		expect(assistantMessageEnd).toMatchObject({
+			type: 'message_end',
+			message: {
+				role: 'assistant',
+				content: [
+					{ type: 'thinking', thinking: 'Inspect inputs' },
+					{ type: 'text', text: 'Reviewed workspace.' },
+				],
+			},
+			turnId: expect.any(String),
+		});
+		expect(events.map((event) => event.eventIndex)).toEqual(events.map((_, index) => index));
+		expect(events.indexOf(assistantMessageEnd as (typeof events)[number])).toBeGreaterThan(
+			events.findLastIndex((event) => event.type === 'text_delta'),
+		);
 	});
 
 	it('persists completed assistant output before the agent reaches idle when a prompt returns no tool calls', async () => {
