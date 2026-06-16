@@ -20,6 +20,10 @@ test('restarts after discovered config changes and recovers after invalid config
 	const root = createFixtureRoot();
 	const port = await getAvailablePort();
 	writeWorkflow(root);
+	fs.writeFileSync(
+		path.join(root, 'workflows', 'daily.report.mjs'),
+		`export async function run() { return { ok: true }; }\n`,
+	);
 	fs.writeFileSync(path.join(root, '.config-helper.mjs'), `export default 'dist-one';\n`);
 	fs.writeFileSync(
 		path.join(root, 'flue.config.mjs'),
@@ -29,6 +33,7 @@ test('restarts after discovered config changes and recovers after invalid config
 	const dev = startDev(root, ['--port', String(port)]);
 	try {
 		await waitForServer(port, dev.logs);
+		await dev.waitForLog('daily.report');
 		assert.equal(fs.existsSync(path.join(root, 'dist-one', 'server.mjs')), true);
 
 		fs.writeFileSync(path.join(root, '.config-helper.mjs'), `export default 'dist-two';\n`);
@@ -48,7 +53,7 @@ test('restarts after discovered config changes and recovers after invalid config
 		await waitForServer(port);
 
 		fs.rmSync(path.join(root, 'flue.config.ts'));
-		await dev.waitForLog('Loaded config: flue.config.mjs');
+		await dev.waitForLog('config    flue.config.mjs');
 		await waitForServer(port);
 	} finally {
 		await dev.stop();
