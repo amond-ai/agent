@@ -145,7 +145,6 @@ export type FlueEvent = (
 			toolResults: unknown[];
 	  }
 	| { type: 'message_start'; message: LlmMessage; turnId: string }
-	| { type: 'message_update'; message: LlmMessage; turnId: string }
 	| { type: 'message_end'; message: LlmMessage; turnId: string }
 	| { type: 'text_delta'; text: string }
 	| { type: 'thinking_start' }
@@ -261,5 +260,3 @@ export type AttachedAgentEvent = Exclude<
 	runId?: never;
 	instanceId: string;
 };
-
-

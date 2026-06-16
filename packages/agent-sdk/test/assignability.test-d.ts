@@ -7,8 +7,8 @@ import {
 	type RunRecord as RuntimeRunRecord,
 } from '@flue/runtime';
 import {
-	IMAGE_DATA_OMITTED as SDK_IMAGE_DATA_OMITTED,
 	type AgentPromptResponse,
+	IMAGE_DATA_OMITTED as SDK_IMAGE_DATA_OMITTED,
 	type FlueEvent as SdkFlueEvent,
 	type LlmMessage as SdkLlmMessage,
 	type PromptUsage as SdkPromptUsage,
@@ -18,7 +18,7 @@ import {
 // `turn_request` is in-process only (`observe()` subscribers and exporters);
 // it is never persisted to durable streams or served over HTTP, so the SDK
 // wire union deliberately omits it.
-type MessageSnapshotEvent = { type: 'message_start' | 'message_update' | 'message_end' };
+type MessageSnapshotEvent = { type: 'message_start' | 'message_end' };
 const _: Exclude<SdkFlueEvent, MessageSnapshotEvent> = {} as Exclude<
 	RuntimeFlueEvent,
 	{ type: 'turn_request' } | MessageSnapshotEvent
@@ -32,6 +32,12 @@ const _snapshotTurnId: Extract<SdkFlueEvent, MessageSnapshotEvent>['turnId'] = {
 >['turnId'];
 void _snapshot;
 void _snapshotTurnId;
+
+type ExpectNever<T extends never> = T;
+type _SdkMessageUpdateIsAbsent = ExpectNever<Extract<SdkFlueEvent, { type: 'message_update' }>>;
+type _RuntimeMessageUpdateIsAbsent = ExpectNever<
+	Extract<RuntimeFlueEvent, { type: 'message_update' }>
+>;
 
 // Direct-agent prompts (`?wait=result`) always resolve with the runtime
 // `PromptResponse`; the SDK duplicates the shape so it must stay assignable.
