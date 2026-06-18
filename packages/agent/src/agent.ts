@@ -16,6 +16,7 @@ export interface TaskToolParams {
 	description?: string;
 	agent?: string;
 	cwd?: string;
+	attachments?: Array<{ id: string }>;
 }
 
 export interface TaskToolResultDetails {
@@ -284,6 +285,14 @@ const TaskParams = Type.Object({
 				'Working directory for the child agent. AGENTS.md and skills are discovered from here.',
 		}),
 	),
+	attachments: Type.Optional(
+		Type.Array(
+			Type.Object({
+				id: Type.String({ description: 'Attachment ID shown in the current conversation' }),
+			}),
+			{ description: 'Images from this conversation to include in the child agent prompt' },
+		),
+	),
 });
 
 /** Build Flue's framework-owned `task` tool. */
@@ -310,6 +319,7 @@ export function createTaskTool(
 		description:
 			'Delegate a focused task to a detached child agent with its own context. ' +
 			'Use this for independent research, file exploration, or parallel work. ' +
+			'Pass attachment IDs shown in the conversation to include those images. ' +
 			'The task returns only its final answer to this conversation.' +
 			agentDescription,
 		parameters: TaskParams,

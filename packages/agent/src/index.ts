@@ -3,6 +3,7 @@
 
 export { createAgent, defineAgentProfile } from './agent-definition.ts';
 export {
+	AttachmentNotAvailableError,
 	FlueError,
 	ModelNotConfiguredError,
 	OperationFailedError,

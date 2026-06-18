@@ -704,6 +704,7 @@ interface SessionEntryBase {
 export interface MessageEntry extends SessionEntryBase {
 	type: 'message';
 	message: AgentMessage;
+	imageAttachmentIds?: string[];
 	dispatch?: DispatchMessageMetadata;
 	directSubmissionId?: string;
 	submissionTerminal?: SubmissionTerminalMetadata;

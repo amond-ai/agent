@@ -2,6 +2,7 @@
 
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, UserMessage } from '@earendil-works/pi-ai';
+import { AttachmentNotAvailableError } from './errors.ts';
 import type {
 	CompactionEntry,
 	DispatchMessageMetadata,
@@ -31,11 +32,19 @@ export class SessionHistory {
 	private entries: SessionEntry[];
 	private byId: Map<string, SessionEntry>;
 	private leafId: string | null;
+	private imageAttachmentIds = new Map<string, Map<string, string>>();
 
 	private constructor(entries: SessionEntry[], leafId: string | null) {
 		this.entries = [...entries];
 		this.leafId = leafId;
 		this.byId = new Map(this.entries.map((entry) => [entry.id, entry]));
+		for (const entry of this.entries) {
+			if (entry.type !== 'message' || !entry.imageAttachmentIds) continue;
+			for (const [index, image] of getPromptImages(entry.message).entries()) {
+				const id = entry.imageAttachmentIds[index];
+				if (id) this.rememberImageAttachment(image, id);
+			}
+		}
 	}
 
 	static empty(): SessionHistory {
@@ -144,6 +153,10 @@ export class SessionHistory {
 			timestamp: new Date().toISOString(),
 			message,
 		};
+		const imageAttachmentIds = getPromptImages(message).map((image) =>
+			this.getOrCreateImageAttachmentId(image),
+		);
+		if (imageAttachmentIds.length > 0) entry.imageAttachmentIds = imageAttachmentIds;
 		if (metadata?.dispatch) entry.dispatch = metadata.dispatch;
 		if (metadata?.directSubmissionId) entry.directSubmissionId = metadata.directSubmissionId;
 		if (metadata?.submissionTerminal) entry.submissionTerminal = metadata.submissionTerminal;
@@ -170,6 +183,34 @@ export class SessionHistory {
 			(entry): entry is MessageEntry =>
 				entry.type === 'message' && entry.submissionTerminal?.submissionId === submissionId,
 		);
+	}
+
+	prepareImagePrompt(text: string, images: readonly PromptImage[] | undefined): string {
+		if (!images || images.length === 0) return text;
+		const manifest = images
+			.map((image) => {
+				const id = this.getOrCreateImageAttachmentId(image);
+				return `<image id="${escapeXmlAttribute(id)}" mimeType="${escapeXmlAttribute(image.mimeType)}" />`;
+			})
+			.join('\n');
+		return `${text}\n\n<attachments>\n${manifest}\n</attachments>`;
+	}
+
+	resolveImages(ids: readonly string[]): PromptImage[] {
+		const available = new Map<string, PromptImage>();
+		for (const contextEntry of this.buildContextEntries()) {
+			const entry = contextEntry.entry;
+			if (entry?.type !== 'message' || !entry.imageAttachmentIds) continue;
+			for (const [index, image] of getPromptImages(entry.message).entries()) {
+				const id = entry.imageAttachmentIds[index];
+				if (id) available.set(id, image);
+			}
+		}
+		return ids.map((id) => {
+			const image = available.get(id);
+			if (!image) throw new AttachmentNotAvailableError({ attachmentId: id });
+			return image;
+		});
 	}
 
 	appendMessages(messages: AgentMessage[]): string[] {
@@ -224,6 +265,23 @@ export class SessionHistory {
 			throw new Error(`[flue] Cannot set leaf: entry "${entryId}" does not exist.`);
 		}
 		this.leafId = entryId;
+	}
+
+	private getOrCreateImageAttachmentId(image: PromptImage): string {
+		const existing = this.imageAttachmentIds.get(image.mimeType)?.get(image.data);
+		if (existing) return existing;
+		const id = `att_${crypto.randomUUID()}`;
+		this.rememberImageAttachment(image, id);
+		return id;
+	}
+
+	private rememberImageAttachment(image: PromptImage, id: string): void {
+		let byData = this.imageAttachmentIds.get(image.mimeType);
+		if (!byData) {
+			byData = new Map();
+			this.imageAttachmentIds.set(image.mimeType, byData);
+		}
+		byData.set(image.data, id);
 	}
 
 	private appendEntry(entry: SessionEntry): void {
@@ -294,6 +352,21 @@ function pathToContextEntries(path: SessionEntry[]): ContextEntry[] {
 		index += 1;
 	}
 	return context;
+}
+
+function getPromptImages(message: AgentMessage): PromptImage[] {
+	if ((message.role !== 'user' && message.role !== 'toolResult') || !Array.isArray(message.content)) {
+		return [];
+	}
+	return message.content.filter(isPromptImage);
+}
+
+function isPromptImage(value: unknown): value is PromptImage {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	const block = value as { type?: unknown; data?: unknown; mimeType?: unknown };
+	return (
+		block.type === 'image' && typeof block.data === 'string' && typeof block.mimeType === 'string'
+	);
 }
 
 function isCompleteToolResultBatch(
