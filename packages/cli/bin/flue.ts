@@ -97,7 +97,7 @@ function printUsage(log: (message: string) => void = console.error) {
 	log(
 		'Usage:\n' +
 			'  flue dev   [--target <node|cloudflare>] [--root <path>] [--output <path>] [--config <path>] [--port <number>] [--env <path>]\n' +
-			'  flue run     <workflow> [--target node] [--payload <json>] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
+			'  flue run     <workflow> [--target node] [--input <json>] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
 			'  flue connect <agent> <instance-id> [--target node] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
 			'  flue build   [--target <node|cloudflare>] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
 			'  flue init  --target <node|cloudflare> [--root <path>] [--force]\n' +
@@ -133,7 +133,7 @@ function printUsage(log: (message: string) => void = console.error) {
 			'  flue dev --target node\n' +
 			'  flue dev --target cloudflare --port 8787\n' +
 			'  flue run hello --target node\n' +
-			'  flue run hello --target node --payload \'{"name": "World"}\' --env .env.staging\n' +
+			'  flue run hello --target node --input \'{"name": "World"}\' --env .env.staging\n' +
 			'  flue connect assistant thread-1 --target node\n' +
 			'  flue build --target node\n' +
 			'  flue build --target cloudflare --root ./my-app\n' +
@@ -162,7 +162,7 @@ interface RunArgs {
 	workflow: string;
 	/** May be undefined if the user is relying on `flue.config.ts` for `target`. */
 	target: 'node' | undefined;
-	payload: string;
+	input: string | undefined;
 	/** Explicit --root value, or undefined to default to cwd. */
 	explicitRoot: string | undefined;
 	/** Explicit --output value, or undefined to default to <root>/dist. */
@@ -284,7 +284,7 @@ type CliValue = string | boolean | Array<string | boolean> | undefined;
 type CliValues = Record<string, CliValue>;
 
 const SHARED_PARSE_OPTIONS = {
-	payload: { type: 'string' },
+	input: { type: 'string' },
 	target: { type: 'string' },
 	root: { type: 'string' },
 	output: { type: 'string' },
@@ -327,7 +327,7 @@ function parseCommandOptions(
 		}
 		if (!allowed.has(token.rawName)) {
 			const hint =
-				command === 'connect' && token.rawName === '--payload'
+				command === 'connect' && token.rawName === '--input'
 					? '; enter prompts after connecting'
 					: '';
 			fail(`\`flue ${command}\` does not accept ${token.rawName}${hint}.`);
@@ -391,7 +391,7 @@ function parseFlags(
 	explicitRoot: string | undefined;
 	explicitOutput: string | undefined;
 	configFile: string | undefined;
-	payload: string;
+	input: string | undefined;
 	port: number;
 	envFile: string | undefined;
 } {
@@ -422,7 +422,7 @@ function parseFlags(
 		// `--config` is intentionally NOT pre-resolved: the config loader
 		// resolves it vs. cwd at load time, mirroring how Vite handles `--config`.
 		configFile: stringFlag(values, 'config', 'Missing value for --config'),
-		payload: stringFlag(values, 'payload', 'Missing value for --payload') ?? '{}',
+		input: stringFlag(values, 'input', 'Missing value for --input'),
 		port,
 		envFile: envFiles[0],
 	};
@@ -437,16 +437,19 @@ function shellQuote(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function printCloudflareRunUnsupported(workflow: string, payload: string): never {
+function printCloudflareRunUnsupported(workflow: string, input: string | undefined): never {
+	const request =
+		input === undefined
+			? `  curl -X POST http://localhost:${DEFAULT_DEV_PORT}/workflows/${workflow}`
+			: `  curl http://localhost:${DEFAULT_DEV_PORT}/workflows/${workflow} \\\n` +
+				'    -H "Content-Type: application/json" \\\n' +
+				`    -d ${shellQuote(input)}`;
 	console.error(
 		'`flue run --target cloudflare` is not supported.\n\n' +
 			'`flue run` is a one-shot Node.js invoker; Cloudflare builds need a Workers runtime.\n\n' +
 			'For local development of a Cloudflare target, use `flue dev`:\n\n' +
 			`  flue dev --target cloudflare\n\n` +
-			`Then in another terminal:\n\n` +
-			`  curl http://localhost:${DEFAULT_DEV_PORT}/workflows/${workflow} \\\n` +
-			'    -H "Content-Type: application/json" \\\n' +
-			`    -d ${shellQuote(payload)}`,
+			`Then in another terminal:\n\n${request}`,
 	);
 	process.exit(1);
 }
@@ -801,7 +804,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 		const flags = parseFlags(
 			'run',
 			rest,
-			new Set(['--target', '--payload', '--root', '--output', '--config', '--env']),
+			new Set(['--target', '--input', '--root', '--output', '--config', '--env']),
 		);
 		const [workflow, ...extra] = flags.positionals;
 		if (!workflow) {
@@ -820,20 +823,22 @@ function parseArgs(argv: string[]): ParsedArgs {
 		// where `flue.config.ts` sets `target: cloudflare` is handled later
 		// in `run()` after config resolution.
 		if (flags.target === 'cloudflare') {
-			printCloudflareRunUnsupported(workflow, flags.payload);
+			printCloudflareRunUnsupported(workflow, flags.input);
 		}
-		try {
-			JSON.parse(flags.payload);
-		} catch {
-			console.error(`Invalid JSON for --payload: ${flags.payload}`);
-			process.exit(1);
+		if (flags.input !== undefined) {
+			try {
+				JSON.parse(flags.input);
+			} catch {
+				console.error(`Invalid JSON for --input: ${flags.input}`);
+				process.exit(1);
+			}
 		}
 
 		return {
 			command: 'run',
 			workflow,
 			target: flags.target as 'node' | undefined,
-			payload: flags.payload,
+			input: flags.input,
 			explicitRoot: flags.explicitRoot,
 			explicitOutput: flags.explicitOutput,
 			configFile: flags.configFile,
@@ -1360,7 +1365,7 @@ async function buildLocalTarget(
 
 async function run(args: RunArgs) {
 	const built = await buildLocalTarget(args);
-	if (built.cfg.target === 'cloudflare') printCloudflareRunUnsupported(args.workflow, args.payload);
+	if (built.cfg.target === 'cloudflare') printCloudflareRunUnsupported(args.workflow, args.input);
 	if (!built.serverPath)
 		throw new Error('[flue] Node local workflow build did not produce an executable artifact.');
 	brandRows('flue run', [
@@ -1386,7 +1391,7 @@ async function run(args: RunArgs) {
 			{
 				type: 'invoke',
 				requestId: `req_${crypto.randomUUID()}`,
-				payload: JSON.parse(args.payload),
+				input: args.input === undefined ? undefined : JSON.parse(args.input),
 			},
 			(message) => {
 				row('run', message.runId);

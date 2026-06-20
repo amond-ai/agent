@@ -197,12 +197,11 @@ const createAdmission = Object.fromEntries(
   ]),
 );
 
-function createContextForRequest(id, runId, payload, req, initialEventIndex, dispatchId) {
+function createContextForRequest(id, runId, req, initialEventIndex, dispatchId) {
   return createFlueContext({
     id,
     runId,
     dispatchId,
-    payload,
     initialEventIndex,
     env: process.env,
     req,
@@ -302,7 +301,7 @@ function parseIpcWorkflowMessage(raw) {
   if (!raw || typeof raw !== 'object' || raw.type !== 'invoke' || typeof raw.requestId !== 'string') {
     throw new Error('IPC workflow messages must have type "invoke" and a string requestId.');
   }
-  return { type: 'invoke', requestId: raw.requestId, payload: raw.payload === undefined ? {} : raw.payload };
+  return { type: 'invoke', requestId: raw.requestId, input: raw.input };
 }
 
 function parseIpcAgentMessage(raw) {
@@ -351,7 +350,7 @@ function startLocalWorkflow(name) {
       workflowName: name,
       id: runId,
       runId,
-      input: message.payload,
+      input: message.input,
       request: localRequest(),
       workflow,
       createContext: createContextForRequest,

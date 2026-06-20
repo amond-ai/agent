@@ -95,6 +95,107 @@ describe('resolveConfig()', () => {
 	});
 });
 
+describe('flue run', () => {
+	it('accepts omitted --input for a no-input Created Workflow', async () => {
+		const root = createNoInputWorkflowFixture();
+		const child = spawn(process.execPath, [cli.pathname, 'run', 'no-input'], {
+			cwd: root,
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		let stderr = '';
+		child.stderr.setEncoding('utf8');
+		child.stderr.on('data', (chunk) => {
+			stderr += chunk;
+		});
+		const [exitCode] = await once(child, 'exit');
+
+		assert.equal(exitCode, 0, stderr);
+	});
+
+	it('rejects explicit --input for a no-input Created Workflow', async () => {
+		const root = createNoInputWorkflowFixture();
+		const child = spawn(process.execPath, [cli.pathname, 'run', 'no-input', '--input', '{}'], {
+			cwd: root,
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		let stderr = '';
+		child.stderr.setEncoding('utf8');
+		child.stderr.on('data', (chunk) => {
+			stderr += chunk;
+		});
+		const [exitCode] = await once(child, 'exit');
+
+		assert.equal(exitCode, 1);
+		assert.match(stderr, /does not accept input/);
+	});
+
+	it('delivers --input JSON unchanged through the generated workflow runner', async () => {
+		const root = createWorkflowFixture();
+		const child = spawn(
+			process.execPath,
+			[cli.pathname, 'run', 'inspect-input', '--input', '{"value":"weekly","nested":{"count":3}}'],
+			{ cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+		);
+		let stdout = '';
+		let stderr = '';
+		child.stdout.setEncoding('utf8');
+		child.stderr.setEncoding('utf8');
+		child.stdout.on('data', (chunk) => {
+			stdout += chunk;
+		});
+		child.stderr.on('data', (chunk) => {
+			stderr += chunk;
+		});
+		const [exitCode] = await once(child, 'exit');
+
+		assert.equal(exitCode, 0, stderr);
+		assert.deepEqual(JSON.parse(stdout), { value: 'weekly', nested: { count: 3 } });
+	});
+
+	it('represents omitted CLI input as undefined for a workflow with schema defaults', async () => {
+		const root = createWorkflowFixture(true);
+		const build = spawn(process.execPath, [cli.pathname, 'build'], {
+			cwd: root,
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		let buildOutput = '';
+		for (const stream of [build.stdout, build.stderr]) {
+			stream.setEncoding('utf8');
+			stream.on('data', (chunk) => {
+				buildOutput += chunk;
+			});
+		}
+		const [buildExitCode] = await once(build, 'exit');
+		assert.equal(buildExitCode, 0, buildOutput);
+
+		const server = spawn(process.execPath, [path.join(root, 'dist', 'server.mjs')], {
+			cwd: root,
+			stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+			env: {
+				...process.env,
+				FLUE_MODE: 'local',
+				FLUE_INTERNAL_CLI_IPC: '1',
+				FLUE_CLI_TARGET: 'workflow',
+				FLUE_CLI_NAME: 'inspect-input',
+			},
+		});
+		try {
+			await waitForIpcMessage(server, (message) => message.type === 'ready');
+			server.send({
+				type: 'invoke',
+				requestId: 'omitted-input',
+			});
+			const result = await waitForIpcMessage(
+				server,
+				(message) => message.type === 'result' && message.requestId === 'omitted-input',
+			);
+			assert.deepEqual(result.result, { value: 'default' });
+		} finally {
+			server.kill('SIGTERM');
+		}
+	});
+});
+
 describe('flue build', () => {
 	it('rejects a project that contains channels but no agents or workflows', async () => {
 		const root = createFixtureRoot();
@@ -138,7 +239,9 @@ describe('flue build', () => {
 		);
 		fs.writeFileSync(
 			path.join(root, '.flue', 'workflows', 'inner.mjs'),
-			`export async function run() { return { ok: true }; }\n`,
+			`import { createAgent, createWorkflow } from '@flue/runtime';\n` +
+				`const agent = createAgent(() => ({ model: false }));\n` +
+				`export default createWorkflow({ agent, async run() { return { ok: true }; } });\n`,
 		);
 
 		// Bare layout that must be ignored because .flue/ exists.
@@ -152,7 +255,9 @@ describe('flue build', () => {
 		);
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'outer.mjs'),
-			`export async function run() { return { ok: true }; }\n`,
+			`import { createAgent, createWorkflow } from '@flue/runtime';\n` +
+				`const agent = createAgent(() => ({ model: false }));\n` +
+				`export default createWorkflow({ agent, async run() { return { ok: true }; } });\n`,
 		);
 
 		const child = spawn(process.execPath, [cli.pathname, 'build'], {
@@ -182,6 +287,68 @@ function createFixtureRoot() {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'flue-cli-config-'));
 	fixtureRoots.push(root);
 	return root;
+}
+
+function createNoInputWorkflowFixture() {
+	const root = createFixtureRoot();
+	linkRuntime(root);
+	fs.writeFileSync(path.join(root, 'flue.config.mjs'), `export default { target: 'node' };\n`);
+	fs.mkdirSync(path.join(root, 'workflows'));
+	fs.writeFileSync(
+		path.join(root, 'workflows', 'no-input.mjs'),
+		`import { createAgent, createWorkflow } from '@flue/runtime';\n` +
+			`const agent = createAgent(() => ({ model: false }));\n` +
+			`export default createWorkflow({ agent, async run() { return { ok: true }; } });\n`,
+	);
+	return root;
+}
+
+function createWorkflowFixture(optionalInput = false) {
+	const root = createFixtureRoot();
+	linkRuntime(root);
+	fs.writeFileSync(path.join(root, 'flue.config.mjs'), `export default { target: 'node' };\n`);
+	fs.mkdirSync(path.join(root, 'workflows'));
+	fs.writeFileSync(
+		path.join(root, 'workflows', 'inspect-input.mjs'),
+		`import * as v from 'valibot';\n` +
+			`import { createAgent, createWorkflow } from '@flue/runtime';\n` +
+			`const agent = createAgent(() => ({ model: false }));\n` +
+			`export default createWorkflow({\n` +
+			`  agent,\n` +
+			(optionalInput
+				? `  input: v.object({ value: v.optional(v.string(), 'default') }),\n  async run({ input }) { return input; },\n`
+				: `  input: v.object({ value: v.string(), nested: v.object({ count: v.number() }) }),\n  async run({ input }) { return input; },\n`) +
+			`});\n`,
+	);
+	const valibotPath = path.join(repositoryRoot, 'node_modules', 'valibot');
+	fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true });
+	fs.symlinkSync(valibotPath, path.join(root, 'node_modules', 'valibot'), 'dir');
+	return root;
+}
+
+function waitForIpcMessage(child, predicate) {
+	return new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			cleanup();
+			reject(new Error('Timed out waiting for generated runner IPC message.'));
+		}, 60_000);
+		const onMessage = (message) => {
+			if (!predicate(message)) return;
+			cleanup();
+			resolve(message);
+		};
+		const onExit = (code) => {
+			cleanup();
+			reject(new Error(`Generated runner exited before IPC response (${code}).`));
+		};
+		const cleanup = () => {
+			clearTimeout(timeout);
+			child.off('message', onMessage);
+			child.off('exit', onExit);
+		};
+		child.on('message', onMessage);
+		child.on('exit', onExit);
+	});
 }
 
 function linkRuntime(root) {

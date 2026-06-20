@@ -72,10 +72,10 @@ describe('flue (argument parsing)', () => {
 		assert.ok(!result.stderr.includes('Missing value for --target'), result.stderr);
 	});
 
-	it('rejects --payload when passed to `flue build`', async () => {
-		const result = await runCli(['build', '--payload', '{"x":1}']);
+	it('rejects --input when passed to `flue build`', async () => {
+		const result = await runCli(['build', '--input', '{"x":1}']);
 		assert.equal(result.code, 1);
-		assert.ok(result.stderr.includes('`flue build` does not accept --payload'), result.stderr);
+		assert.ok(result.stderr.includes('`flue build` does not accept --input'), result.stderr);
 	});
 
 	it('rejects --port when passed to `flue build`', async () => {
@@ -84,18 +84,24 @@ describe('flue (argument parsing)', () => {
 		assert.ok(result.stderr.includes('`flue build` does not accept --port'), result.stderr);
 	});
 
-	it('rejects --payload when passed to `flue dev`', async () => {
-		const result = await runCli(['dev', '--payload', '{}']);
+	it('rejects --input when passed to `flue dev`', async () => {
+		const result = await runCli(['dev', '--input', '{}']);
 		assert.equal(result.code, 1);
-		assert.ok(result.stderr.includes('`flue dev` does not accept --payload'), result.stderr);
+		assert.ok(result.stderr.includes('`flue dev` does not accept --input'), result.stderr);
 	});
 
-	it('rejects --payload when `flue connect` is given the default payload value', async () => {
+	it('rejects --input when `flue connect` is given the default input value', async () => {
 		// Rejection is by flag name, not by comparing against the default
-		// value, so even `--payload '{}'` errors instead of slipping through.
-		const result = await runCli(['connect', 'assistant', 'thread-1', '--payload', '{}']);
+		// value, so even `--input '{}'` errors instead of slipping through.
+		const result = await runCli(['connect', 'assistant', 'thread-1', '--input', '{}']);
 		assert.equal(result.code, 1);
-		assert.ok(result.stderr.includes('`flue connect` does not accept --payload'), result.stderr);
+		assert.ok(result.stderr.includes('`flue connect` does not accept --input'), result.stderr);
+	});
+
+	it('rejects the removed --payload flag when passed to `flue run`', async () => {
+		const result = await runCli(['run', 'hello', '--payload', '{}']);
+		assert.equal(result.code, 1);
+		assert.ok(result.stderr.includes('Unknown flag for `flue run`: --payload'), result.stderr);
 	});
 
 	it('rejects an unknown flag when passed to `flue run`', async () => {

@@ -288,12 +288,11 @@ const dispatchQueue = {
   },
 };
 
-function createContextForRequest(id, runId, payload, doInstance, req, defaultStore, initialEventIndex, dispatchId) {
+function createContextForRequest(id, runId, doInstance, req, defaultStore, initialEventIndex, dispatchId) {
   return createFlueContext({
     id,
     runId,
     dispatchId,
-    payload,
     env: doInstance?.env ?? {},
     req,
     initialEventIndex,
@@ -303,10 +302,9 @@ function createContextForRequest(id, runId, payload, doInstance, req, defaultSto
   });
 }
 
-function createAgentContextForRequest(executionStore, id, payload, doInstance, req, initialEventIndex, dispatchId) {
+function createAgentContextForRequest(executionStore, id, doInstance, req, initialEventIndex, dispatchId) {
   return createFlueContext({
     id,
-    payload,
     env: doInstance?.env ?? {},
     req,
     initialEventIndex,
@@ -318,9 +316,9 @@ function createAgentContextForRequest(executionStore, id, payload, doInstance, r
   });
 }
 
-function createWorkflowContextForRequest(id, runId, payload, doInstance, req, initialEventIndex, dispatchId) {
+function createWorkflowContextForRequest(id, runId, doInstance, req, initialEventIndex, dispatchId) {
   const defaultStore = createSqlSessionStore(doInstance.ctx.storage);
-  return createContextForRequest(id, runId, payload, doInstance, req, defaultStore, initialEventIndex, dispatchId);
+  return createContextForRequest(id, runId, doInstance, req, defaultStore, initialEventIndex, dispatchId);
 }
 
 function createRunStoreForRequest(doInstance) {
@@ -379,8 +377,8 @@ function createEventStreamStoreForInstance(doInstance) {
 
 const cloudflareAgents = createCloudflareAgentRuntime({
   createdAgents,
-  createContext: ({ executionStore, instance, payload, request, initialEventIndex, dispatchId }) =>
-    createAgentContextForRequest(executionStore, instance.name, payload, instance, request, initialEventIndex, dispatchId),
+  createContext: ({ executionStore, instance, request, initialEventIndex, dispatchId }) =>
+    createAgentContextForRequest(executionStore, instance.name, instance, request, initialEventIndex, dispatchId),
   runWithInstanceContext: (instance, agentName, fn) => runWithInstanceContext(instance, agentRuntimeIdentity(agentName), fn),
   createEventStreamStore: (instance) => createEventStreamStoreForInstance(instance),
 });
@@ -407,7 +405,7 @@ async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
     error: new Error('Flue workflow execution was interrupted. Start a new workflow run explicitly if retry is appropriate.'),
     runStore,
     eventStreamStore: createEventStreamStoreForInstance(doInstance),
-    createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createWorkflowContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+    createContext: (id_, recoveredRunId, req, initialEventIndex) => createWorkflowContextForRequest(id_, recoveredRunId, doInstance, req, initialEventIndex),
   });
 }
 
@@ -448,7 +446,7 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
         request,
         runStore: createRunStoreForRequest(doInstance),
         eventStreamStore: createEventStreamStoreForInstance(doInstance),
-        createContext: (id_, runId, payload, req, initialEventIndex, dispatchId) => createWorkflowContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex, dispatchId),
+        createContext: (id_, runId, req, initialEventIndex, dispatchId) => createWorkflowContextForRequest(id_, runId, doInstance, req, initialEventIndex, dispatchId),
         startWorkflowAdmission: (runId, run) => {
           assertAgentsDurabilityApi(doInstance, 'runFiber');
           return doInstance.runFiber('flue:workflow:' + runId, () => runWithInstanceContext(doInstance, identity, run));
@@ -465,7 +463,7 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
       workflow,
       runStore: createRunStoreForRequest(doInstance),
       eventStreamStore: createEventStreamStoreForInstance(doInstance),
-      createContext: (id_, runId, payload, req, initialEventIndex, dispatchId) => createWorkflowContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex, dispatchId),
+      createContext: (id_, runId, req, initialEventIndex, dispatchId) => createWorkflowContextForRequest(id_, runId, doInstance, req, initialEventIndex, dispatchId),
       startWorkflowAdmission: (runId, run) => {
         assertAgentsDurabilityApi(doInstance, 'runFiber');
         return doInstance.runFiber('flue:workflow:' + runId, () => runWithInstanceContext(doInstance, identity, run));
