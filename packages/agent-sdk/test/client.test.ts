@@ -432,31 +432,20 @@ describe('createFlueClient', () => {
 	});
 
 	describe('workflows.invoke()', () => {
-		it('POSTs to workflow route and returns the server-provided run stream coordinates', async () => {
+		it('POSTs to workflow route and returns the run ID', async () => {
 			const seen: Request[] = [];
 			const client = createFlueClient({
 				baseUrl: 'https://flue.test',
 				fetch: async (input, init) => {
 					seen.push(new Request(input, init));
-					return Response.json(
-						{
-							runId: 'run_abc123',
-							streamUrl: 'https://flue.test/runs/run_abc123',
-							offset: '-1',
-						},
-						{ status: 202 },
-					);
+					return Response.json({ runId: 'run_abc123' }, { status: 202 });
 				},
 			});
 
 			const result = await client.workflows.invoke('my-workflow', {
 				input: { key: 'value' },
 			});
-			expect(result.runId).toBe('run_abc123');
-			// The streamUrl/offset come from the server response verbatim —
-			// the SDK must not fabricate stream coordinates.
-			expect(result.streamUrl).toBe('https://flue.test/runs/run_abc123');
-			expect(result.offset).toBe('-1');
+			expect(result).toEqual({ runId: 'run_abc123' });
 			expect(seen).toHaveLength(1);
 			const [request] = seen;
 			if (!request) throw new Error('Expected a workflow request.');
@@ -476,8 +465,6 @@ describe('createFlueClient', () => {
 					return Response.json({
 						result: { summary: 'done' },
 						runId: 'run_abc123',
-						streamUrl: 'https://flue.test/runs/run_abc123',
-						offset: '-1',
 					});
 				},
 			});
@@ -486,8 +473,10 @@ describe('createFlueClient', () => {
 				input: { key: 'value' },
 				wait: 'result',
 			});
-			expect(result.result).toEqual({ summary: 'done' });
-			expect(result.runId).toBe('run_abc123');
+			expect(result).toEqual({
+				result: { summary: 'done' },
+				runId: 'run_abc123',
+			});
 			expect(seen).toHaveLength(1);
 			const [request] = seen;
 			if (!request) throw new Error('Expected a workflow request.');
@@ -503,16 +492,12 @@ describe('createFlueClient', () => {
 				baseUrl: 'https://flue.test',
 				fetch: async (input, init) => {
 					request = new Request(input, init);
-					return Response.json(
-						{ runId: 'run_xyz', streamUrl: 'https://flue.test/runs/run_xyz', offset: '-1' },
-						{ status: 202 },
-					);
+					return Response.json({ runId: 'run_xyz' }, { status: 202 });
 				},
 			});
 
 			const result = await client.workflows.invoke('simple-workflow');
-			expect(result.runId).toBe('run_xyz');
-			expect(result.streamUrl).toBe('https://flue.test/runs/run_xyz');
+			expect(result).toEqual({ runId: 'run_xyz' });
 			expect(request?.headers.has('content-type')).toBe(false);
 			expect(await request?.text()).toBe('');
 		});

@@ -31,17 +31,10 @@ export interface WorkflowInvokeOptions {
 	signal?: AbortSignal;
 }
 
-/** Result of starting a workflow run. All fields are server-provided. */
+/** Result of starting a workflow run. */
 export interface WorkflowInvokeResult {
 	/** The workflow run ID. */
 	runId: string;
-	/** Fully resolved DS-compatible stream URL for observing run events. */
-	streamUrl: string;
-	/**
-	 * Opaque DS stream offset captured at admission. Reading `streamUrl` from
-	 * this offset yields the run's events from the start.
-	 */
-	offset: string;
 }
 
 /** Result of one workflow invocation that waited for the terminal result. */
@@ -87,7 +80,7 @@ export interface FlueClient {
 			name: string,
 			options: WorkflowInvokeOptions & { wait: 'result' },
 		): Promise<WorkflowWaitResult>;
-		/** Start a workflow run. Returns the run ID and its server-provided stream coordinates. */
+		/** Start a workflow run and return its ID. */
 		invoke(name: string, options?: WorkflowInvokeOptions): Promise<WorkflowInvokeResult>;
 	};
 }
@@ -139,10 +132,6 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 			},
 		},
 		workflows: {
-			// The admission envelope IS the result: the server owns stream-URL
-			// and offset derivation (DS offsets are opaque tokens clients must
-			// not construct). With `wait: 'result'` the server also resolves
-			// the run's terminal result before responding.
 			invoke: (name, opts?: WorkflowInvokeOptions) =>
 				http.json<WorkflowWaitResult>({
 					method: 'POST',
