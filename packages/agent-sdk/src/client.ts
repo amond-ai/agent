@@ -21,8 +21,8 @@ export type { RequestHeaders };
 
 /** Options for starting a workflow run. */
 export interface WorkflowInvokeOptions {
-	/** Workflow-defined payload. */
-	payload?: unknown;
+	/** Workflow-defined input. */
+	input?: unknown;
 	/**
 	 * When `'result'`, the request waits for the run to finish and resolves
 	 * with its terminal result. Omit to start the run without waiting.
@@ -148,7 +148,7 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 					method: 'POST',
 					path: `/workflows/${encodeURIComponent(name)}`,
 					query: opts?.wait === 'result' ? { wait: 'result' } : undefined,
-					body: opts?.payload,
+					body: opts?.input,
 					signal: opts?.signal,
 				}),
 		},

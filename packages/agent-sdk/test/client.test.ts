@@ -450,7 +450,7 @@ describe('createFlueClient', () => {
 			});
 
 			const result = await client.workflows.invoke('my-workflow', {
-				payload: { key: 'value' },
+				input: { key: 'value' },
 			});
 			expect(result.runId).toBe('run_abc123');
 			// The streamUrl/offset come from the server response verbatim —
@@ -483,7 +483,7 @@ describe('createFlueClient', () => {
 			});
 
 			const result = await client.workflows.invoke('my-workflow', {
-				payload: { key: 'value' },
+				input: { key: 'value' },
 				wait: 'result',
 			});
 			expect(result.result).toEqual({ summary: 'done' });
@@ -497,19 +497,24 @@ describe('createFlueClient', () => {
 			expect(await request.json()).toEqual({ key: 'value' });
 		});
 
-		it('invokes the workflow when no payload is provided', async () => {
+		it('invokes the workflow with an omitted HTTP body when no input is provided', async () => {
+			let request: Request | undefined;
 			const client = createFlueClient({
 				baseUrl: 'https://flue.test',
-				fetch: async () =>
-					Response.json(
+				fetch: async (input, init) => {
+					request = new Request(input, init);
+					return Response.json(
 						{ runId: 'run_xyz', streamUrl: 'https://flue.test/runs/run_xyz', offset: '-1' },
 						{ status: 202 },
-					),
+					);
+				},
 			});
 
 			const result = await client.workflows.invoke('simple-workflow');
 			expect(result.runId).toBe('run_xyz');
 			expect(result.streamUrl).toBe('https://flue.test/runs/run_xyz');
+			expect(request?.headers.has('content-type')).toBe(false);
+			expect(await request?.text()).toBe('');
 		});
 	});
 

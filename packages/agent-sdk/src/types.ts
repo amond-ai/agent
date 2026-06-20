@@ -9,7 +9,7 @@ export interface RunRecord {
 	endedAt?: string;
 	isError?: boolean;
 	durationMs?: number;
-	payload?: unknown;
+	input?: unknown;
 	result?: unknown;
 	error?: unknown;
 }
@@ -126,7 +126,7 @@ export type FlueEvent = (
 			runId: string;
 			workflowName: string;
 			startedAt: string;
-			payload: unknown;
+			input: unknown;
 	  }
 	| {
 			type: 'run_resume';
