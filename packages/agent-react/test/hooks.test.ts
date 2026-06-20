@@ -92,7 +92,7 @@ describe('useFlueWorkflow()', () => {
 				runId: 'run-1',
 				workflowName: 'flow',
 				startedAt: '2026-06-12T00:00:00.000Z',
-				payload: null,
+				input: null,
 				eventIndex: 0,
 				timestamp: '2026-06-12T00:00:00.000Z',
 			},
