@@ -163,6 +163,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 			const definition = assertResolvedAgentProfile(
 				extendAgentProfile(resolveAgentProfile(resolvedOptions), {
 					tools: options?.tools,
+					actions: options?.actions,
 					skills: options?.skills,
 					subagents: options?.subagents,
 				}),
@@ -212,6 +213,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 					instructions: definition.instructions,
 					definitionSkills: definition.skills,
 					skills: localContext.skills,
+					actions: definition.actions,
 					subagents: Object.fromEntries(
 						(definition.subagents ?? [])
 							.filter((agent): agent is AgentProfile & { name: string } => agent.name !== undefined)
@@ -235,6 +237,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 					definition.tools,
 					toolFactory,
 					config.submissionStore,
+					definition.actions,
 				);
 			} catch (error) {
 				initializedHarnessNames.delete(name);

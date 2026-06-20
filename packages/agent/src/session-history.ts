@@ -4,6 +4,7 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, UserMessage } from '@earendil-works/pi-ai';
 import { AttachmentNotAvailableError } from './errors.ts';
 import type {
+	ActionSessionRef,
 	CompactionEntry,
 	DispatchMessageMetadata,
 	MessageEntry,
@@ -239,6 +240,7 @@ export class SessionHistory {
 	toData(
 		affinityKey: string,
 		taskSessions: TaskSessionRef[],
+		actionSessions: ActionSessionRef[],
 		metadata: Record<string, any>,
 		createdAt: string,
 		updatedAt: string,
@@ -249,6 +251,7 @@ export class SessionHistory {
 			entries: [...this.entries],
 			leafId: this.leafId,
 			taskSessions: [...taskSessions],
+			actionSessions: [...actionSessions],
 			metadata,
 			createdAt,
 			updatedAt,

@@ -13,6 +13,7 @@ export type {
 export { createAgent, defineAgentProfile } from './agent-definition.ts';
 export {
 	ActionInputValidationError,
+	ActionOutputSerializationError,
 	ActionOutputValidationError,
 	AttachmentNotAvailableError,
 	FlueError,
@@ -61,6 +62,7 @@ export { defineTool } from './tool.ts';
 export { createWorkflow } from './workflow-definition.ts';
 export type { CreatedWorkflow, ExtractedWorkflow, InlineWorkflow } from './workflow-definition.ts';
 export type {
+	ActionSessionRef,
 	AgentCreateContext,
 	AgentDispatchRequest,
 	AgentHarnessOptions,

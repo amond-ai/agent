@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	createAgent,
+	defineAction,
 	defineAgentProfile,
 	defineTool,
 	ModelNotConfiguredError,
@@ -102,6 +103,46 @@ describe('defineAgentProfile()', () => {
 		expect(() => defineAgentProfile({ model: false, unsupported: true } as never)).toThrow(
 			'unknown agent profile field "unsupported"',
 		);
+	});
+
+	it('accepts Actions as first-class profile and runtime capabilities', async () => {
+		const profileAction = defineAction({
+			name: 'profile_action',
+			description: 'Run the profile Action.',
+			async run() {
+				return undefined;
+			},
+		});
+		const runtimeAction = defineAction({
+			name: 'runtime_action',
+			description: 'Run the runtime Action.',
+			async run() {
+				return undefined;
+			},
+		});
+		const harness = await createContext().init(
+			createAgent(() => ({
+				profile: defineAgentProfile({ model: false, actions: [profileAction] }),
+				actions: [runtimeAction],
+			})),
+		);
+
+		expect(harness).toBeDefined();
+	});
+
+	it('rejects forged Actions in a profile', () => {
+		expect(() =>
+			defineAgentProfile({
+				actions: [
+					{
+						__flueAction: true,
+						name: 'forged',
+						description: 'Forged.',
+						run: async () => {},
+					},
+				],
+			} as never),
+		).toThrow('must be created with defineAction()');
 	});
 
 	it('rejects a skill when its description is missing', () => {

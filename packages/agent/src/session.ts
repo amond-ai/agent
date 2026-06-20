@@ -22,6 +22,7 @@ import type {
 import { streamSimple } from '@earendil-works/pi-ai';
 import type * as v from 'valibot';
 import { abortErrorFor, createCallHandle } from './abort.ts';
+import { validateAndRunAction, type ActionDefinition } from './action.ts';
 import {
 	createActivateSkillTool,
 	createPackagedSkillReadTool,
@@ -92,7 +93,10 @@ import {
 	renderSignalMessage,
 	SessionHistory,
 } from './session-history.ts';
-import { childTaskSessionStorageKey } from './session-identity.ts';
+import {
+	childActionSessionStorageKey,
+	childTaskSessionStorageKey,
+} from './session-identity.ts';
 import { execShellWithEvents, getErrorMessage } from './shell.ts';
 import {
 	classifySubmissionState,
@@ -103,6 +107,7 @@ import {
 } from './submission-state.ts';
 import { normalizeToolDefinition } from './tool.ts';
 import type {
+	ActionSessionRef,
 	AgentConfig,
 	AgentProfile,
 	CallHandle,
@@ -111,6 +116,7 @@ import type {
 	FlueEventInput,
 	FlueEventInputCallback,
 	FlueFs,
+	FlueHarness,
 	FlueSession,
 	MessageEntry,
 	PackagedSkillDirectory,
@@ -230,6 +236,25 @@ export interface CreateTaskSessionOptions {
 
 export type CreateTaskSession = (options: CreateTaskSessionOptions) => Promise<Session>;
 
+export interface CreateActionHarnessOptions {
+	invocationId: string;
+	depth: number;
+	signal?: AbortSignal;
+	config: AgentConfig;
+	env: SessionEnv;
+	tools: ToolDefinition[];
+	actions: ActionDefinition[];
+	createTaskSession?: CreateTaskSession;
+	createActionHarness?: CreateActionHarness;
+	retainSession(session: string, scope: string): Promise<void>;
+}
+
+export interface ActionHarness extends FlueHarness {
+	close(): Promise<void>;
+}
+
+export type CreateActionHarness = (options: CreateActionHarnessOptions) => Promise<ActionHarness>;
+
 type OperationKind = 'prompt' | 'skill' | 'task' | 'shell' | 'compact';
 
 interface SessionInitOptions {
@@ -245,6 +270,9 @@ interface SessionInitOptions {
 	toolFactory?: SessionToolFactory;
 	taskDepth?: number;
 	createTaskSession?: CreateTaskSession;
+	actions?: ActionDefinition[];
+	createActionHarness?: CreateActionHarness;
+	scopeSignal?: AbortSignal;
 	onDelete?: () => void;
 	submissionStore?: AgentSubmissionStore;
 }
@@ -370,6 +398,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	metadata: Record<string, any>;
 
 	private taskSessions: TaskSessionRef[];
+	private actionSessions: ActionSessionRef[];
 	private agentLoop: Agent;
 	private storageKey: string;
 	private affinityKey: string;
@@ -388,11 +417,17 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	private activeOperation: OperationKind | undefined;
 	private activeOperationId: string | undefined;
 	private toolStartTimes = new Map<string, number>();
+	private modelToolSources = new WeakMap<AgentTool<any>, 'builtin' | 'adapter' | 'framework'>();
 	private turnStartTime: number | undefined;
 	private activeTurnId: string | undefined;
 	private activeTasks = new Set<Session>();
+	private activeActionHarnesses = new Set<ActionHarness>();
+	private activeActionControllers = new Set<AbortController>();
 	private taskDepth: number;
 	private createTaskSession: CreateTaskSession | undefined;
+	private actions: ActionDefinition[];
+	private createActionHarness: CreateActionHarness | undefined;
+	private scopeSignal: AbortSignal | undefined;
 	private onDelete: (() => void) | undefined;
 	private submissionStore: AgentSubmissionStore | undefined;
 	private pendingSave: Promise<void> = Promise.resolve();
@@ -483,19 +518,22 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		this.toolFactory = options.toolFactory;
 		this.taskDepth = options.taskDepth ?? 0;
 		this.createTaskSession = options.createTaskSession;
+		this.actions = options.actions ?? [];
+		this.createActionHarness = options.createActionHarness;
+		this.scopeSignal = options.scopeSignal;
 		this.onDelete = options.onDelete;
 		this.submissionStore = options.submissionStore;
 
 		this.metadata = options.existingData?.metadata ?? {};
 		this.taskSessions = options.existingData?.taskSessions ?? [];
+		this.actionSessions = options.existingData?.actionSessions ?? [];
 		this.createdAt = options.existingData?.createdAt;
 
 		this.history = SessionHistory.fromData(options.existingData);
 
 		const systemPrompt = this.config.systemPrompt;
 
-		const builtinTools = this.createBuiltinTools(this.env, []);
-		const tools = [...builtinTools, ...this.createCustomTools(this.agentTools, builtinTools)];
+		const tools = this.assembleModelTools(this.createBuiltinTools(this.env, []), this.agentTools, []);
 
 		const previousMessages = this.history.buildContext();
 
@@ -1003,7 +1041,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					(event) => this.emit(event),
 					command,
 					options,
-					signal,
+					this.scopeSignal ? AbortSignal.any([signal, this.scopeSignal]) : signal,
 					(toolCallId, args, result, isError) =>
 						this.appendShellTriple(toolCallId, args, result, isError),
 				),
@@ -1022,6 +1060,8 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		this.compactionAbortController?.abort();
 		this.modelRetryAbortController?.abort();
 		for (const task of this.activeTasks) task.abort();
+		for (const controller of this.activeActionControllers) controller.abort();
+		for (const harness of this.activeActionHarnesses) void harness.close();
 	}
 
 	/**
@@ -1138,12 +1178,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
 	// ─── Custom Tools ───────────────────────────────────────────────────────
 
-	private createCustomTools(
-		tools: ToolDefinition[],
-		builtinTools: AgentTool<any>[],
-	): AgentTool<any>[] {
-		this.validateCustomToolNames(tools, builtinTools);
-
+	private createCustomTools(tools: ToolDefinition[]): AgentTool<any>[] {
 		return tools.map((rawToolDef): AgentTool<any> => {
 			// `defineTool()` already normalized its result; this catches inline
 			// tool literals whose valibot `parameters` never went through it.
@@ -1165,34 +1200,139 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		});
 	}
 
-	/** Reject custom tools that collide with active built-ins or each other. */
-	private validateCustomToolNames(tools: ToolDefinition[], builtinTools: AgentTool<any>[]): void {
-		const reserved = new Set<string>(builtinTools.map((t) => t.name));
-		reserved.add('task');
-		reserved.add('activate_skill');
-		// Reserved unconditionally so the failure is deterministic at definition
-		// time, not dependent on whether a `result` schema is used on a call.
-		reserved.add(FINISH_TOOL_NAME);
-		reserved.add(GIVE_UP_TOOL_NAME);
-		const names = new Set<string>();
-		for (const toolDef of tools) {
-			if (reserved.has(toolDef.name)) {
-				throw new ToolNameConflictError({
-					name: toolDef.name,
-					conflict: 'reserved',
-					source: 'custom',
-					reserved: [...reserved],
-				});
-			}
-			if (names.has(toolDef.name)) {
-				throw new ToolNameConflictError({
-					name: toolDef.name,
-					conflict: 'duplicate',
-					source: 'custom',
-				});
-			}
-			names.add(toolDef.name);
+	private createActionTools(): AgentTool<any>[] {
+		return this.actions.map((action) => ({
+			name: action.name,
+			label: action.name,
+			description: action.description,
+			parameters: (action.inputJsonSchema ?? {
+				type: 'object',
+				properties: {},
+				additionalProperties: false,
+			}) as any,
+			execute: (toolCallId: string, params: unknown, signal?: AbortSignal) =>
+				this.executeActionTool(action, toolCallId, params, signal),
+		}));
+	}
+
+	private async executeActionTool(
+		action: ActionDefinition,
+		toolCallId: string,
+		input: unknown,
+		signal?: AbortSignal,
+	): Promise<AgentToolResult<any>> {
+		if (!this.createActionHarness) throw new Error('[flue] This session cannot execute Actions.');
+		if (this.taskDepth >= MAX_TASK_DEPTH) {
+			throw new TaskDepthExceededError({ maxDepth: MAX_TASK_DEPTH });
 		}
+		const invocationId = crypto.randomUUID();
+		const actionController = new AbortController();
+		const actionSignal = signal
+			? AbortSignal.any([signal, actionController.signal])
+			: actionController.signal;
+		this.activeActionControllers.add(actionController);
+		const harness = await this.createActionHarness({
+			invocationId,
+			depth: this.taskDepth + 1,
+			signal: actionSignal,
+			config: this.config,
+			env: this.env,
+			tools: this.agentTools,
+			actions: this.actions,
+			createTaskSession: this.createTaskSession,
+			createActionHarness: this.createActionHarness,
+			retainSession: async (session, scope) => {
+				if (
+					this.actionSessions.some(
+						(ref) => ref.invocationId === invocationId && ref.session === session,
+					)
+				) {
+					return;
+				}
+				const reference = { invocationId, session, scope };
+				this.actionSessions.push(reference);
+				try {
+					await this.save();
+				} catch (error) {
+					const index = this.actionSessions.indexOf(reference);
+					if (index !== -1) this.actionSessions.splice(index, 1);
+					throw error;
+				}
+			},
+		});
+		this.activeActionHarnesses.add(harness);
+		try {
+			const output = await validateAndRunAction(
+				action,
+				{ harness, log: this.createActionLogger(action.name, toolCallId) },
+				action.input ? input : undefined,
+			);
+			return {
+				content: [{ type: 'text', text: output === undefined ? 'null' : JSON.stringify(output) }],
+				details: { action: action.name, invocationId, toolCallId, output },
+			};
+		} finally {
+			this.activeActionControllers.delete(actionController);
+			this.activeActionHarnesses.delete(harness);
+			await harness.close();
+		}
+	}
+
+	private createActionLogger(action: string, toolCallId: string) {
+		const emit = (level: 'info' | 'warn' | 'error', message: string, attributes?: Record<string, unknown>) =>
+			this.emit({ type: 'log', level, message, attributes: { ...attributes, action, toolCallId } });
+		return {
+			info: (message: string, attributes?: Record<string, unknown>) => emit('info', message, attributes),
+			warn: (message: string, attributes?: Record<string, unknown>) => emit('warn', message, attributes),
+			error: (message: string, attributes?: Record<string, unknown>) => emit('error', message, attributes),
+		};
+	}
+
+	private assembleModelTools(
+		builtinTools: AgentTool<any>[],
+		customDefinitions: ToolDefinition[],
+		extraTools: AgentTool<any>[],
+	): AgentTool<any>[] {
+		const builtinGroups = new Map<'builtin' | 'adapter' | 'framework', AgentTool<any>[]>();
+		for (const tool of builtinTools) {
+			const source = this.modelToolSources.get(tool) ?? 'builtin';
+			const tools = builtinGroups.get(source) ?? [];
+			tools.push(tool);
+			builtinGroups.set(source, tools);
+		}
+		const groups = [
+			...([...builtinGroups].map(([source, tools]) => ({ source, tools }))),
+			{ source: 'custom' as const, tools: this.createCustomTools(customDefinitions) },
+			{ source: 'action' as const, tools: this.createActionTools() },
+			{ source: 'result' as const, tools: extraTools },
+		];
+		const seen = new Map<string, (typeof groups)[number]['source']>();
+		const frameworkReserved = new Set(['task', 'activate_skill', FINISH_TOOL_NAME, GIVE_UP_TOOL_NAME]);
+		for (const group of groups) {
+			for (const tool of group.tools) {
+				if (
+					frameworkReserved.has(tool.name) &&
+					group.source !== 'framework' &&
+					!(group.source === 'result' && (tool.name === FINISH_TOOL_NAME || tool.name === GIVE_UP_TOOL_NAME))
+				) {
+					throw new ToolNameConflictError({
+						name: tool.name,
+						conflict: 'reserved',
+						source: group.source,
+						reserved: [...frameworkReserved],
+					});
+				}
+				if (seen.has(tool.name)) {
+					throw new ToolNameConflictError({
+						name: tool.name,
+						conflict: 'duplicate',
+						source: group.source,
+					});
+				}
+				seen.set(tool.name, group.source);
+			}
+		}
+		return groups.flatMap((group) => group.tools);
 	}
 
 	/** Build built-in tools from the sandbox adapter or the framework defaults. */
@@ -1214,8 +1354,18 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			skillNames.length > 0
 				? createActivateSkillTool(skillNames, (name) => this.activateSkillForTool(name))
 				: undefined;
-		const appendActivateSkillTool = (builtinTools: AgentTool<any>[]) =>
-			activateSkillTool ? [...builtinTools, activateSkillTool] : builtinTools;
+		const markTools = (
+			tools: AgentTool<any>[],
+			source: 'builtin' | 'adapter' | 'framework',
+		): AgentTool<any>[] => {
+			for (const tool of tools) this.modelToolSources.set(tool, source);
+			return tools;
+		};
+		const appendFrameworkTools = (tools: AgentTool<any>[], taskTool: AgentTool<any>) => {
+			const frameworkTools = activateSkillTool ? [taskTool, activateSkillTool] : [taskTool];
+			markTools(frameworkTools, 'framework');
+			return [...tools, ...frameworkTools];
+		};
 
 		if (this.toolFactory) {
 			let adapterTools = this.toolFactory(env, { subagents: this.config.subagents ?? {} });
@@ -1248,42 +1398,20 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					adapterTools = [...adapterTools, packagedRead];
 				}
 			}
-			this.validateAdapterTools(adapterTools);
-			return appendActivateSkillTool([
-				...adapterTools,
+			return appendFrameworkTools(
+				markTools(adapterTools, 'adapter'),
 				createTaskTool(runTask, this.config.subagents ?? {}),
-			]);
+			);
 		}
 
-		return appendActivateSkillTool(
-			createTools(env, {
-				subagents: this.config.subagents ?? {},
-				packagedSkills,
-				task: runTask,
-			}),
+		const builtinTools = createTools(env, {
+			subagents: this.config.subagents ?? {},
+			packagedSkills,
+		});
+		return appendFrameworkTools(
+			markTools(builtinTools, 'builtin'),
+			createTaskTool(runTask, this.config.subagents ?? {}),
 		);
-	}
-
-	/** Validate sandbox adapter tool names before handing them to the agent loop. */
-	private validateAdapterTools(tools: AgentTool<any>[]): void {
-		const names = new Set<string>();
-		for (const tool of tools) {
-			if (tool.name === 'task' || tool.name === 'activate_skill') {
-				throw new ToolNameConflictError({
-					name: tool.name,
-					conflict: 'reserved',
-					source: 'adapter',
-				});
-			}
-			if (names.has(tool.name)) {
-				throw new ToolNameConflictError({
-					name: tool.name,
-					conflict: 'duplicate',
-					source: 'adapter',
-				});
-			}
-			names.add(tool.name);
-		}
 	}
 
 	private async withCallOverrides<T>(
@@ -1304,11 +1432,11 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			options.thinkingLevel,
 			options.activePackagedSkills,
 		);
-		const customTools = this.createCustomTools(
-			[...this.agentTools, ...options.tools],
+		this.agentLoop.state.tools = this.assembleModelTools(
 			builtinTools,
+			[...this.agentTools, ...options.tools],
+			options.extraTools ?? [],
 		);
-		this.agentLoop.state.tools = [...builtinTools, ...customTools, ...(options.extraTools ?? [])];
 		try {
 			return await fn({ resolvedModel });
 		} finally {
@@ -1482,8 +1610,12 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		signal: AbortSignal | undefined,
 		fn: () => Promise<T>,
 	): Promise<T> {
+		const operationSignal =
+			signal && this.scopeSignal
+				? AbortSignal.any([signal, this.scopeSignal])
+				: (signal ?? this.scopeSignal);
 		return this.runExclusive(operation, async () => {
-			if (signal?.aborted) throw abortErrorFor(signal);
+			if (operationSignal?.aborted) throw abortErrorFor(operationSignal);
 			this.activeOperationId = generateOperationId();
 			const operationId = this.activeOperationId;
 			const startedAt = Date.now();
@@ -1494,11 +1626,13 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			// hooks are inert there.
 			const onAbort = () => {
 				this.agentLoop.abort();
-				this.compactionAbortController?.abort(signal?.reason);
-				this.modelRetryAbortController?.abort(signal?.reason);
+				this.compactionAbortController?.abort(operationSignal?.reason);
+				this.modelRetryAbortController?.abort(operationSignal?.reason);
 				for (const task of this.activeTasks) task.abort();
+				for (const controller of this.activeActionControllers) controller.abort();
+				for (const harness of this.activeActionHarnesses) void harness.close();
 			};
-			signal?.addEventListener('abort', onAbort, { once: true });
+			operationSignal?.addEventListener('abort', onAbort, { once: true });
 
 			try {
 				const result = await fn();
@@ -1514,7 +1648,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				return result;
 			} catch (error) {
 				// Normalize post-abort fallout to a single AbortError for callers.
-				const surfaced = signal?.aborted ? abortErrorFor(signal) : error;
+				const surfaced = operationSignal?.aborted ? abortErrorFor(operationSignal) : error;
 				this.emit({
 					type: 'operation',
 					operationId,
@@ -1525,7 +1659,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				});
 				throw surfaced;
 			} finally {
-				signal?.removeEventListener('abort', onAbort);
+				operationSignal?.removeEventListener('abort', onAbort);
 				this.emit({ type: 'idle' });
 				this.activeOperationId = undefined;
 			}
@@ -1683,6 +1817,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			const data = this.history.toData(
 				this.affinityKey,
 				this.taskSessions,
+				this.actionSessions,
 				this.metadata,
 				this.createdAt ?? now,
 				now,
@@ -2488,6 +2623,10 @@ export async function deleteSessionTree(
 	const data = await store.load(storageKey);
 	for (const task of data?.taskSessions ?? []) {
 		const childStorageKey = childTaskSessionStorageKey(storageKey, task);
+		if (childStorageKey) await deleteSessionTree(store, childStorageKey, seen);
+	}
+	for (const action of data?.actionSessions ?? []) {
+		const childStorageKey = childActionSessionStorageKey(storageKey, action);
 		if (childStorageKey) await deleteSessionTree(store, childStorageKey, seen);
 	}
 	await store.delete(storageKey);

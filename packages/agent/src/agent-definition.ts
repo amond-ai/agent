@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { isActionDefinition } from './action.ts';
 import type {
 	AgentCreateContext,
 	AgentProfile,
@@ -28,6 +29,7 @@ const AgentProfileSchema = v.strictObject(
 		instructions: v.optional(v.string()),
 		skills: v.optional(v.array(v.unknown())),
 		tools: v.optional(v.array(v.unknown())),
+		actions: v.optional(v.array(v.unknown())),
 		subagents: v.optional(v.array(v.unknown())),
 		thinkingLevel: v.optional(v.string()),
 		compaction: v.optional(v.union([v.literal(false), v.looseObject({})])),
@@ -103,6 +105,7 @@ export function resolveAgentProfile(options: AgentRuntimeConfig | undefined): Ag
 		instructions: hasOwn(options, 'instructions') ? options?.instructions : profile?.instructions,
 		skills: mergeArrays(profile?.skills, options?.skills),
 		tools: mergeArrays(profile?.tools, options?.tools),
+		actions: mergeArrays(profile?.actions, options?.actions),
 		subagents: mergeArrays(profile?.subagents, options?.subagents),
 		thinkingLevel: hasOwn(options, 'thinkingLevel')
 			? options?.thinkingLevel
@@ -114,12 +117,13 @@ export function resolveAgentProfile(options: AgentRuntimeConfig | undefined): Ag
 
 export function extendAgentProfile(
 	profile: AgentProfile,
-	extensions: Pick<AgentProfile, 'skills' | 'tools' | 'subagents'>,
+	extensions: Pick<AgentProfile, 'skills' | 'tools' | 'actions' | 'subagents'>,
 ): AgentProfile {
 	return {
 		...profile,
 		skills: mergeArrays(profile.skills, extensions.skills),
 		tools: mergeArrays(profile.tools, extensions.tools),
+		actions: mergeArrays(profile.actions, extensions.actions),
 		subagents: mergeArrays(profile.subagents, extensions.subagents),
 	};
 }
@@ -178,9 +182,11 @@ function assertAgentProfile(
 	assertCompaction(definition.compaction, label);
 	assertDurability(definition.durability, label);
 	assertTools(definition.tools, label);
+	assertActions(definition.actions, label);
 	assertSkills(definition.skills, label);
 	assertSubagents(definition.subagents, label, activeDefinitions);
 	assertUniqueNames(definition.tools, `${label} tools`, 'tool');
+	assertUniqueNames(definition.actions, `${label} actions`, 'action');
 	assertUniqueNames(definition.skills, `${label} skills`, 'skill');
 	assertUniqueNames(definition.subagents, `${label} subagents`, 'subagent');
 
@@ -259,6 +265,16 @@ function assertTools(
 	}
 }
 
+function assertActions(values: unknown[] | undefined, label: string): void {
+	for (const [index, value] of values?.entries() ?? []) {
+		if (!isActionDefinition(value)) {
+			throw new Error(
+				`[flue] ${label} actions[${index}] must be created with defineAction().`,
+			);
+		}
+	}
+}
+
 function assertSkills(
 	values: unknown[] | undefined,
 	label: string,
@@ -310,9 +326,9 @@ function assertNonEmptyString(value: unknown, label: string): asserts value is s
 }
 
 function assertUniqueNames(
-	values: ToolDefinition[] | Skill[] | AgentProfile[] | undefined,
+	values: Array<{ name?: string }> | undefined,
 	label: string,
-	kind: 'tool' | 'skill' | 'subagent',
+	kind: 'tool' | 'action' | 'skill' | 'subagent',
 ): void {
 	if (!values) {
 		return;

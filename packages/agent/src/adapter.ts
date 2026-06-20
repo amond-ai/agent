@@ -137,6 +137,7 @@ export {
 // ─── Re-export session types needed for SessionStore implementations ────────
 
 export type {
+	ActionSessionRef,
 	CompactionEntry,
 	MessageEntry,
 	SessionData,

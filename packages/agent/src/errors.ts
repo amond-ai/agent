@@ -598,8 +598,7 @@ export class ToolNameConflictError extends FlueError {
 	}: {
 		name: string;
 		conflict: 'reserved' | 'duplicate';
-		/** Where the conflicting tool came from: agent/call `tools` or a sandbox adapter's `tools()`. */
-		source: 'custom' | 'adapter';
+		source: 'builtin' | 'adapter' | 'framework' | 'custom' | 'action' | 'result';
 		reserved?: readonly string[];
 	}) {
 		const dev =
@@ -667,6 +666,20 @@ export class ActionOutputValidationError extends ActionValidationError {
 	constructor({ action, issues }: { action: string; issues: readonly ValidationIssue[] }) {
 		super({ action, boundary: 'output', issues });
 		this.name = 'ActionOutputValidationError';
+	}
+}
+
+export class ActionOutputSerializationError extends FlueError {
+	constructor({ action, cause }: { action: string; cause?: unknown }) {
+		super({
+			type: 'action_output_serialization',
+			message: `Action "${action}" output is not JSON-serializable.`,
+			details: '',
+			dev: 'Return a JSON-serializable value, or undefined when the Action has no output schema.',
+			meta: { action },
+			cause,
+		});
+		this.name = 'ActionOutputSerializationError';
 	}
 }
 

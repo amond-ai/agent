@@ -18,6 +18,7 @@ declare module '@earendil-works/pi-agent-core' {
 
 import type { MiddlewareHandler } from 'hono';
 import type * as v from 'valibot';
+import type { ActionDefinition } from './action.ts';
 import type { ToolDefinition } from './tool-types.ts';
 
 export type { ToolArgs, ToolDefinition, ToolParameters } from './tool-types.ts';
@@ -301,6 +302,7 @@ export interface AgentConfig {
 	/** Discovered at runtime from .agents/skills/ in the session's cwd. */
 	skills: Record<string, Skill>;
 	subagents?: Record<string, AgentProfile>;
+	actions?: ActionDefinition[];
 	/**
 	 * Agent-wide default model. Undefined when the user explicitly passes
 	 * `createAgent(() => ({ model: false }))`, so each model-using call must provide a
@@ -343,6 +345,7 @@ export interface AgentProfile {
 	skills?: Skill[];
 	/** Custom model-callable tools available to sessions initialized from this profile. */
 	tools?: ToolDefinition[];
+	actions?: ActionDefinition[];
 	/** Named profiles available for delegated `session.task()` operations. */
 	subagents?: AgentProfile[];
 	/** Default reasoning effort. Individual operations may override this value. */
@@ -375,6 +378,7 @@ export interface AgentRuntimeConfig {
 	skills?: Skill[];
 	/** Additional custom model-callable tools available to initialized sessions. */
 	tools?: ToolDefinition[];
+	actions?: ActionDefinition[];
 	/** Additional named profiles available for delegated `session.task()` operations. */
 	subagents?: AgentProfile[];
 	/** Default reasoning effort. Individual operations may override this value. */
@@ -402,6 +406,7 @@ export interface AgentHarnessOptions {
 	name?: string;
 	/** Additional custom model-callable tools available to initialized sessions. */
 	tools?: ToolDefinition[];
+	actions?: ActionDefinition[];
 	/** Additional registered skills available to initialized sessions. */
 	skills?: Skill[];
 	/** Additional named profiles available for delegated `session.task()` operations. */
@@ -678,6 +683,7 @@ export interface SessionData {
 	 * remove child task-session storage with the parent.
 	 */
 	taskSessions: TaskSessionRef[];
+	actionSessions?: ActionSessionRef[];
 	/** Application-owned session metadata. Flue never reads or writes keys here. */
 	metadata: Record<string, any>;
 	createdAt: string;
@@ -690,6 +696,12 @@ export interface TaskSessionRef {
 	session: string;
 	/** Task id that created the child session. */
 	taskId: string;
+}
+
+export interface ActionSessionRef {
+	invocationId: string;
+	session: string;
+	scope: string;
 }
 
 export type SessionEntry = MessageEntry | CompactionEntry;

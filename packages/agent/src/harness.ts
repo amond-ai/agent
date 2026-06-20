@@ -1,10 +1,12 @@
-import { createCallHandle } from './abort.ts';
+import { abortErrorFor, createCallHandle } from './abort.ts';
+import type { ActionDefinition } from './action.ts';
 import type { AgentSubmissionStore } from './agent-execution-store.ts';
 import { discoverSessionContext } from './context.ts';
 import { SessionAlreadyExistsError, SessionNotFoundError } from './errors.ts';
 import { generateSessionAffinityKey } from './runtime/ids.ts';
 import { createCwdSessionEnv, createFlueFs } from './sandbox.ts';
 import {
+	type CreateActionHarnessOptions,
 	type CreateTaskSessionOptions,
 	createPublicSession,
 	deleteSessionTree,
@@ -12,6 +14,7 @@ import {
 } from './session.ts';
 import {
 	assertPublicSessionName,
+	createActionScopeName,
 	createSessionStorageKey,
 	createTaskSessionName,
 } from './session-identity.ts';
@@ -50,6 +53,8 @@ export class Harness implements FlueHarness {
 
 	private openSessions = new Map<string, Session>();
 	private pendingSessionOperations = new Map<string, Promise<void>>();
+	private activeShellCalls = new Set<CallHandle<ShellResult>>();
+	private scopeAbortController = new AbortController();
 
 	constructor(
 		private instanceId: string,
@@ -61,8 +66,22 @@ export class Harness implements FlueHarness {
 		private agentTools: ToolDefinition[] = [],
 		private toolFactory?: SessionToolFactory,
 		private submissionStore?: AgentSubmissionStore,
+		private actions: ActionDefinition[] = config.actions ?? [],
+		private scopeName?: string,
+		private scopeDepth = 0,
+		private retainSession?: (session: string) => Promise<void>,
+		private scopeSignal?: AbortSignal,
 	) {
 		this.fs = createFlueFs(env);
+		if (scopeSignal) {
+			if (scopeSignal.aborted) this.scopeAbortController.abort(scopeSignal.reason);
+			else
+				scopeSignal.addEventListener(
+					'abort',
+					() => this.scopeAbortController.abort(scopeSignal.reason),
+					{ once: true },
+				);
+		}
 	}
 
 	async session(name?: string): Promise<FlueSession> {
@@ -70,9 +89,18 @@ export class Harness implements FlueHarness {
 	}
 
 	shell(command: string, options?: ShellOptions): CallHandle<ShellResult> {
-		return createCallHandle(options?.signal, (signal) =>
+		const externalSignal = options?.signal
+			? AbortSignal.any([options.signal, this.scopeAbortController.signal])
+			: this.scopeAbortController.signal;
+		const call = createCallHandle(externalSignal, (signal) =>
 			execShellWithEvents(this.env, (event) => this.emit(event), command, options, signal),
 		);
+		this.activeShellCalls.add(call);
+		void call.then(
+			() => this.activeShellCalls.delete(call),
+			() => this.activeShellCalls.delete(call),
+		);
+		return call;
 	}
 
 	private async openSession(name: string | undefined, mode: OpenMode): Promise<FlueSession> {
@@ -104,6 +132,8 @@ export class Harness implements FlueHarness {
 	}
 
 	private async loadSession(sessionName: string, mode: OpenMode): Promise<Session> {
+		if (this.scopeAbortController.signal.aborted)
+			throw abortErrorFor(this.scopeAbortController.signal);
 		const open = this.openSessions.get(sessionName);
 		if (open) {
 			if (mode === 'create') {
@@ -112,7 +142,11 @@ export class Harness implements FlueHarness {
 			return open;
 		}
 
-		const storageKey = createSessionStorageKey(this.instanceId, this.name, sessionName);
+		const storageKey = createSessionStorageKey(
+			this.instanceId,
+			this.scopeName ? `${this.name}:${this.scopeName}` : this.name,
+			sessionName,
+		);
 		const existingData = await this.store.load(storageKey);
 		if (mode === 'get' && !existingData) {
 			throw new SessionNotFoundError({ session: sessionName, harness: this.name });
@@ -124,6 +158,7 @@ export class Harness implements FlueHarness {
 		let data = existingData;
 		if (!data) {
 			data = createEmptySessionData();
+			await this.retainSession?.(sessionName);
 			await this.store.save(storageKey, data);
 		}
 
@@ -138,8 +173,11 @@ export class Harness implements FlueHarness {
 			onAgentEvent: this.decorateEventCallback(this.eventCallback),
 			agentTools: this.agentTools,
 			toolFactory: this.toolFactory,
-			taskDepth: 0,
+			taskDepth: this.scopeDepth,
 			createTaskSession: (taskOptions) => this.createTaskSession(taskOptions),
+			actions: this.actions,
+			createActionHarness: (actionOptions) => this.createActionHarness(actionOptions),
+			scopeSignal: this.scopeAbortController.signal,
 			onDelete: () => this.openSessions.delete(sessionName),
 			submissionStore: this.submissionStore,
 		});
@@ -156,7 +194,11 @@ export class Harness implements FlueHarness {
 				await open.delete();
 				return;
 			}
-			const storageKey = createSessionStorageKey(this.instanceId, this.name, sessionName);
+			const storageKey = createSessionStorageKey(
+				this.instanceId,
+				this.scopeName ? `${this.name}:${this.scopeName}` : this.name,
+				sessionName,
+			);
 			const deleteTree = () => deleteSessionTree(this.store, storageKey);
 			await (this.submissionStore?.deleteSession(storageKey, deleteTree) ?? deleteTree());
 		});
@@ -182,6 +224,7 @@ export class Harness implements FlueHarness {
 			instructions,
 			definitionSkills,
 			skills: localContext.skills,
+			actions: taskAgent ? taskAgent.actions : this.config.actions,
 			subagents: taskAgent
 				? Object.fromEntries(
 						(taskAgent.subagents ?? [])
@@ -196,7 +239,11 @@ export class Harness implements FlueHarness {
 			thinkingLevel: taskAgent?.thinkingLevel ?? this.config.thinkingLevel,
 			compaction: taskAgent?.compaction ?? this.config.compaction,
 		};
-		const storageKey = createSessionStorageKey(this.instanceId, this.name, sessionName);
+		const storageKey = createSessionStorageKey(
+			this.instanceId,
+			this.scopeName ? `${this.name}:${this.scopeName}` : this.name,
+			sessionName,
+		);
 		// `metadata` is application-owned; the parent→child relationship is
 		// carried by the parent's typed `taskSessions` field, and task/parent
 		// correlation flows through event decoration below.
@@ -225,7 +272,47 @@ export class Harness implements FlueHarness {
 			toolFactory: this.toolFactory,
 			taskDepth: options.depth,
 			createTaskSession: (childOptions) => this.createTaskSession(childOptions),
+			actions: taskConfig.actions ?? [],
+			createActionHarness: (actionOptions) => this.createActionHarness(actionOptions),
 		});
+	}
+
+	private createActionHarness: import('./session.ts').CreateActionHarness = async (options) => {
+		const scope = createActionScopeName(options.invocationId);
+		const nestedScope = this.scopeName ? `${this.scopeName}:${scope}` : scope;
+		const harness = new Harness(
+			this.instanceId,
+			this.name,
+			options.config,
+			options.env,
+			this.store,
+			this.eventCallback,
+			options.tools,
+			this.toolFactory,
+			this.submissionStore,
+			options.actions,
+			nestedScope,
+			options.depth,
+			(session) => options.retainSession(session, scope),
+			options.signal,
+		);
+		harness.createTaskSession = options.createTaskSession ?? harness.createTaskSession.bind(harness);
+		harness.createActionHarness = options.createActionHarness ?? harness.createActionHarness.bind(harness);
+		return harness;
+	}
+
+	async close(): Promise<void> {
+		this.scopeAbortController.abort();
+		for (const call of this.activeShellCalls) call.abort();
+		for (const session of this.openSessions.values()) session.abort();
+		const pending = [
+			...this.pendingSessionOperations.values(),
+			...this.activeShellCalls,
+		];
+		await Promise.allSettled(pending);
+		this.activeShellCalls.clear();
+		for (const session of this.openSessions.values()) session.close();
+		this.openSessions.clear();
 	}
 
 	private emit(event: FlueEventInput): void {

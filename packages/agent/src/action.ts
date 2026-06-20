@@ -1,5 +1,9 @@
 import type * as v from 'valibot';
-import { ActionInputValidationError, ActionOutputValidationError } from './errors.ts';
+import {
+	ActionInputValidationError,
+	ActionOutputSerializationError,
+	ActionOutputValidationError,
+} from './errors.ts';
 import {
 	isTopLevelObjectSchema,
 	isValibotSchema,
@@ -7,6 +11,7 @@ import {
 	type ReadonlyJsonSchema,
 	valibotToJsonSchema,
 } from './schema.ts';
+import { cloneJsonSerializable } from './json-snapshot.ts';
 import type { FlueHarness, FlueLogger } from './types.ts';
 
 const definedActions = new WeakSet<object>();
@@ -121,10 +126,20 @@ export async function validateAndRunAction<TAction extends ActionDefinition>(
 	}
 	const runContext = action.input ? { ...context, input: parsedInput } : context;
 	const result = await action.run(runContext as never);
-	if (!action.output) return result as ActionOutput<TAction>;
-	const parsed = parseValibot(action.output, result);
-	if (!parsed.success) throw new ActionOutputValidationError({ action: action.name, issues: parsed.issues });
-	return parsed.output as ActionOutput<TAction>;
+	let output: unknown = result;
+	if (action.output) {
+		const parsed = parseValibot(action.output, result);
+		if (!parsed.success)
+			throw new ActionOutputValidationError({ action: action.name, issues: parsed.issues });
+		output = parsed.output;
+	}
+	if (output === undefined && !action.output) return undefined as ActionOutput<TAction>;
+	if (output === undefined) throw new ActionOutputSerializationError({ action: action.name });
+	try {
+		return cloneJsonSerializable(output, `Action "${action.name}" output`) as ActionOutput<TAction>;
+	} catch (cause) {
+		throw new ActionOutputSerializationError({ action: action.name, cause });
+	}
 }
 
 function assertNonEmptyString(value: unknown, label: string): asserts value is string {

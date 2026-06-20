@@ -1,4 +1,5 @@
 const TASK_SESSION_PREFIX = 'task:';
+const ACTION_SCOPE_PREFIX = 'action:';
 const SESSION_STORAGE_PREFIX = 'agent-session:';
 
 interface SessionStorageIdentity {
@@ -17,6 +18,9 @@ export function assertPublicSessionName(name: string): void {
 			'[flue] Session names beginning with "task:" are reserved for delegated tasks.',
 		);
 	}
+	if (name.startsWith(ACTION_SCOPE_PREFIX)) {
+		throw new Error('[flue] Session names beginning with "action:" are reserved for Actions.');
+	}
 }
 
 export function createTaskSessionName(parentSession: string, taskId: string): string {
@@ -29,6 +33,33 @@ export function createSessionStorageKey(
 	session: string,
 ): string {
 	return `${SESSION_STORAGE_PREFIX}${JSON.stringify([instanceId, harness, session])}`;
+}
+
+export function createActionScopeName(invocationId: string): string {
+	return `${ACTION_SCOPE_PREFIX}${invocationId}`;
+}
+
+export function childActionSessionStorageKey(
+	parentStorageKey: string,
+	action: unknown,
+): string | undefined {
+	if (!action || typeof action !== 'object') return undefined;
+	const { invocationId, session, scope } = action as {
+		invocationId?: unknown;
+		session?: unknown;
+		scope?: unknown;
+	};
+	if (
+		typeof invocationId !== 'string' ||
+		typeof session !== 'string' ||
+		typeof scope !== 'string' ||
+		scope !== createActionScopeName(invocationId)
+	) {
+		return undefined;
+	}
+	const parent = parseSessionStorageKey(parentStorageKey);
+	if (!parent) return undefined;
+	return createSessionStorageKey(parent.instanceId, `${parent.harness}:${scope}`, session);
 }
 
 export function childTaskSessionStorageKey(
