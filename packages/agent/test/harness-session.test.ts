@@ -595,7 +595,6 @@ function createContext(
 ) {
 	return createFlueContext({
 		id: 'agent-instance',
-		payload: undefined,
 		env: {},
 		agentConfig: {
 			resolveModel: () => undefined,

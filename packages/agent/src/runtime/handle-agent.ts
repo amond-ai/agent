@@ -77,7 +77,6 @@ function parseDirectAgentPayload(payload: unknown): DirectAgentPayload {
 export type CreateContextFn = (
 	id: string,
 	runId: string | undefined,
-	payload: unknown,
 	request: Request,
 	initialEventIndex?: number,
 	dispatchId?: string,
@@ -201,6 +200,7 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 
 	try {
 		const input = await parseJsonBody(request);
+		parseActionInput(workflow.action, input);
 		const wait = new URL(request.url).searchParams.get('wait');
 
 		const execution = await prepareWorkflowExecution({
@@ -429,7 +429,7 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 	const startedAt = run?.startedAt ?? new Date().toISOString();
 	const startedAtMs = Date.parse(startedAt);
 	const startEvent = events.find((event) => event.type === 'run_start');
-	const payload = run?.payload !== undefined ? run.payload : startEvent?.payload;
+	const input = run?.input !== undefined ? run.input : startEvent?.input;
 	// The original workflow may have crashed before its admission write
 	// landed. Idempotent first-writer-wins createRun makes the recovered run
 	// visible so the terminal endRun below has a record to finalize.
@@ -439,7 +439,7 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 				runId: opts.runId,
 				workflowName: opts.workflowName,
 				startedAt,
-				payload,
+				input,
 			}),
 		);
 	// Ensure the event stream exists — the original workflow may have crashed
@@ -447,8 +447,8 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 	await opts.eventStreamStore.createStream(runStreamPath(opts.runId));
 	const lifecycle: WorkflowRunLifecycle = {
 		...opts,
-		input: payload,
-		ctx: opts.createContext(opts.id, opts.runId, payload, opts.request, initialEventIndex),
+		input,
+		ctx: opts.createContext(opts.id, opts.runId, opts.request, initialEventIndex),
 		startedAt,
 		startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
 	};
@@ -461,14 +461,14 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 async function readRecoveryEvents(opts: FailRecoveredRunOptions): Promise<FlueEvent[]> {
 	const streamPath = runStreamPath(opts.runId);
 	// Read all events — recovery needs the history to find a terminal
-	// run_end and the run_start payload fallback. The next event index is
+	// run_end and the run_start input fallback. The next event index is
 	// derived from the stream head instead (gap-proof).
 	const events: FlueEvent[] = [];
 	let offset = '-1';
 	while (true) {
 		const result = await opts.eventStreamStore.readEvents(streamPath, { offset });
-		for (const e of result.events) {
-			events.push(e.data as FlueEvent);
+		for (const event of result.events) {
+			events.push(normalizeRunStreamEvent(event.data));
 		}
 		if (result.upToDate || result.events.length === 0) break;
 		offset = result.nextOffset;
@@ -495,7 +495,7 @@ async function reconcileTerminalRun(
 				runId: opts.runId,
 				workflowName: opts.workflowName,
 				startedAt: endedAt,
-				payload: undefined,
+				input: undefined,
 			}),
 		);
 	}
@@ -513,6 +513,16 @@ async function reconcileTerminalRun(
 	// between appendEvent(run_end) and closeStream() can leave the stream
 	// permanently open without this repair.
 	await opts.eventStreamStore.closeStream(runStreamPath(opts.runId));
+}
+
+export function normalizeRunStreamEvent(value: unknown): FlueEvent {
+	if (!value || typeof value !== 'object') return value as FlueEvent;
+	const event = value as Record<string, unknown>;
+	if (event.type !== 'run_start' || 'input' in event || !('payload' in event)) {
+		return value as FlueEvent;
+	}
+	const { payload, ...rest } = event;
+	return { ...rest, input: payload } as FlueEvent;
 }
 
 function findTerminalRunEvent(
@@ -571,6 +581,7 @@ async function runSyncMode(execution: AdmittedWorkflowExecution): Promise<Respon
 export async function invokeWorkflowAttached(
 	opts: InvokeWorkflowAttachedOptions,
 ): Promise<WorkflowAttachedInvocationResult> {
+	parseActionInput(opts.workflow.action, opts.input);
 	const lifecycle = await createWorkflowRunLifecycle({
 		workflowName: opts.workflowName,
 		id: opts.id,
@@ -634,7 +645,7 @@ async function createWorkflowRunLifecycle(
 ): Promise<WorkflowRunLifecycle> {
 	const startedAtMs = Date.now();
 	const startedAt = new Date(startedAtMs).toISOString();
-	const ctx = options.createContext(options.id, options.runId, options.input, options.request);
+	const ctx = options.createContext(options.id, options.runId, options.request);
 	const runStore = options.runStore;
 	const workflowName = options.workflowName;
 	try {
@@ -644,7 +655,7 @@ async function createWorkflowRunLifecycle(
 					runId: options.runId,
 					workflowName,
 					startedAt,
-					payload: options.input,
+					input: options.input,
 				}),
 			);
 	} catch (error) {
@@ -712,7 +723,7 @@ function emitRunStart(lifecycle: WorkflowRunLifecycle): void {
 		runId: lifecycle.runId,
 		workflowName: lifecycle.workflowName,
 		startedAt: lifecycle.startedAt,
-		payload: lifecycle.input,
+		input: lifecycle.input,
 	});
 }
 

@@ -918,7 +918,7 @@ type FlueEventVariant =
 			runId: string;
 			workflowName: string;
 			startedAt: string;
-			payload: unknown;
+			input: unknown;
 	  }
 	| {
 			type: 'run_resume';

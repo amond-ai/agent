@@ -20,6 +20,7 @@ import {
 	formatOffset,
 	parseOffset,
 } from './event-stream-store.ts';
+import { normalizeRunStreamEvent } from './handle-agent.ts';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -207,6 +208,12 @@ export async function handleStreamRead(opts: HandleStreamReadOptions): Promise<R
 
 // ─── Catch-up mode ──────────────────────────────────────────────────────────
 
+function publicEventData(path: string, result: EventStreamReadResult): unknown[] {
+	return result.events.map((event) =>
+		path.startsWith('runs/') ? normalizeRunStreamEvent(event.data) : event.data,
+	);
+}
+
 function streamErrorResponse(
 	error: InvalidRequestError | RunNotFoundError | StreamNotFoundError,
 ): Response {
@@ -236,7 +243,7 @@ function handleCatchUpMode(
 	const conditional = etag ? checkConditional(request, etag) : null;
 	if (conditional) return conditional;
 
-	const body = JSON.stringify(result.events.map((e) => e.data));
+	const body = JSON.stringify(publicEventData(path, result));
 	const headers: Record<string, string> = {
 		'content-type': 'application/json',
 		[STREAM_NEXT_OFFSET]: result.nextOffset,
@@ -309,7 +316,7 @@ function longPollDataResponse(
 	if (isClosed) headers[STREAM_CLOSED] = 'true';
 	if (offsetParam !== 'now')
 		headers.etag = generateETag(path, offsetParam, result.nextOffset, isClosed);
-	return new Response(JSON.stringify(result.events.map((e) => e.data)), { status: 200, headers });
+	return new Response(JSON.stringify(publicEventData(path, result)), { status: 200, headers });
 }
 
 /** Build a 204 long-poll response (no new data). */
@@ -497,7 +504,7 @@ async function runSseLoop(
 
 		// Emit data events.
 		if (result.events.length > 0) {
-			const dataPayload = JSON.stringify(result.events.map((e) => e.data));
+			const dataPayload = JSON.stringify(publicEventData(path, result));
 			const sseData = `event: data\n${encodeSseData(dataPayload)}`;
 			try {
 				controller.enqueue(encoder.encode(sseData));

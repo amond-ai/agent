@@ -165,11 +165,6 @@ export function createAgentSubmissionSessionHandler(
 	};
 }
 
-/** Context payload for all submission contexts: the user's direct payload or the public dispatch input. */
-function agentSubmissionPayload(input: AgentSubmissionInput): unknown {
-	return input.kind === 'dispatch' ? agentSubmissionDispatchInput(input) : input.payload;
-}
-
 function agentSubmissionDispatchId(input: AgentSubmissionInput): string | undefined {
 	return input.kind === 'dispatch' ? input.dispatchId : undefined;
 }
@@ -304,14 +299,14 @@ type ReconciliationResult =
  * Used by both the Cloudflare and Node agent coordinators.
  *
  * The `createContext` callback builds a `FlueContextInternal` for handler
- * execution. The shared function selects the appropriate payload internally
- * (read-only for inspection/repair, processing for terminal handlers).
+ * execution. Submission input is delivered through the session handler rather
+ * than context construction.
  */
 export async function reconcileInterruptedSubmission(
 	submissions: AgentSubmissionStore,
 	submission: AgentSubmission,
 	agent: CreatedAgent,
-	createContext: (payload: unknown, dispatchId: string | undefined) => FlueContextInternal,
+	createContext: (dispatchId: string | undefined) => FlueContextInternal,
 	lease?: { ownerId: string; leaseExpiresAt: number },
 ): Promise<ReconciliationResult> {
 	const { input } = submission;
@@ -323,9 +318,8 @@ export async function reconcileInterruptedSubmission(
 	// retry budget and timeout below gate only the retry/replacement and
 	// requeue branches — exhausting either must never discard (or append a
 	// contradictory interruption advisory over) work that already completed.
-	const payload = agentSubmissionPayload(input);
 	const dispatchId = agentSubmissionDispatchId(input);
-	const ctx = createContext(payload, dispatchId);
+	const ctx = createContext(dispatchId);
 	if (submission.kind === 'direct') ctx.setSubmissionId?.(submission.submissionId);
 	const inspected = (await createAgentSubmissionSessionHandler(agent, input, (s) => {
 		const state = s.inspectSubmissionInput(input);
@@ -428,7 +422,7 @@ export async function reconcileInterruptedSubmission(
 	) {
 		const streamKey = journal.streamKey;
 		const turnCheckpointLeafId = journal.checkpointLeafId;
-		const recoveryCtx = createContext(payload, dispatchId);
+		const recoveryCtx = createContext(dispatchId);
 		if (submission.kind === 'direct') recoveryCtx.setSubmissionId?.(submission.submissionId);
 		const recovered = (await createAgentSubmissionSessionHandler(agent, input, (s) =>
 			s.recoverInterruptedStream(streamKey, turnCheckpointLeafId),
@@ -482,7 +476,7 @@ export async function reconcileInterruptedSubmission(
 		journal.committed === false &&
 		journal.toolRequest
 	) {
-		const repairCtx = createContext(payload, dispatchId);
+		const repairCtx = createContext(dispatchId);
 		if (submission.kind === 'direct') repairCtx.setSubmissionId?.(submission.submissionId);
 		const repairedLeafId = (await createAgentSubmissionSessionHandler(agent, input, (s) =>
 			s.repairInterruptedToolCalls(input, journal.toolRequest as AgentSubmissionToolRequest),
@@ -595,7 +589,7 @@ export interface ProcessSubmissionOptions {
 	/** Resolve a created agent by name. Must throw if absent. */
 	resolveAgent: (name: string) => CreatedAgent;
 	/** Build a context for this submission. */
-	createContext: (payload: unknown, dispatchId: string | undefined) => FlueContextInternal;
+	createContext: (dispatchId: string | undefined) => FlueContextInternal;
 	/** Observer registry for direct submission events and settlement. */
 	observers: Pick<AgentSubmissionObserverRegistry, 'publish' | 'complete' | 'fail'>;
 	/**
@@ -641,7 +635,7 @@ export async function processSubmission(opts: ProcessSubmissionOptions): Promise
 	if (persisted?.status !== 'running' || persisted.attemptId !== attempt.attemptId) return;
 
 	const agent = opts.resolveAgent(input.agent);
-	const ctx = opts.createContext(agentSubmissionPayload(input), agentSubmissionDispatchId(input));
+	const ctx = opts.createContext(agentSubmissionDispatchId(input));
 
 	if (submission.kind === 'direct') {
 		ctx.setSubmissionId?.(submission.submissionId);
@@ -727,14 +721,13 @@ async function failInterruptedSubmission(
 	agent: CreatedAgent,
 	reason: AgentSubmissionInterruption['reason'],
 	error: Error,
-	createContext: (payload: unknown, dispatchId: string | undefined) => FlueContextInternal,
+	createContext: (dispatchId: string | undefined) => FlueContextInternal,
 	journalStreamKey: string | undefined,
 	interruptedTools?: ReadonlyArray<{ readonly name: string; readonly id: string }>,
 ): Promise<ReconciliationResult> {
 	const { input } = submission;
-	const payload = agentSubmissionPayload(input);
 	const dispatchId = agentSubmissionDispatchId(input);
-	const ctx = createContext(payload, dispatchId);
+	const ctx = createContext(dispatchId);
 	if (submission.kind === 'direct') ctx.setSubmissionId?.(submission.submissionId);
 	// The terminal message is a best-effort diagnostic recorded in the
 	// session. If it fails (e.g., disk full, SQLite corruption), proceed

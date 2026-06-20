@@ -15,7 +15,7 @@ describe('listRuns()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
+			input: { report: 'weekly' },
 		});
 		await runStore.endRun({
 			runId: 'run_01DAILYREPORT',
@@ -73,7 +73,7 @@ describe('getRun()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
+			input: { report: 'weekly' },
 		});
 		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runStore });
 
@@ -82,7 +82,7 @@ describe('getRun()', () => {
 			workflowName: 'daily-report',
 			status: 'active',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
+			input: { report: 'weekly' },
 		});
 	});
 
@@ -102,7 +102,7 @@ describe('getRun()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: {},
+			input: {},
 		});
 		const routeRunRequest = vi.fn(async (request: Request) => {
 			const url = new URL(request.url);

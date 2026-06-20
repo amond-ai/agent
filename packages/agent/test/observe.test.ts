@@ -5,7 +5,6 @@ import { createFlueContext, InMemorySessionStore } from '../src/internal.ts';
 function createContext(id: string) {
 	return createFlueContext({
 		id,
-		payload: {},
 		env: {},
 		agentConfig: {
 			resolveModel: () => undefined,

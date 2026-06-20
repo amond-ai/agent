@@ -82,7 +82,6 @@ function createEnv({
 function createContext(overrides: Partial<FlueContextConfig> = {}) {
 	return createFlueContext({
 		id: 'context-instance',
-		payload: {},
 		env: {},
 		agentConfig: {
 			resolveModel: () => undefined,

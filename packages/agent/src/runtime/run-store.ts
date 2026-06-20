@@ -7,7 +7,7 @@ export interface RunRecord {
 	workflowName: string;
 	status: RunStatus;
 	startedAt: string;
-	payload?: unknown;
+	input?: unknown;
 	endedAt?: string;
 	isError?: boolean;
 	durationMs?: number;
@@ -17,7 +17,7 @@ export interface RunRecord {
 
 /**
  * Listing/lookup projection of a {@link RunRecord}: every field except the
- * potentially large `payload`, `result`, and `error` values. Single-database
+ * potentially large `input`, `result`, and `error` values. Single-database
  * adapters back pointers with a column-subset select over the run records.
  */
 export interface RunPointer {
@@ -34,7 +34,7 @@ export interface CreateRunInput {
 	runId: string;
 	workflowName: string;
 	startedAt: string;
-	payload: unknown;
+	input: unknown;
 }
 
 export interface EndRunInput {

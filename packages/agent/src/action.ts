@@ -3,6 +3,7 @@ import {
 	ActionInputValidationError,
 	ActionOutputSerializationError,
 	ActionOutputValidationError,
+	WorkflowInputUnexpectedError,
 } from './errors.ts';
 import {
 	isTopLevelObjectSchema,
@@ -119,8 +120,11 @@ export interface ParsedActionInput {
 }
 
 export function parseActionInput(action: ActionDefinition, input?: unknown): ParsedActionInput {
-	if (!action.input) return { declared: false, value: undefined };
-	const parsed = parseValibot(action.input, input);
+	if (!action.input) {
+		if (input !== undefined) throw new WorkflowInputUnexpectedError();
+		return { declared: false, value: undefined };
+	}
+	const parsed = parseValibot(action.input, input === undefined ? {} : input);
 	if (!parsed.success) {
 		throw new ActionInputValidationError({ action: action.name, issues: parsed.issues });
 	}

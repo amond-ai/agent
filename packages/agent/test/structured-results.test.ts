@@ -30,7 +30,6 @@ async function createSession(
 ): Promise<FlueSession> {
 	const ctx = createFlueContext({
 		id: 'structured-results-instance',
-		payload: {},
 		env: {},
 		agentConfig: {
 			resolveModel: () => provider.getModel(),

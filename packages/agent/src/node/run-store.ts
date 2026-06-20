@@ -27,7 +27,7 @@ export class InMemoryRunStore implements RunStore {
 			workflowName: input.workflowName,
 			status: 'active',
 			startedAt: input.startedAt,
-			payload: input.payload,
+			input: input.input,
 		});
 	}
 

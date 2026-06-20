@@ -69,7 +69,6 @@ interface CloudflareAgentRuntimeOptions {
 	readonly createContext: (options: {
 		readonly executionStore: AgentExecutionStore;
 		readonly instance: CloudflareAgentInstance;
-		readonly payload: unknown;
 		readonly request: Request;
 		readonly initialEventIndex?: number;
 		readonly dispatchId?: string;
@@ -260,7 +259,6 @@ class CloudflareAgentCoordinator {
 	}
 
 	private createContext(
-		payload: unknown,
 		request: Request,
 		initialEventIndex?: number,
 		dispatchId?: string,
@@ -268,7 +266,6 @@ class CloudflareAgentCoordinator {
 		return this.options.createContext({
 			executionStore: this.executionStore,
 			instance: this.instance,
-			payload,
 			request,
 			initialEventIndex,
 			dispatchId,
@@ -282,11 +279,10 @@ class CloudflareAgentCoordinator {
 	 * reach detached stream readers.
 	 */
 	private createDurableContext(
-		payload: unknown,
 		request: Request,
 		dispatchId?: string,
 	): FlueContextInternal {
-		const ctx = this.createContext(payload, request, undefined, dispatchId);
+		const ctx = this.createContext(request, undefined, dispatchId);
 		const streamPath = agentStreamPath(this.agentName, this.instance.name);
 		ctx.subscribeEvent((event) => {
 			if (isStreamExcludedEvent(event)) return;
@@ -436,12 +432,8 @@ class CloudflareAgentCoordinator {
 				this.submissions,
 				submission,
 				agent,
-				(payload, dispatchId) =>
-					this.createDurableContext(
-						payload,
-						submissionSyntheticRequest(submission.input),
-						dispatchId,
-					),
+				(dispatchId) =>
+					this.createDurableContext(submissionSyntheticRequest(submission.input), dispatchId),
 				{ ownerId: this.instance.ctx.id.toString(), leaseExpiresAt: 0 },
 			),
 		);
@@ -553,12 +545,8 @@ class CloudflareAgentCoordinator {
 				if (!agent) throw new Error('[flue] Agent target unavailable during durable processing.');
 				return agent;
 			},
-			createContext: (payload, dispatchId) =>
-				this.createDurableContext(
-					payload,
-					submissionSyntheticRequest(submission.input),
-					dispatchId,
-				),
+			createContext: (dispatchId) =>
+				this.createDurableContext(submissionSyntheticRequest(submission.input), dispatchId),
 			observers: this.observers,
 			wrapExecution: (fn) => this.runWithInstanceContext(fn),
 			onSettled: () => {

@@ -187,7 +187,7 @@ describe('sqlite() PersistenceAdapter', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-03T00:00:00.000Z',
-			payload: { day: 'wednesday' },
+			input: { day: 'wednesday' },
 		});
 		await runStore1.endRun({
 			runId: 'run_01DAILYREPORT',
@@ -204,7 +204,7 @@ describe('sqlite() PersistenceAdapter', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			status: 'completed',
-			payload: { day: 'wednesday' },
+			input: { day: 'wednesday' },
 			result: { report: 'done' },
 		});
 		expect(await runStore2.lookupRun('run_01DAILYREPORT')).toMatchObject({

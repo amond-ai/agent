@@ -35,7 +35,6 @@ afterEach(() => {
 function createContext(
 	id: string,
 	runId: string | undefined,
-	payload: unknown,
 	request: Request,
 	initialEventIndex?: number,
 	dispatchId?: string,
@@ -44,7 +43,6 @@ function createContext(
 		id,
 		runId,
 		dispatchId,
-		payload,
 		req: request,
 		initialEventIndex,
 		env: {},
@@ -192,7 +190,10 @@ describe('invoke()', () => {
 		});
 
 		const receipt = await invoke(target, { input: { report: 'weekly' } });
-		expect((await runStore.getRun(receipt.runId))?.status).toBe('active');
+		expect(await runStore.getRun(receipt.runId)).toMatchObject({
+			status: 'active',
+			input: { report: 'weekly' },
+		});
 		expect(await eventStreamStore.getStreamMeta(`runs/${receipt.runId}`)).toBeDefined();
 		release();
 		await vi.waitFor(async () => {
@@ -474,11 +475,10 @@ describe('workflow invocation', () => {
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'validated', transports: { http: true } }] },
 			workflows: { validated: invalidWorkflow },
-			createContext(id, runId, payload, request) {
+			createContext(id, runId, request) {
 				return createFlueContext({
 					id,
 					runId,
-					payload,
 					req: request,
 					env: {},
 					agentConfig: { resolveModel: () => undefined },
@@ -498,6 +498,45 @@ describe('workflow invocation', () => {
 		);
 
 		expect(response.status).toBe(500);
+		expect(initialize).not.toHaveBeenCalled();
+		expect(createSessionEnv).not.toHaveBeenCalled();
+	});
+
+	it('rejects explicit input for a no-input workflow before initializing its Agent or sandbox', async () => {
+		const initialize = vi.fn(() => ({ model: false as const }));
+		const createSessionEnv = vi.fn(async () => createNoopSessionEnv());
+		const noInputWorkflow = createWorkflow({
+			agent: createAgent(initialize),
+			run: async () => undefined,
+		});
+		const app = createApp({
+			target: 'node',
+			manifest: { agents: [], workflows: [{ name: 'no-input', transports: { http: true } }] },
+			workflows: { 'no-input': noInputWorkflow },
+			createContext(id, runId, request) {
+				return createFlueContext({
+					id,
+					runId,
+					req: request,
+					env: {},
+					agentConfig: { resolveModel: () => undefined },
+					createDefaultEnv: createSessionEnv,
+					defaultStore: new InMemorySessionStore(),
+				});
+			},
+			runStore: new InMemoryRunStore(),
+		});
+
+		const response = await app.fetch(
+			new Request('http://localhost/flue/workflows/no-input?wait=result', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: '{}',
+			}),
+		);
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({ error: { type: 'workflow_input_unexpected' } });
 		expect(initialize).not.toHaveBeenCalled();
 		expect(createSessionEnv).not.toHaveBeenCalled();
 	});
@@ -532,11 +571,12 @@ describe('workflow invocation', () => {
 			workflowName: 'daily-report',
 			status: 'completed',
 			startedAt: expect.any(String),
-			payload: {},
 			endedAt: expect.any(String),
 			isError: false,
 			durationMs: expect.any(Number),
+			input: undefined,
 			result: null,
+			error: undefined,
 		});
 	});
 });
@@ -571,11 +611,10 @@ describe('workflow run lifecycle', () => {
 			target: 'node',
 			manifest: { agents: [], workflows: [{ name: 'cleanup', transports: { http: true } }] },
 			workflows: { cleanup: createdWorkflow },
-			createContext(id, runId, payload, request) {
+			createContext(id, runId, request) {
 				return createFlueContext({
 					id,
 					runId,
-					payload,
 					req: request,
 					env: {},
 					agentConfig: { resolveModel: () => undefined },
@@ -624,6 +663,9 @@ describe('workflow run lifecycle', () => {
 		const persisted = await eventStreamStore.readEvents(`runs/${activeRun.runId}`, { offset: '-1' });
 		const types = persisted.events.map((entry) => (entry.data as { type: string }).type);
 		expect(types.at(-1)).toBe('run_end');
+		expect(persisted.events[0]?.data).toMatchObject({ type: 'run_start' });
+		expect(persisted.events[0]?.data).not.toHaveProperty('input');
+		expect(persisted.events[0]?.data).not.toHaveProperty('payload');
 		expect(types.lastIndexOf('operation')).toBeLessThan(types.lastIndexOf('run_end'));
 		expect(persisted.closed).toBe(true);
 		const eventCount = persisted.events.length;
@@ -673,10 +715,11 @@ describe('workflow run lifecycle', () => {
 				workflowName: 'daily-report',
 				status: 'errored',
 				startedAt: expect.any(String),
-				payload: {},
 				endedAt: expect.any(String),
 				isError: true,
 				durationMs: expect.any(Number),
+				input: undefined,
+				result: undefined,
 				error: { name: 'Error', message: 'report generation failed' },
 			});
 		} finally {
@@ -733,6 +776,38 @@ describe('workflow run lifecycle', () => {
 		} finally {
 			consoleError.mockRestore();
 		}
+	});
+
+	it('normalizes legacy persisted run_start payloads during recovery', async () => {
+		const eventStreamStore = createTestEventStreamStore();
+		const runStore = new InMemoryRunStore();
+		const runId = 'run_legacy_recovery';
+		const streamPath = `runs/${runId}`;
+		await eventStreamStore.createStream(streamPath);
+		await eventStreamStore.appendEvent(streamPath, {
+			type: 'run_start',
+			v: 1,
+			runId,
+			workflowName: 'report',
+			startedAt: '2026-06-19T00:00:00.000Z',
+			payload: { report: 'weekly' },
+		});
+
+		await failRecoveredRun({
+			workflowName: 'report',
+			id: runId,
+			runId,
+			request: new Request('http://localhost/recovery'),
+			createContext,
+			error: new Error('interrupted'),
+			runStore,
+			eventStreamStore,
+		});
+
+		expect(await runStore.getRun(runId)).toMatchObject({
+			status: 'errored',
+			input: { report: 'weekly' },
+		});
 	});
 
 	it('derives recovery event indexes from the stream head, not the event count', async () => {

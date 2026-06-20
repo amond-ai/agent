@@ -735,7 +735,7 @@ describe('flue()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: {},
+			input: {},
 		});
 		const store = createTestEventStreamStore();
 		await store.createStream('runs/run_01DAILYREPORT');
@@ -763,7 +763,7 @@ describe('flue()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
+			input: { report: 'weekly' },
 		});
 		await runStore.endRun({
 			runId: 'run_01DAILYREPORT',
@@ -797,7 +797,7 @@ describe('flue()', () => {
 			workflowName: 'daily-report',
 			status: 'completed',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
+			input: { report: 'weekly' },
 			endedAt: '2026-06-01T10:05:00.000Z',
 			isError: false,
 			durationMs: 300_000,
@@ -811,7 +811,7 @@ describe('flue()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: {},
+			input: {},
 		});
 		configureFlueRuntime({
 			target: 'node',
@@ -841,7 +841,7 @@ describe('flue()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: {},
+			input: {},
 		});
 		configureFlueRuntime({
 			target: 'node',
@@ -1205,11 +1205,10 @@ describe('createDefaultFlueApp()', () => {
 	});
 });
 
-function createTestContext(id: string, runId: string | undefined, payload: unknown, req: Request) {
+function createTestContext(id: string, runId: string | undefined, req: Request) {
 	return createFlueContext({
 		id,
 		runId,
-		payload,
 		env: {},
 		req,
 		agentConfig: {

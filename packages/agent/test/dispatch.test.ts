@@ -294,7 +294,6 @@ describe('dispatched session processing', () => {
 		const ctx = createFlueContext({
 			id: input.id,
 			dispatchId: input.dispatchId,
-			payload: input,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: {
@@ -353,7 +352,6 @@ describe('dispatched session processing', () => {
 		};
 		const ctx = createFlueContext({
 			id: input.id,
-			payload: input.payload,
 			env: {},
 			req: new Request('http://flue.local/agents/moderator/guild:direct-input-marker-order', {
 				method: 'POST',
@@ -423,7 +421,6 @@ describe('dispatched session processing', () => {
 		};
 		const ctx = createFlueContext({
 			id: input.id,
-			payload: input.payload,
 			env: {},
 			req: new Request('http://flue.local/agents/moderator/guild:aborted-turn-no-commit', {
 				method: 'POST',
@@ -491,7 +488,6 @@ describe('dispatched session processing', () => {
 		};
 		const ctx = createFlueContext({
 			id: input.id,
-			payload: input.payload,
 			env: {},
 			req: new Request('http://flue.local/agents/moderator/guild:error-turn-no-commit', {
 				method: 'POST',
@@ -542,7 +538,6 @@ describe('dispatched session processing', () => {
 		const createContext = () =>
 			createFlueContext({
 				id: input.id,
-				payload: input.payload,
 				env: {},
 				req: new Request('http://flue.local/agents/moderator/guild:terminal-advisory', {
 					method: 'POST',
@@ -632,7 +627,6 @@ describe('dispatched session processing', () => {
 		}));
 		const ctx = createFlueContext({
 			id: input.id,
-			payload: input.payload,
 			env: {},
 			req: new Request('http://flue.local/agents/moderator/guild:direct-inspect-completed', {
 				method: 'POST',
@@ -697,7 +691,6 @@ describe('dispatched session processing', () => {
 		const ctx = createFlueContext({
 			id: input.id,
 			dispatchId: input.dispatchId,
-			payload: input,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: testAgentConfig(),
@@ -753,7 +746,6 @@ describe('dispatched session processing', () => {
 		const ctx = createFlueContext({
 			id: input.id,
 			dispatchId: input.dispatchId,
-			payload: input,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: testAgentConfig(),
@@ -841,7 +833,6 @@ describe('dispatched session processing', () => {
 		const ctx = createFlueContext({
 			id: input.id,
 			dispatchId: input.dispatchId,
-			payload: input,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: testAgentConfig(),
@@ -931,7 +922,6 @@ describe('dispatched session processing', () => {
 		const ctx = createFlueContext({
 			id: input.id,
 			dispatchId: input.dispatchId,
-			payload: input,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: { subagents: {}, resolveModel: () => provider.getModel() },
@@ -1092,7 +1082,6 @@ describe('repairInterruptedToolCalls()', () => {
 		const ctx = createFlueContext({
 			id: submissionInput.id,
 			dispatchId: submissionInput.dispatchId,
-			payload: submissionInput,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: { subagents: {}, resolveModel: () => provider.getModel() },
@@ -1160,7 +1149,6 @@ describe('repairInterruptedToolCalls()', () => {
 		const ctx = createFlueContext({
 			id: submissionInput.id,
 			dispatchId: submissionInput.dispatchId,
-			payload: submissionInput,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: { subagents: {}, resolveModel: () => provider.getModel() },
@@ -1228,7 +1216,6 @@ describe('repairInterruptedToolCalls()', () => {
 		const ctx = createFlueContext({
 			id: submissionInput.id,
 			dispatchId: submissionInput.dispatchId,
-			payload: submissionInput,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: { subagents: {}, resolveModel: () => provider.getModel() },
@@ -1295,7 +1282,6 @@ describe('repairInterruptedToolCalls()', () => {
 		const ctx = createFlueContext({
 			id: submissionInput.id,
 			dispatchId: submissionInput.dispatchId,
-			payload: submissionInput,
 			env: {},
 			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
 			agentConfig: { subagents: {}, resolveModel: () => provider.getModel() },

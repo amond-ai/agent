@@ -1078,9 +1078,7 @@ export function toHttpResponse(err: unknown): Response {
 // framework utilities, not error definitions.
 
 /**
- * Parse a request body as JSON. Returns `{}` for genuinely empty bodies
- * (Content-Length: 0 or missing) so workflow invocations that do not accept
- * a payload can be invoked without one.
+ * Parse a request body as JSON. Returns `undefined` when the body is omitted.
  *
  * Throws `UnsupportedMediaTypeError` if a body is present without
  * `application/json` content-type, and `InvalidJsonError` if the body is
@@ -1090,39 +1088,13 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
 	const contentLengthHeader = request.headers.get('content-length');
 	const contentLength = contentLengthHeader === null ? null : Number(contentLengthHeader);
 	const contentType = request.headers.get('content-type');
-
-	// Genuinely empty body: legal, treated as `{}`. We accept both an explicit
-	// Content-Length: 0 and the absence of any body indicator (some clients
-	// omit Content-Length on empty POSTs).
-	//
-	// Trade-off: if a client sends a body but no Content-Length AND no
-	// Content-Type, we silently treat the request as empty rather than
-	// reading the stream to check. That's intentional — it preserves the
-	// `curl -X POST <url>` "no payload" UX for invocations that don't take input,
-	// and a misconfigured client that sends a body without either header is
-	// already broken in ways we can't recover from cleanly.
 	const looksEmpty = contentLength === 0 || (contentLengthHeader === null && contentType === null);
-	if (looksEmpty) return {};
+	if (looksEmpty) return undefined;
 
-	// If a body is present, require application/json. This is strict on
-	// purpose — invocation routes do not accept form-encoded or plain-text
-	// payloads, and silently accepting them invites the kind of
-	// drift this whole hardening pass is trying to eliminate.
 	if (!contentType?.toLowerCase().includes('application/json')) {
 		throw new UnsupportedMediaTypeError({ received: contentType });
 	}
 
-	// We label both stream-read failures and JSON-parse failures as
-	// `invalid_json`. A separate `BodyReadError` would be more precise, but
-	// neither runtime (Node + workerd) exposes the distinction in a way
-	// that's actionable for the client — in both cases, the right fix is
-	// "send a valid JSON body" — so a single error type is clearer.
-	//
-	// We consume a clone, not the original, so that handlers can still
-	// access the request body via `ctx.req` (e.g. for HMAC verification
-	// over the raw bytes). Cloning is lazy — the body stream is tee'd, not
-	// copied — so the cost is the unread tee buffering until GC. Skipped
-	// above for empty-body requests, where there's nothing to clone.
 	let text: string;
 	try {
 		text = await request.clone().text();
@@ -1132,7 +1104,7 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
 		});
 	}
 
-	if (text.trim() === '') return {};
+	if (text.trim() === '') return undefined;
 
 	try {
 		return JSON.parse(text);

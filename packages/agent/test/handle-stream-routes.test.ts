@@ -68,6 +68,36 @@ describe('handleStreamRead()', () => {
 		);
 	});
 
+	it('normalizes legacy run_start payloads when reading persisted run streams', async () => {
+		const store = createStore();
+		await store.createStream('runs/legacy');
+		await store.appendEvent('runs/legacy', {
+			type: 'run_start',
+			v: 1,
+			runId: 'legacy',
+			workflowName: 'report',
+			startedAt: '2026-06-19T00:00:00.000Z',
+			payload: { report: 'weekly' },
+		});
+
+		const response = await handleStreamRead({
+			store,
+			path: 'runs/legacy',
+			request: new Request('http://localhost/runs/legacy'),
+		});
+
+		expect(await response.json()).toEqual([
+			{
+				type: 'run_start',
+				v: 1,
+				runId: 'legacy',
+				workflowName: 'report',
+				startedAt: '2026-06-19T00:00:00.000Z',
+				input: { report: 'weekly' },
+			},
+		]);
+	});
+
 	it('returns only the requested trailing events when tail modifies offset=-1', async () => {
 		const store = createStore();
 		await store.createStream('runs/test');

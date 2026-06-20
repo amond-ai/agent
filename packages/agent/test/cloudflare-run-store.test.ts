@@ -46,13 +46,13 @@ describe('createCloudflareRunStore()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: { report: 'weekly' },
+			input: { report: 'weekly' },
 		});
 
 		expect(await records.getRun('run_01DAILYREPORT')).toMatchObject({
 			runId: 'run_01DAILYREPORT',
 			status: 'active',
-			payload: { report: 'weekly' },
+			input: { report: 'weekly' },
 		});
 		expect(fake.instanceNames).toEqual(['default']);
 		expect(fake.requestedIds).toEqual([fake.id]);
@@ -77,7 +77,7 @@ describe('createCloudflareRunStore()', () => {
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: {},
+			input: {},
 		});
 		await store.endRun({
 			runId: 'run_01DAILYREPORT',
@@ -126,7 +126,7 @@ describe('createCloudflareRunStore()', () => {
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.endRun({
 				runId: 'run_01DAILYREPORT',
@@ -160,7 +160,7 @@ describe('createCloudflareRunStore()', () => {
 			runId: 'run_01LOCAL',
 			workflowName: 'daily-report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: {},
+			input: {},
 		});
 		const store = createCloudflareRunStore(records, fake.namespace);
 
@@ -191,7 +191,7 @@ describe('createCloudflareRunStore()', () => {
 			runId: 'run_01 colon:slash/id?#fragment',
 			workflowName: 'daily report',
 			startedAt: '2026-06-01T10:00:00.000Z',
-			payload: {},
+			input: {},
 		});
 		await store.endRun({
 			runId: 'run_01 colon:slash/id?#fragment',

@@ -31,7 +31,6 @@ function createProvider(): FauxProviderRegistration {
 function createContext(provider: FauxProviderRegistration, store?: SessionStore) {
 	return createFlueContext({
 		id: 'session-event-images-instance',
-		payload: {},
 		env: {},
 		agentConfig: {
 			resolveModel: (specifier) => {

@@ -45,7 +45,6 @@ function createContext(
 ) {
 	return createFlueContext({
 		id: 'tool-test-instance',
-		payload: {},
 		env: {},
 		agentConfig: {
 			resolveModel: () => provider.getModel(),

@@ -40,7 +40,7 @@ describe('createSqlRunStore()', () => {
 			runId,
 			workflowName: 'hello',
 			startedAt: '2026-06-02T00:00:00.000Z',
-			payload: undefined,
+			input: undefined,
 		});
 		await store.endRun({
 			runId,
@@ -50,7 +50,7 @@ describe('createSqlRunStore()', () => {
 		});
 
 		expect(await store.getRun(runId)).toMatchObject({
-			payload: undefined,
+			input: undefined,
 			result: undefined,
 			error: undefined,
 		});
@@ -64,7 +64,7 @@ describe('createSqlRunStore()', () => {
 			runId,
 			workflowName: 'hello',
 			startedAt: '2026-06-02T00:00:00.000Z',
-			payload: null,
+			input: null,
 		});
 		await store.endRun({
 			runId,
@@ -75,6 +75,6 @@ describe('createSqlRunStore()', () => {
 			error: null,
 		});
 
-		expect(await store.getRun(runId)).toMatchObject({ payload: null, result: null, error: null });
+		expect(await store.getRun(runId)).toMatchObject({ input: null, result: null, error: null });
 	});
 });

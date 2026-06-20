@@ -9,7 +9,6 @@ import { local } from '../src/node/index.ts';
 function createContext() {
 	return createFlueContext({
 		id: 'agent-instance',
-		payload: undefined,
 		env: {},
 		agentConfig: {
 			resolveModel: () => undefined,

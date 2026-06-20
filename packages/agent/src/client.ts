@@ -28,7 +28,6 @@ export interface FlueContextConfig {
 	id: string;
 	runId?: string;
 	dispatchId?: string;
-	payload?: unknown;
 	env: Record<string, any>;
 	/**
 	 * Host-provided agent-config seeds (`resolveModel`, `packagedSkills`, and

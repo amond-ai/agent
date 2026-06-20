@@ -160,11 +160,10 @@ export function createNodeAgentCoordinator(options: {
 	// ── Helpers ──────────────────────────────────────────────────────────
 
 	function makeSubmissionContext(input: AgentSubmissionInput) {
-		return (payload: unknown, dispatchId: string | undefined) => {
+		return (dispatchId: string | undefined) => {
 			const ctx = createContext(
 				input.id,
 				undefined,
-				payload,
 				submissionSyntheticRequest(input),
 				undefined,
 				dispatchId,

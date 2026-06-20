@@ -88,12 +88,11 @@ async function openExecutionStore(dbPath: string): Promise<AgentExecutionStore> 
 /** Create a context factory that uses a real LLM model. */
 function makeRealCreateContext(executionStore: AgentExecutionStore): CreateContextFn {
 	const model = resolveModel(REAL_MODEL);
-	return (id, runId, payload, req, initialEventIndex, dispatchId) =>
+	return (id, runId, req, initialEventIndex, dispatchId) =>
 		createFlueContext({
 			id,
 			runId,
 			dispatchId,
-			payload,
 			env: {},
 			req,
 			initialEventIndex,
@@ -112,12 +111,11 @@ function makeFauxCreateContext(
 	provider: FauxProviderRegistration,
 	executionStore: AgentExecutionStore,
 ): CreateContextFn {
-	return (id, runId, payload, req, initialEventIndex, dispatchId) =>
+	return (id, runId, req, initialEventIndex, dispatchId) =>
 		createFlueContext({
 			id,
 			runId,
 			dispatchId,
-			payload,
 			env: {},
 			req,
 			initialEventIndex,

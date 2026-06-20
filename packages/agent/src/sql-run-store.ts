@@ -46,7 +46,7 @@ class SqlRunStore implements RunStore {
 			input.workflowName,
 			'active',
 			input.startedAt,
-			serializeSqlJson(input.payload),
+			serializeSqlJson(input.input),
 		);
 	}
 
@@ -147,7 +147,7 @@ function serializeSqlJson(value: unknown): string | null {
 }
 
 function rowToRunRecord(row: SqlRow): RunRecord {
-	const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : undefined;
+	const input = typeof row.payload === 'string' ? JSON.parse(row.payload) : undefined;
 	const result = typeof row.result === 'string' ? JSON.parse(row.result) : undefined;
 	const error = typeof row.error === 'string' ? JSON.parse(row.error) : undefined;
 	return {
@@ -155,7 +155,7 @@ function rowToRunRecord(row: SqlRow): RunRecord {
 		workflowName: String(row.workflow_name),
 		status: row.status as RunRecord['status'],
 		startedAt: String(row.started_at),
-		payload,
+		input,
 		endedAt: typeof row.ended_at === 'string' ? row.ended_at : undefined,
 		isError:
 			row.is_error === null || row.is_error === undefined ? undefined : Boolean(row.is_error),

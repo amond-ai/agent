@@ -95,7 +95,6 @@ describe('session.skill()', () => {
 		]);
 		const ctx = createFlueContext({
 			id: 'workspace-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -128,7 +127,6 @@ describe('session.skill()', () => {
 		provider.setResponses([fauxAssistantMessage('Workspace review complete.')]);
 		const ctx = createFlueContext({
 			id: 'malformed-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -185,7 +183,6 @@ describe('session.skill()', () => {
 		};
 		const ctx = createFlueContext({
 			id: 'packaged-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				packagedSkills: { [reference.id]: directory },
@@ -242,7 +239,6 @@ describe('session.skill()', () => {
 		};
 		const ctx = createFlueContext({
 			id: 'packaged-skill-args-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				packagedSkills: { [reference.id]: directory },
@@ -309,7 +305,6 @@ describe('session.skill()', () => {
 		};
 		const ctx = createFlueContext({
 			id: 'packaged-skill-resource-advertisement-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				packagedSkills: { [reference.id]: directory },
@@ -383,7 +378,6 @@ describe('session.skill()', () => {
 		};
 		const ctx = createFlueContext({
 			id: 'packaged-skill-resource-read-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				packagedSkills: { [reference.id]: directory },
@@ -451,7 +445,6 @@ describe('session.skill()', () => {
 		};
 		const ctx = createFlueContext({
 			id: 'packaged-skill-resource-isolation-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				packagedSkills: { [reference.id]: directory },
@@ -496,7 +489,6 @@ describe('session.skill()', () => {
 		};
 		const ctx = createFlueContext({
 			id: 'unavailable-packaged-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -518,7 +510,6 @@ describe('session.skill()', () => {
 		const provider = createProvider();
 		const ctx = createFlueContext({
 			id: 'unknown-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -538,7 +529,6 @@ describe('session.skill()', () => {
 		const provider = createProvider();
 		const ctx = createFlueContext({
 			id: 'duplicate-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -576,7 +566,6 @@ describe('session.skill()', () => {
 		]);
 		const ctx = createFlueContext({
 			id: 'no-autonomous-skills-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -617,7 +606,6 @@ describe('session.skill()', () => {
 		]);
 		const ctx = createFlueContext({
 			id: 'autonomous-workspace-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -674,7 +662,6 @@ describe('session.skill()', () => {
 		]);
 		const ctx = createFlueContext({
 			id: 'autonomous-metadata-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: () => provider.getModel(),
@@ -750,7 +737,6 @@ describe('session.skill()', () => {
 		};
 		const ctx = createFlueContext({
 			id: 'autonomous-packaged-skill-instance',
-			payload: {},
 			env: {},
 			agentConfig: {
 				packagedSkills: { [reference.id]: directory },

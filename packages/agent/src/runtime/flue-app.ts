@@ -425,7 +425,7 @@ function workflowRouteSpec() {
 					schema: {
 						type: 'object',
 						additionalProperties: true,
-						description: 'Workflow-defined payload. Consult the target workflow documentation.',
+						description: 'Workflow-defined input. Consult the target workflow documentation.',
 					},
 				},
 			},

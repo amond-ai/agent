@@ -52,7 +52,6 @@ function captureFetch(assistantText: string): Request[] {
 function createContext() {
 	return createFlueContext({
 		id: 'providers-test-instance',
-		payload: {},
 		env: {},
 		agentConfig: {
 			resolveModel,

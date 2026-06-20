@@ -26,7 +26,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 			});
 
 			expect(await store.getRun('run_01DAILYREPORT')).toMatchObject({
@@ -34,7 +34,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				workflowName: 'daily-report',
 				status: 'active',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 			});
 		});
 
@@ -44,7 +44,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 			});
 			await store.endRun({
 				runId: 'run_01DAILYREPORT',
@@ -60,13 +60,13 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T11:00:00.000Z',
-				payload: { report: 'replayed' },
+				input: { report: 'replayed' },
 			});
 
 			expect(await store.getRun('run_01DAILYREPORT')).toMatchObject({
 				status: 'completed',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 				endedAt: '2026-06-01T10:05:00.000Z',
 				result: { delivered: true },
 			});
@@ -82,7 +82,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 			});
 			await store.endRun({
 				runId: 'run_01DAILYREPORT',
@@ -97,7 +97,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				workflowName: 'daily-report',
 				status: 'completed',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 				endedAt: '2026-06-01T10:05:00.000Z',
 				isError: false,
 				durationMs: 300_000,
@@ -111,7 +111,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 			});
 			await store.endRun({
 				runId: 'run_01DAILYREPORT',
@@ -141,13 +141,13 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 			expect((await store.listRuns()).runs).toEqual([]);
 		});
 
-		it('returns the pointer projection without payload or result when lookupRun() resolves a run', async () => {
+		it('returns the pointer projection without input or result when lookupRun() resolves a run', async () => {
 			const store = await create();
 			await store.createRun({
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: { report: 'weekly' },
+				input: { report: 'weekly' },
 			});
 			await store.endRun({
 				runId: 'run_01DAILYREPORT',
@@ -179,19 +179,19 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.createRun({
 				runId: 'run_02DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:02:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.createRun({
 				runId: 'run_03DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:01:00.000Z',
-				payload: {},
+				input: {},
 			});
 
 			expect((await store.listRuns()).runs.map((pointer) => pointer.runId)).toEqual([
@@ -207,7 +207,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.endRun({
 				runId: 'run_01DAILYREPORT',
@@ -219,7 +219,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_02DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:01:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.endRun({
 				runId: 'run_02DAILYREPORT',
@@ -231,7 +231,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01INVOICE',
 				workflowName: 'invoice',
 				startedAt: '2026-06-01T10:02:00.000Z',
-				payload: {},
+				input: {},
 			});
 
 			expect(
@@ -250,19 +250,19 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.createRun({
 				runId: 'run_02DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:01:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.createRun({
 				runId: 'run_03DAILYREPORT',
 				workflowName: 'daily-report',
 				startedAt: '2026-06-01T10:02:00.000Z',
-				payload: {},
+				input: {},
 			});
 
 			const firstPage = await store.listRuns({ limit: 2 });
@@ -283,13 +283,13 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				runId: 'run_01NIPPO',
 				workflowName: '日報',
 				startedAt: '2026-06-01T10:00:00.000Z',
-				payload: {},
+				input: {},
 			});
 			await store.createRun({
 				runId: 'run_02NIPPO',
 				workflowName: '日報',
 				startedAt: '2026-06-01T10:01:00.000Z',
-				payload: {},
+				input: {},
 			});
 
 			const firstPage = await store.listRuns({ limit: 1 });

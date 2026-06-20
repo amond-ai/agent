@@ -450,11 +450,11 @@ describe('createCloudflareAgentRuntime()', () => {
 		const events: string[] = [];
 		const { storage } = makeFakeSql();
 		const recovery = makeRecoveryContext({ inspection: 'uncertain', events });
-		const payloads: unknown[] = [];
+		let contextCount = 0;
 		const runtime = makeRuntime({
 			createdAgent: {} as never,
-			createContext: ({ payload }) => {
-				payloads.push(payload);
+			createContext: () => {
+				contextCount += 1;
 				return recovery.ctx;
 			},
 		});
@@ -499,7 +499,7 @@ describe('createCloudflareAgentRuntime()', () => {
 		await runtime.onStart(instance, () => {});
 
 		expect(events).toEqual(['record-terminal', 'settle-error']);
-		expect(payloads).toEqual([directInput().payload, directInput().payload]);
+		expect(contextCount).toBe(2);
 		expect(await executionStore.submissions.getSubmission('direct-1')).toMatchObject({
 			status: 'settled',
 		});
@@ -605,23 +605,23 @@ describe('createCloudflareAgentRuntime()', () => {
 		);
 	});
 
-	it('uses the public dispatch input as context payload without internal envelope fields when processing', async () => {
+	it('delivers the persisted dispatch submission through the session when processing', async () => {
 		const { storage } = makeFakeSql();
-		const payloads: unknown[] = [];
+		const processedInputs: unknown[] = [];
 		let resolveProcessed!: () => void;
 		const processed = new Promise<void>((resolve) => {
 			resolveProcessed = resolve;
 		});
 		const session = {
-			async processSubmissionInput() {
+			async processSubmissionInput(input: unknown) {
+				processedInputs.push(input);
 				resolveProcessed();
 			},
 			async recordSubmissionTerminal() {},
 		};
 		const runtime = makeRuntime({
 			createdAgent: {} as never,
-			createContext: ({ payload }) => {
-				payloads.push(payload);
+			createContext: () => {
 				return {
 					async initializeRootHarness() {
 						return {
@@ -645,17 +645,19 @@ describe('createCloudflareAgentRuntime()', () => {
 		await runtime.onStart(instance, () => {});
 		await processed;
 
-		expect(payloads).toEqual([dispatchInput()]);
+		expect(processedInputs).toEqual([
+			{ ...dispatchInput(), kind: 'dispatch', submissionId: 'dispatch-1' },
+		]);
 	});
 
-	it('uses the public dispatch input as context payload without internal envelope fields when recovering', async () => {
+	it('settles recovered dispatch input without context payload plumbing', async () => {
 		const { storage } = makeFakeSql();
 		const recovery = makeRecoveryContext({ inspection: 'completed' });
-		const payloads: unknown[] = [];
+		let contextCount = 0;
 		const runtime = makeRuntime({
 			createdAgent: {} as never,
-			createContext: ({ payload }) => {
-				payloads.push(payload);
+			createContext: () => {
+				contextCount += 1;
 				return recovery.ctx;
 			},
 		});
@@ -675,7 +677,7 @@ describe('createCloudflareAgentRuntime()', () => {
 
 		await runtime.onStart(instance, () => {});
 
-		expect(payloads).toEqual([dispatchInput()]);
+		expect(contextCount).toBe(1);
 		expect(await executionStore.submissions.getSubmission('dispatch-1')).toMatchObject({
 			status: 'settled',
 		});

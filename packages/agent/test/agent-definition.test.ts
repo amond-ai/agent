@@ -14,7 +14,6 @@ import { createNoopSessionEnv } from './fixtures/session-env.ts';
 function createContext(overrides: Partial<FlueContextConfig> = {}) {
 	return createFlueContext({
 		id: 'agent-instance',
-		payload: { request: 'payload' },
 		env: { API_KEY: 'secret' },
 		agentConfig: {
 			resolveModel: () => undefined,

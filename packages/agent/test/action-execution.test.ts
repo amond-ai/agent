@@ -68,7 +68,6 @@ function createContext(
 ) {
 	return createFlueContext({
 		id: 'action-instance',
-		payload: {},
 		env: {},
 		agentConfig: { resolveModel: () => provider.getModel() },
 		createDefaultEnv: async () => env,

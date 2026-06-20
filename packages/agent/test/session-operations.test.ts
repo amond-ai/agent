@@ -42,7 +42,6 @@ function createContext(
 ) {
 	return createFlueContext({
 		id: 'session-operations-instance',
-		payload: {},
 		env: {},
 		agentConfig: {
 			resolveModel: (specifier) => {

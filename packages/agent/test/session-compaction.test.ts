@@ -26,7 +26,6 @@ describe('session.compact()', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'manual-empty-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -62,7 +61,6 @@ describe('session.compact()', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'manual-event-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -111,7 +109,6 @@ describe('session.compact()', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'manual-failed-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -164,7 +161,6 @@ describe('session.compact()', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'manual-overlap-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -200,7 +196,6 @@ describe('session.compact()', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'manual-disabled-threshold-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -248,7 +243,6 @@ describe('automatic compaction', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'automatic-threshold-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -292,7 +286,6 @@ describe('automatic compaction', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'automatic-threshold-disabled',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -339,7 +332,6 @@ describe('automatic compaction', () => {
 		const save = vi.spyOn(store, 'save');
 		const ctx = createFlueContext({
 			id: 'overflow-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -395,7 +387,6 @@ describe('automatic compaction', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'overflow-disabled-threshold-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -445,7 +436,6 @@ describe('automatic compaction', () => {
 		const modelSpecifier = `${model.provider}/${model.id}`;
 		const ctx = createFlueContext({
 			id: 'next-request-after-compaction',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => (requested === modelSpecifier ? model : undefined),
@@ -507,7 +497,6 @@ describe('automatic compaction', () => {
 		const summarizerModelSpecifier = `${summarizerModel.provider}/${summarizerModel.id}`;
 		const ctx = createFlueContext({
 			id: 'configured-compaction-model',
-			payload: {},
 			env: {},
 			agentConfig: {
 				resolveModel: (requested) => {
