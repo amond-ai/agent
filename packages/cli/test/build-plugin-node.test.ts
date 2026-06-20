@@ -60,6 +60,19 @@ describe('NodePlugin', () => {
 		expect(entry).toContain("process.on('SIGTERM'");
 	});
 
+	it('passes normalized Workflow route and runs middleware through runtime configuration', () => {
+		const entry = new NodePlugin().generateEntryPoint(
+			testBuildContext({
+				workflows: [{ name: 'report', filePath: '/fixture/workflows/report.ts' }],
+			}),
+		);
+
+		expect(entry).toContain("if (typeof mod.route === 'function') workflow.route = mod.route;");
+		expect(entry).toContain("if (typeof mod.runs === 'function') workflow.runs = mod.runs;");
+		expect(entry).toContain('configureFlueRuntime({');
+		expect(entry).toContain('workflows,');
+	});
+
 	it('wires ambient workflow invocation directly to detached in-process admission', () => {
 		const entry = new NodePlugin().generateEntryPoint(
 			testBuildContext({

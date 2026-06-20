@@ -42,6 +42,22 @@ describe('CloudflarePlugin', () => {
 		);
 	});
 
+	it('passes normalized Workflow route and runs middleware to the outer Worker runtime', async () => {
+		const entry = await new CloudflarePlugin().generateEntryPoint(
+			testBuildContext({
+				workflows: [{ name: 'report', filePath: '/fixture/workflows/report.ts' }],
+			}),
+		);
+
+		expect(entry).toContain("if (typeof mod.route === 'function') workflow.route = mod.route;");
+		expect(entry).toContain("if (typeof mod.runs === 'function') workflow.runs = mod.runs;");
+		expect(entry).toContain('configureFlueRuntime({');
+		expect(entry).toContain('workflows,');
+		expect(entry).toContain('routeRunRequest: async (request, reqEnv, target) => {');
+		expect(entry).toContain('return fetchAgent(binding, target.runId, request);');
+		expect(entry).not.toContain('routeRunRequest: async (request, reqEnv, target) => runAttachedMiddleware');
+	});
+
 	it('wires ambient workflow invocation through a private per-run Durable Object request', async () => {
 		const entry = await new CloudflarePlugin().generateEntryPoint(
 			testBuildContext({

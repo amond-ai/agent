@@ -39,10 +39,12 @@ function normalizeBuiltModules(agentModules, workflowModules, channelModules = {
   for (const [name, mod] of Object.entries(workflowModules)) {
     assertWorkflowDefinition(mod.default, name);
     if (mod.route !== undefined && typeof mod.route !== 'function') throw new Error('[flue] Workflow "' + name + '" route export must be a callable Hono middleware value.');
+    if (mod.runs !== undefined && typeof mod.runs !== 'function') throw new Error('[flue] Workflow "' + name + '" runs export must be a callable Hono middleware value.');
     const previous = workflows.find((workflow) => workflow.definition === mod.default);
     if (previous) throw new Error('[flue] Workflows "' + previous.name + '" and "' + name + '" default-export the same workflow definition value. Use distinct defineWorkflow(...) values for workflow modules.');
     const workflow = { name, definition: mod.default };
     if (typeof mod.route === 'function') workflow.route = mod.route;
+    if (typeof mod.runs === 'function') workflow.runs = mod.runs;
     workflows.push(workflow);
   }
 

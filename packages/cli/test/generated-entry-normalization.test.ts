@@ -78,15 +78,48 @@ describe('normalizeBuiltModules()', () => {
 		).toThrow('[flue] Agent "support" description export must be a non-empty string.');
 	});
 
-	it('normalizes genuine default-exported Workflow Definitions separately from route middleware', () => {
+	it('normalizes a Workflow module with no middleware exports', () => {
+		const module = workflowModule();
+
+		const normalized = normalizeBuiltModules({}, { report: module });
+
+		expect(normalized.workflows).toEqual([{ name: 'report', definition: module.default }]);
+	});
+
+	it('normalizes a Workflow module with only a route export', () => {
 		const route = () => undefined;
 		const module = workflowModule({ route });
 
 		const normalized = normalizeBuiltModules({}, { report: module });
 
+		expect(normalized.workflows).toEqual([{ name: 'report', definition: module.default, route }]);
+	});
+
+	it('normalizes a Workflow module with only a runs export', () => {
+		const runs = () => undefined;
+		const module = workflowModule({ runs });
+
+		const normalized = normalizeBuiltModules({}, { report: module });
+
+		expect(normalized.workflows).toEqual([{ name: 'report', definition: module.default, runs }]);
+	});
+
+	it('normalizes a Workflow module with route and runs exports independently', () => {
+		const route = () => undefined;
+		const runs = () => undefined;
+		const module = workflowModule({ route, runs });
+
+		const normalized = normalizeBuiltModules({}, { report: module });
+
 		expect(normalized.workflows).toEqual([
-			expect.objectContaining({ name: 'report', definition: module.default, route }),
+			{ name: 'report', definition: module.default, route, runs },
 		]);
+	});
+
+	it('rejects a Workflow module with an invalid runs export', () => {
+		expect(() => normalizeBuiltModules({}, { report: workflowModule({ runs: true }) })).toThrow(
+			'[flue] Workflow "report" runs export must be a callable Hono middleware value.',
+		);
 	});
 
 	it('rejects duplicate Workflow Definition identities across discovered modules', () => {
