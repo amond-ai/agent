@@ -5,13 +5,14 @@ import {
 	type ActionContext,
 	type ActionDefinition,
 	type ActionInputSchema,
+	type ActionOutputSchema,
 	type JsonValue,
 } from './action.ts';
 import { isCreatedAgent } from './agent-definition.ts';
 import { isTopLevelObjectSchema, isValibotSchema } from './schema.ts';
 import type { CreatedAgent } from './types.ts';
 
-type InlineRunResult<S extends v.GenericSchema | undefined> = S extends v.GenericSchema
+type InlineRunResult<S extends ActionOutputSchema | undefined> = S extends ActionOutputSchema
 	? v.InferInput<S>
 	: JsonValue | undefined;
 
@@ -26,7 +27,7 @@ export type ExtractedWorkflow<TAction extends ActionDefinition = ActionDefinitio
 
 export type InlineWorkflow<
 	TInput extends ActionInputSchema | undefined = ActionInputSchema | undefined,
-	TOutput extends v.GenericSchema | undefined = v.GenericSchema | undefined,
+	TOutput extends ActionOutputSchema | undefined = ActionOutputSchema | undefined,
 > = CreatedWorkflow<ActionDefinition<TInput, TOutput>>;
 
 const createdWorkflows = new WeakSet<object>();
@@ -41,7 +42,7 @@ type ExtractedWorkflowOptions<TAction extends ActionDefinition> = {
 
 type InlineWorkflowOptions<
 	TInput extends ActionInputSchema | undefined,
-	TOutput extends v.GenericSchema | undefined,
+	TOutput extends ActionOutputSchema | undefined,
 > = {
 	agent: CreatedAgent;
 	action?: never;
@@ -55,7 +56,7 @@ export function createWorkflow<TAction extends ActionDefinition>(
 ): ExtractedWorkflow<TAction>;
 export function createWorkflow<
 	const TInput extends ActionInputSchema | undefined = undefined,
-	const TOutput extends v.GenericSchema | undefined = undefined,
+	const TOutput extends ActionOutputSchema | undefined = undefined,
 >(options: InlineWorkflowOptions<TInput, TOutput>): InlineWorkflow<TInput, TOutput>;
 export function createWorkflow(
 	options: ExtractedWorkflowOptions<ActionDefinition> | InlineWorkflowOptions<any, any>,

@@ -2,7 +2,9 @@ import * as v from 'valibot';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
 	ActionInputValidationError,
+	ActionOutputSerializationError,
 	ActionOutputValidationError,
+	type ActionOutputSchema,
 	createAgent,
 	createWorkflow,
 	defineAction,
@@ -69,6 +71,26 @@ describe('defineAction()', () => {
 			type: 'action_output_validation',
 			meta: { action: 'count', issues: [{ path: ['count'] }] },
 		});
+	});
+
+	it('excludes undefined-producing declared output schemas from the public type', () => {
+		expectTypeOf(v.string()).toMatchTypeOf<ActionOutputSchema>();
+		expectTypeOf(v.undefined()).not.toMatchTypeOf<ActionOutputSchema>();
+		expectTypeOf(v.optional(v.string())).not.toMatchTypeOf<ActionOutputSchema>();
+		expectTypeOf(v.pipe(v.string(), v.transform(() => undefined))).not.toMatchTypeOf<ActionOutputSchema>();
+	});
+
+	it('rejects undefined produced by a cast declared output schema at runtime', async () => {
+		const action = defineAction({
+			name: 'undefined_output',
+			description: 'Produces undefined despite a declared output.',
+			output: v.undefined() as unknown as ActionOutputSchema,
+			run: async () => undefined as never,
+		});
+
+		await expect(validateAndRunAction(action, { harness, log })).rejects.toBeInstanceOf(
+			ActionOutputSerializationError,
+		);
 	});
 
 	it('rejects non-Valibot Standard Schemas before conversion', () => {
@@ -174,6 +196,17 @@ describe('createWorkflow()', () => {
 		expect(inline).toMatchObject({ __flueCreatedWorkflow: true, agent });
 		expect(inline).not.toHaveProperty('name');
 		expect(inline).not.toHaveProperty('description');
+	});
+
+	it('excludes undefined-producing inline output schemas from the public type', () => {
+		const agent = createAgent(() => ({ model: false }));
+		const invalidOutput = v.undefined();
+		expectTypeOf(invalidOutput).not.toMatchTypeOf<ActionOutputSchema>();
+		createWorkflow({
+			agent,
+			output: v.string(),
+			run: async () => 'ok',
+		});
 	});
 
 	it('rejects forged Created Agent and Action brands', () => {

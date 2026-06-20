@@ -8,6 +8,7 @@ export type {
 	ActionInput,
 	ActionInputSchema,
 	ActionOutput,
+	ActionOutputSchema,
 	JsonValue,
 } from './action.ts';
 export { createAgent, defineAgentProfile } from './agent-definition.ts';
@@ -69,7 +70,6 @@ export { defineTool } from './tool.ts';
 export { createWorkflow } from './workflow-definition.ts';
 export type { CreatedWorkflow, ExtractedWorkflow, InlineWorkflow } from './workflow-definition.ts';
 export type {
-	ActionSessionRef,
 	AgentCreateContext,
 	AgentDispatchRequest,
 	AgentProfile,

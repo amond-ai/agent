@@ -170,11 +170,12 @@ describe('model-called Actions', () => {
 		expect(writeFile).toHaveBeenCalledWith('report.txt', 'complete');
 	});
 
-	it('inherits a task cwd and selected-profile capabilities when a task calls an Action', async () => {
+	it('inherits selected-profile capabilities and config through Task to Action to Task', async () => {
 		const provider = createProvider();
 		const store = new RecordingSessionStore();
 		const exec = vi.fn(async () => ({ stdout: 'ok', stderr: '', exitCode: 0 }));
 		let actionToolNames: string[] = [];
+		let nestedTaskToolNames: string[] = [];
 		const profileAction = defineAction({
 			name: 'inspect_task_scope',
 			description: 'Inspect the selected task scope.',
@@ -182,6 +183,7 @@ describe('model-called Actions', () => {
 				await harness.shell('pwd');
 				const session = await harness.session();
 				await session.prompt('List inherited capabilities.');
+				await session.task('Inspect inherited task capabilities.');
 				return undefined;
 			},
 		});
@@ -198,6 +200,10 @@ describe('model-called Actions', () => {
 			(context) => {
 				actionToolNames = (context.tools ?? []).map((tool) => tool.name);
 				return fauxAssistantMessage('Capabilities inherited.');
+			},
+			(context) => {
+				nestedTaskToolNames = (context.tools ?? []).map((tool) => tool.name);
+				return fauxAssistantMessage('Nested task complete.');
 			},
 			fauxAssistantMessage('Task complete.'),
 			fauxAssistantMessage('Root complete.'),
@@ -227,6 +233,8 @@ describe('model-called Actions', () => {
 		expect(exec).toHaveBeenCalledWith('pwd', expect.objectContaining({ cwd: '/repo/packages/runtime' }));
 		expect(actionToolNames).toContain('selected_tool');
 		expect(actionToolNames).toContain('inspect_task_scope');
+		expect(nestedTaskToolNames).toContain('selected_tool');
+		expect(nestedTaskToolNames).toContain('inspect_task_scope');
 	});
 
 	it('cancels direct harness shell calls and waits for cleanup before an Action settles', async () => {
@@ -388,6 +396,79 @@ describe('model-called Actions', () => {
 		expect([...store.records.keys()].filter((key) => key.includes('default:action:'))).toHaveLength(1);
 		await parent.delete();
 		expect([...store.records.keys()].filter((key) => key.includes('default:action:'))).toHaveLength(0);
+	});
+
+	it('recursively deletes a task retained by an Action session', async () => {
+		const provider = createProvider();
+		const store = new RecordingSessionStore();
+		const action = defineAction({
+			name: 'delegate_from_action',
+			description: 'Delegate from an Action.',
+			async run({ harness }) {
+				await (await harness.session()).task('Complete nested work.');
+				return undefined;
+			},
+		});
+		provider.setResponses([
+			fauxAssistantMessage(fauxToolCall('delegate_from_action', {}), { stopReason: 'toolUse' }),
+			fauxAssistantMessage('Nested work complete.'),
+			fauxAssistantMessage('Done.'),
+		]);
+		const harness = await createContext(provider, store).initializeRootHarness(
+			createAgent(() => ({
+				model: `${provider.getModel().provider}/${provider.getModel().id}`,
+				actions: [action],
+			})),
+		);
+		const parent = await harness.session();
+		await parent.prompt('Delegate.');
+		const descendants = [...store.records.keys()].filter((key) => key.includes(':action:'));
+		expect(descendants).toHaveLength(2);
+
+		await parent.delete();
+
+		for (const key of descendants) expect(store.records.has(key)).toBe(false);
+	});
+
+	it('recursively deletes an Action retained by another Action session', async () => {
+		const provider = createProvider();
+		const store = new RecordingSessionStore();
+		const nested = defineAction({
+			name: 'nested_action',
+			description: 'Run nested work.',
+			async run({ harness }) {
+				await harness.session();
+				return undefined;
+			},
+		});
+		const outer = defineAction({
+			name: 'outer_action',
+			description: 'Run an Action from an Action.',
+			async run({ harness }) {
+				await (await harness.session()).prompt('Run nested work.');
+				return undefined;
+			},
+		});
+		provider.setResponses([
+			fauxAssistantMessage(fauxToolCall('outer_action', {}), { stopReason: 'toolUse' }),
+			fauxAssistantMessage(fauxToolCall('nested_action', {}), { stopReason: 'toolUse' }),
+			fauxAssistantMessage('Nested done.'),
+			fauxAssistantMessage('Done.'),
+		]);
+		const harness = await createContext(provider, store).initializeRootHarness(
+			createAgent(() => ({
+				model: `${provider.getModel().provider}/${provider.getModel().id}`,
+				actions: [outer, nested],
+			})),
+		);
+		const parent = await harness.session();
+		await parent.prompt('Run outer work.');
+		const descendants = [...store.records.keys()].filter((key) => key.includes(':action:'));
+		expect(descendants).toHaveLength(2);
+
+		await parent.delete();
+
+		for (const key of descendants) expect(store.records.has(key)).toBe(false);
 	});
 
 	it('recursively deletes valid task and Action descendants without following tampered references', async () => {

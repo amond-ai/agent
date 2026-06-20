@@ -43,6 +43,14 @@ describe('package entrypoints', () => {
 		expect(runtime).not.toHaveProperty('resetProvidersForTests');
 	});
 
+	it('keeps Action session persistence types adapter-only', () => {
+		const rootDeclaration = readFileSync('types/index.d.ts', 'utf8');
+		const adapterDeclaration = readFileSync('dist/adapter.d.mts', 'utf8');
+
+		expect(rootDeclaration).not.toContain('ActionSessionRef');
+		expect(adapterDeclaration).toContain('ActionSessionRef');
+	});
+
 	it('exposes flue() when a consumer imports @flue/runtime/routing', async () => {
 		const routing = await import('@flue/runtime/routing');
 

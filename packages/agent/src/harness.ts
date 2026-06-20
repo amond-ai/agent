@@ -297,8 +297,6 @@ export class Harness implements FlueHarness {
 			(session) => options.retainSession(session, scope),
 			options.signal,
 		);
-		harness.createTaskSession = options.createTaskSession ?? harness.createTaskSession.bind(harness);
-		harness.createActionHarness = options.createActionHarness ?? harness.createActionHarness.bind(harness);
 		return harness;
 	}
 

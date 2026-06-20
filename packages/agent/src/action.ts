@@ -19,19 +19,20 @@ const definedActions = new WeakSet<object>();
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type ActionInputSchema = v.GenericSchema<Record<string, unknown>, unknown>;
+export type ActionOutputSchema = v.GenericSchema<any, {} | null>;
 
 export type ActionContext<S extends ActionInputSchema | undefined> = {
 	readonly harness: FlueHarness;
 	readonly log: FlueLogger;
 } & (S extends ActionInputSchema ? { readonly input: v.InferOutput<S> } : {});
 
-type ActionRunResult<S extends v.GenericSchema | undefined> = S extends v.GenericSchema
+type ActionRunResult<S extends ActionOutputSchema | undefined> = S extends ActionOutputSchema
 	? v.InferInput<S>
 	: JsonValue | undefined;
 
 export interface ActionDefinition<
 	TInput extends ActionInputSchema | undefined = ActionInputSchema | undefined,
-	TOutput extends v.GenericSchema | undefined = v.GenericSchema | undefined,
+	TOutput extends ActionOutputSchema | undefined = ActionOutputSchema | undefined,
 > {
 	readonly __flueAction: true;
 	readonly name: string;
@@ -55,14 +56,14 @@ export type ActionOutput<TAction extends ActionDefinition> = TAction extends Act
 	any,
 	infer TOutput
 >
-	? TOutput extends v.GenericSchema
+	? TOutput extends ActionOutputSchema
 		? v.InferOutput<TOutput>
 		: unknown
 	: never;
 
 type ActionOptions<
 	TInput extends ActionInputSchema | undefined,
-	TOutput extends v.GenericSchema | undefined,
+	TOutput extends ActionOutputSchema | undefined,
 > = {
 	name: string;
 	description: string;
@@ -73,7 +74,7 @@ type ActionOptions<
 
 export function defineAction<
 	const TInput extends ActionInputSchema | undefined = undefined,
-	const TOutput extends v.GenericSchema | undefined = undefined,
+	const TOutput extends ActionOutputSchema | undefined = undefined,
 >(options: ActionOptions<TInput, TOutput>): ActionDefinition<TInput, TOutput> {
 	if (!options || typeof options !== 'object') {
 		throw new Error('[flue] defineAction() requires an action definition object.');
