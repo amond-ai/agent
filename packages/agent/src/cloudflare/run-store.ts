@@ -19,9 +19,9 @@ import type {
 	EndRunInput,
 	ListRunsOpts,
 	ListRunsResponse,
-	RunPointer,
 	RunRecord,
 	RunStore,
+	WorkflowRunPointer,
 } from '../runtime/run-store.ts';
 import type { RecordRunEndInput, RecordRunStartInput } from './registry-ops.ts';
 
@@ -97,7 +97,7 @@ class CloudflareCompositeRunStore implements RunStore {
 		return this.records.getRun(runId);
 	}
 
-	async lookupRun(runId: string): Promise<RunPointer | null> {
+	async lookupRun(runId: string): Promise<WorkflowRunPointer | null> {
 		return this.index.lookupRun(runId);
 	}
 
@@ -134,7 +134,7 @@ class FlueRegistryClient implements CloudflareRunIndex {
 		await this.callExpectingNoContent(`/pointers/${encodeURIComponent(runId)}/end`, 'POST', body);
 	}
 
-	async lookupRun(runId: string): Promise<RunPointer | null> {
+	async lookupRun(runId: string): Promise<WorkflowRunPointer | null> {
 		const response = await this.fetch(
 			new Request(`${SYNTHETIC_BASE}/pointers/${encodeURIComponent(runId)}`, { method: 'GET' }),
 		);
@@ -144,7 +144,7 @@ class FlueRegistryClient implements CloudflareRunIndex {
 				`[flue] FlueRegistry lookupRun(${runId}) failed: ${response.status} ${await response.text()}`,
 			);
 		}
-		return (await response.json()) as RunPointer;
+		return (await response.json()) as WorkflowRunPointer;
 	}
 
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {

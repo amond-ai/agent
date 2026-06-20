@@ -27,6 +27,7 @@ export type { ThinkingLevel };
 
 export type AgentRouteHandler = MiddlewareHandler;
 export type WorkflowRouteHandler = MiddlewareHandler;
+export type WorkflowRunsHandler = MiddlewareHandler;
 
 /** Input accepted by the agent-definition overload of `dispatch(...)`. */
 export interface AgentDispatchRequest {

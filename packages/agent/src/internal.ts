@@ -108,6 +108,7 @@ export type {
 	RunRecord,
 	RunStatus,
 	RunStore,
+	WorkflowRunPointer,
 } from './runtime/run-store.ts';
 
 export { bashFactoryToSessionEnv } from './sandbox.ts';

@@ -70,9 +70,9 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 				endedAt: '2026-06-01T10:05:00.000Z',
 				result: { delivered: true },
 			});
-			expect(await store.lookupRun('run_01DAILYREPORT')).toMatchObject({
-				status: 'completed',
-				startedAt: '2026-06-01T10:00:00.000Z',
+			expect(await store.lookupRun('run_01DAILYREPORT')).toEqual({
+				runId: 'run_01DAILYREPORT',
+				workflowName: 'daily-report',
 			});
 		});
 
@@ -141,7 +141,7 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 			expect((await store.listRuns()).runs).toEqual([]);
 		});
 
-		it('returns the pointer projection without input or result when lookupRun() resolves a run', async () => {
+		it('returns the minimal ownership pointer when lookupRun() resolves a run', async () => {
 			const store = await create();
 			await store.createRun({
 				runId: 'run_01DAILYREPORT',
@@ -160,11 +160,6 @@ export function defineRunStoreContractTests(label: string, backend: RunStoreCont
 			expect(await store.lookupRun('run_01DAILYREPORT')).toEqual({
 				runId: 'run_01DAILYREPORT',
 				workflowName: 'daily-report',
-				status: 'completed',
-				startedAt: '2026-06-01T10:00:00.000Z',
-				endedAt: '2026-06-01T10:05:00.000Z',
-				durationMs: 300_000,
-				isError: false,
 			});
 		});
 

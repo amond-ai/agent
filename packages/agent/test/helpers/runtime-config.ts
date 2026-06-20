@@ -29,12 +29,13 @@ export function agentRecord(
 export function workflowRecord(
 	name: string,
 	definition: WorkflowDefinition,
-	options: { route?: WorkflowRecord['route'] } = {},
+	options: { route?: WorkflowRecord['route']; runs?: WorkflowRecord['runs'] } = {},
 ): WorkflowRecord {
 	return {
 		name,
 		definition,
 		...(options.route === undefined ? {} : { route: options.route }),
+		...(options.runs === undefined ? {} : { runs: options.runs }),
 	};
 }
 

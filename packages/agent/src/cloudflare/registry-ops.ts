@@ -22,6 +22,7 @@ import {
 	MAX_LIST_LIMIT,
 	type RunPointer,
 	type RunStatus,
+	type WorkflowRunPointer,
 } from '../runtime/run-store.ts';
 import { ensureFlueSchemaVersion } from '../schema-version.ts';
 import type { SqlStorage } from '../sql-storage.ts';
@@ -52,7 +53,7 @@ export interface RecordRunEndInput {
 export interface RegistryOps {
 	recordRunStart(input: RecordRunStartInput): void;
 	recordRunEnd(input: RecordRunEndInput): void;
-	lookupRun(runId: string): RunPointer | null;
+	lookupRun(runId: string): WorkflowRunPointer | null;
 	listRuns(opts: ListRunsOpts): ListRunsResponse;
 }
 
@@ -97,11 +98,13 @@ class SqlRegistryOps implements RegistryOps {
 		);
 	}
 
-	lookupRun(runId: string): RunPointer | null {
+	lookupRun(runId: string): WorkflowRunPointer | null {
 		const row = this.sql
-			.exec('SELECT * FROM flue_registry_runs WHERE run_id = ?', runId)
+			.exec('SELECT run_id, workflow_name FROM flue_registry_runs WHERE run_id = ?', runId)
 			.toArray()[0];
-		return row ? rowToRunPointer(row) : null;
+		return row
+			? { runId: String(row.run_id), workflowName: String(row.workflow_name) }
+			: null;
 	}
 
 	listRuns(opts: ListRunsOpts): ListRunsResponse {

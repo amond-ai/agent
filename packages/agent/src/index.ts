@@ -64,6 +64,7 @@ export type {
 	RunPointer,
 	RunRecord,
 	RunStatus,
+	WorkflowRunPointer,
 } from './runtime/run-store.ts';
 export { bash, createSandboxSessionEnv, type SandboxApi } from './sandbox.ts';
 export { defineTool } from './tool.ts';
@@ -129,6 +130,7 @@ export type {
 	ToolDefinition,
 	ToolParameters,
 	WorkflowRouteHandler,
+	WorkflowRunsHandler,
 } from './types.ts';
 
 // Note: the persistence storage contract (`PersistenceAdapter`, `SessionStore`,

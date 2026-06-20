@@ -29,11 +29,6 @@ export const ErrorEnvelopeSchema = v.object({
 	}),
 });
 
-// Invocation response envelopes. All four responses share one flat
-// convention: `streamUrl` + `offset` are server-provided DS stream
-// coordinates on every response, `runId` appears on workflow responses only
-// (runs are workflow-only), and sync responses add `result`.
-
 export const AgentAdmissionResponseSchema = v.object({
 	streamUrl: v.string(),
 	offset: v.string(),
@@ -47,15 +42,11 @@ export const AgentInvocationResponseSchema = v.object({
 
 export const WorkflowAdmissionResponseSchema = v.object({
 	runId: v.string(),
-	streamUrl: v.string(),
-	offset: v.string(),
 });
 
 export const WorkflowInvocationResponseSchema = v.object({
 	result: v.unknown(),
 	runId: v.string(),
-	streamUrl: v.string(),
-	offset: v.string(),
 });
 
 export const WorkflowRouteParamSchema = v.object({ name: v.string() });

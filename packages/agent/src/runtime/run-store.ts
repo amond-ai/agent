@@ -20,9 +20,12 @@ export interface RunRecord {
  * potentially large `input`, `result`, and `error` values. Single-database
  * adapters back pointers with a column-subset select over the run records.
  */
-export interface RunPointer {
+export interface WorkflowRunPointer {
 	runId: string;
 	workflowName: string;
+}
+
+export interface RunPointer extends WorkflowRunPointer {
 	status: RunStatus;
 	startedAt: string;
 	endedAt?: string;
@@ -116,8 +119,8 @@ export interface RunStore {
 	 */
 	endRun(input: EndRunInput): Promise<void>;
 	getRun(runId: string): Promise<RunRecord | null>;
-	/** {@link RunPointer} projection of {@link getRun}. */
-	lookupRun(runId: string): Promise<RunPointer | null>;
+	/** Minimal ownership pointer for authorizing a run route. */
+	lookupRun(runId: string): Promise<WorkflowRunPointer | null>;
 	/**
 	 * List run pointers newest-first (`startedAt` descending, then `runId`
 	 * descending), filtered by `status`/`workflowName` and paginated via the

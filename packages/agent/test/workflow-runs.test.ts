@@ -382,22 +382,14 @@ describe('workflow invocation', () => {
 			const response = await app.fetch(
 				new Request('http://localhost/flue/workflows/daily-report', { method: 'POST' }),
 			);
-			const body = (await response.json()) as { runId: string; streamUrl: string; offset: string };
+			const body = (await response.json()) as { runId: string };
 			runId = body.runId;
 
 			expect(response.status).toBe(202);
-			expect(body).toEqual({
-				runId: expect.any(String),
-				streamUrl: expect.any(String),
-				offset: '-1',
-			});
+			expect(body).toEqual({ runId: expect.any(String) });
 			expect(runId).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
-			// The server owns stream-coordinate derivation: the run stream lives
-			// at the sibling /runs/:runId route under the same mount prefix.
-			expect(body.streamUrl).toBe(`http://localhost/flue/runs/${runId}`);
-			// 202 admissions mirror the DS stream-creation convention.
-			expect(response.headers.get('location')).toBe(body.streamUrl);
-			expect(response.headers.get('stream-next-offset')).toBe(body.offset);
+			expect(response.headers.get('location')).toBeNull();
+			expect(response.headers.get('stream-next-offset')).toBeNull();
 			expect((await runStore.getRun(runId))?.status).toBe('active');
 		} finally {
 			release();
@@ -422,19 +414,14 @@ describe('workflow invocation', () => {
 		const body = (await response.json()) as {
 			result: unknown;
 			runId: string;
-			streamUrl: string;
-			offset: string;
 		};
 
 		expect(response.status).toBe(200);
 		expect(body).toEqual({
 			result: { delivered: true },
 			runId: expect.any(String),
-			streamUrl: expect.any(String),
-			offset: '-1',
 		});
 		expect(body.runId).toMatch(/^run_[0-9A-HJKMNP-TV-Z]{26}$/);
-		expect(body.streamUrl).toBe(`http://localhost/flue/runs/${body.runId}`);
 	});
 
 	it('rejects workflow admission before executing the handler when run-store persistence is unavailable', async () => {
@@ -619,8 +606,6 @@ describe('workflow invocation', () => {
 		expect(body).toEqual({
 			result: null,
 			runId: expect.any(String),
-			streamUrl: expect.any(String),
-			offset: '-1',
 		});
 		const runRecord = await runStore.getRun(body.runId);
 		expect(runRecord).toEqual({
@@ -799,11 +784,7 @@ describe('workflow run lifecycle', () => {
 			const body = (await response.json()) as { runId: string };
 
 			expect(response.status).toBe(202);
-			expect(body).toEqual({
-				runId: expect.any(String),
-				streamUrl: expect.any(String),
-				offset: '-1',
-			});
+			expect(body).toEqual({ runId: expect.any(String) });
 			// Vitest fails the run on an unhandled rejection, so waiting for the
 			// terminal record also guards against the background completion
 			// rejecting without a handler.

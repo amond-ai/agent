@@ -14,6 +14,7 @@ import {
 	type RunPointer,
 	type RunRecord,
 	type RunStore,
+	type WorkflowRunPointer,
 } from '../runtime/run-store.ts';
 
 export class InMemoryRunStore implements RunStore {
@@ -49,9 +50,9 @@ export class InMemoryRunStore implements RunStore {
 		return this.runs.get(runId) ?? null;
 	}
 
-	async lookupRun(runId: string): Promise<RunPointer | null> {
+	async lookupRun(runId: string): Promise<WorkflowRunPointer | null> {
 		const record = this.runs.get(runId);
-		return record ? recordToPointer(record) : null;
+		return record ? { runId: record.runId, workflowName: record.workflowName } : null;
 	}
 
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {

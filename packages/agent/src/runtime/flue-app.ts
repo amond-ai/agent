@@ -24,6 +24,8 @@ import type {
 	AgentDefinition,
 	DispatchReceipt,
 	NamedAgentDispatchRequest,
+	WorkflowRouteHandler,
+	WorkflowRunsHandler,
 } from '../types.ts';
 import type { AttachedAgentSubmissionAdmission } from './agent-submissions.ts';
 import { enqueueDispatch } from './dispatch.ts';
@@ -38,7 +40,7 @@ import { handleStreamHead, handleStreamRead } from './handle-stream-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
 import { invokeWorkflow, type WorkflowInvokeRequest, type WorkflowInvocationReceipt } from './invoke.ts';
 import type { WorkflowDefinition } from '../workflow-definition.ts';
-import type { RunPointer, RunStore } from './run-store.ts';
+import type { RunStore, WorkflowRunPointer } from './run-store.ts';
 
 import {
 	AgentAdmissionResponseSchema,
@@ -62,7 +64,8 @@ export interface AgentRecord {
 export interface WorkflowRecord {
 	name: string;
 	definition: WorkflowDefinition;
-	route?: MiddlewareHandler;
+	route?: WorkflowRouteHandler;
+	runs?: WorkflowRunsHandler;
 }
 
 interface RuntimeBase {
@@ -633,44 +636,38 @@ function normalizeFetchResponse(value: unknown): Response | undefined {
 const runStreamReadHandler: MiddlewareHandler = async (c) => {
 	const rt = requiredRuntime();
 	const method = c.req.method;
-
-	if (method !== 'GET' && method !== 'HEAD') {
-		throw new MethodNotAllowedError({ method, allowed: ['GET', 'HEAD'] });
-	}
-
-	// Hono's `:runId` pattern never matches an empty segment.
 	const runId = c.req.param('runId') ?? '';
-
-	// Resolve the owning workflow before responding, but emit no
-	// existence-derived response yet: per-workflow route middleware is the
-	// user's auth boundary for run reads, so it must run before this route
-	// discloses whether a run exists. Runs whose pointer is missing — or
-	// whose workflow is no longer part of the current build — are uniformly
-	// not servable: a stale pointer must not bypass the middleware of the
-	// workflow that guarded it when the run was recorded.
 	const pointer = await findRunPointer(rt, c.env, runId);
-	const workflowName =
-		pointer && isRegisteredWorkflow(rt, pointer.workflowName) ? pointer.workflowName : undefined;
-	const middleware = rt.workflows.find((workflow) => workflow.name === workflowName)?.route;
+	const workflow = pointer
+		? rt.workflows.find((record) => record.name === pointer.workflowName)
+		: undefined;
 
-	return runAttachedMiddleware(c, middleware, async () => {
-		if (workflowName === undefined) throw new RunNotFoundError({ runId });
+	if (!workflow?.runs) throw new RunNotFoundError({ runId });
 
-		// `?meta` selects the run-record view of the same resource: plain
-		// `RunRecord` JSON with no Durable Streams headers. Stream params
-		// (`offset`, `live`) are ignored on this view.
+	return runAttachedMiddleware(c, workflow.runs, async () => {
+		if (method !== 'GET' && method !== 'HEAD') {
+			throw new MethodNotAllowedError({ method, allowed: ['GET', 'HEAD'] });
+		}
+
 		const wantsMeta = method === 'GET' && new URL(c.req.url).searchParams.has('meta');
 
 		if (rt.target === 'node') {
 			if (wantsMeta) {
-				return handleRunRouteRequest({ runStore: rt.runStore, workflowName, runId });
+				return handleRunRouteRequest({
+					runStore: rt.runStore,
+					workflowName: workflow.name,
+					runId,
+				});
 			}
 			return nodeStreamReadResponse(rt, method, runStreamPath(runId), c.req.raw);
 		}
 
-		const response = await rt.routeRunRequest(c.req.raw, c.env, { workflowName, runId });
+		const response = await rt.routeRunRequest(c.req.raw, c.env, {
+			workflowName: workflow.name,
+			runId,
+		});
 		if (response) return response;
-		throw new RouteNotFoundError({ method, path: new URL(c.req.url).pathname });
+		throw new RunNotFoundError({ runId });
 	});
 };
 
@@ -721,17 +718,13 @@ async function findRunPointer(
 	rt: FlueRuntime,
 	env: unknown,
 	runId: string,
-): Promise<RunPointer | null> {
+): Promise<WorkflowRunPointer | null> {
 	if (rt.target === 'cloudflare') {
 		const index = rt.createRunIndexForRequest(env);
 		if (!index) throw new RunStoreUnavailableError();
 		return index.lookupRun(runId);
 	}
 	return rt.runStore.lookupRun(runId);
-}
-
-function isRegisteredWorkflow(rt: FlueRuntime, workflowName: string): boolean {
-	return rt.workflows.some((workflow) => workflow.name === workflowName);
 }
 
 function requiredRuntime(): FlueRuntime {

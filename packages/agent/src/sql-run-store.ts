@@ -21,6 +21,7 @@ import {
 	type RunRecord,
 	type RunStatus,
 	type RunStore,
+	type WorkflowRunPointer,
 } from './runtime/run-store.ts';
 import { ensureFlueSchemaVersion } from './schema-version.ts';
 import type { SqlStorage } from './sql-storage.ts';
@@ -72,16 +73,14 @@ class SqlRunStore implements RunStore {
 		return rowToRunRecord(row);
 	}
 
-	async lookupRun(runId: string): Promise<RunPointer | null> {
+	async lookupRun(runId: string): Promise<WorkflowRunPointer | null> {
 		const rows = this.sql
-			.exec(
-				`SELECT run_id, workflow_name, status, started_at, ended_at, duration_ms, is_error
-				 FROM flue_runs WHERE run_id = ?`,
-				runId,
-			)
+			.exec('SELECT run_id, workflow_name FROM flue_runs WHERE run_id = ?', runId)
 			.toArray();
 		const row = rows[0];
-		return row ? rowToRunPointer(row) : null;
+		return row
+			? { runId: String(row.run_id), workflowName: String(row.workflow_name) }
+			: null;
 	}
 
 	async listRuns(opts: ListRunsOpts = {}): Promise<ListRunsResponse> {

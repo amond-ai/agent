@@ -287,10 +287,6 @@ interface WorkflowAdmissionOptions {
 
 interface AdmittedWorkflowExecution {
 	runId: string;
-	/** Absolute DS stream URL for the run's event stream. */
-	streamUrl: string;
-	/** Stream offset captured at admission — reading from it yields the run's events from the start. */
-	offset: string;
 	runStore: RunStore;
 	lifecycle: WorkflowRunLifecycle;
 	startWorkflowAdmission: StartWorkflowAdmissionFn;
@@ -323,13 +319,8 @@ async function prepareWorkflowExecution(
 		eventStreamStore,
 		requirePersistedAdmission: true,
 	});
-	// Capture the stream coordinates at admission, before any run event is
-	// appended, so reading from the returned offset replays the whole run.
-	const offset = (await eventStreamStore.getStreamMeta(runStreamPath(runId)))?.nextOffset ?? '-1';
 	return {
 		runId,
-		streamUrl: invocationStreamUrl(request, runId),
-		offset,
 		runStore,
 		lifecycle,
 		startWorkflowAdmission,
@@ -395,11 +386,10 @@ export async function admitDetachedWorkflow(
 
 async function runWorkflowAdmissionMode(execution: AdmittedWorkflowExecution): Promise<Response> {
 	await detachWorkflowExecution(execution);
-	return admissionResponse(
-		{ runId: execution.runId, streamUrl: execution.streamUrl, offset: execution.offset },
-		execution.streamUrl,
-		execution.offset,
-	);
+	return new Response(JSON.stringify({ runId: execution.runId }), {
+		status: 202,
+		headers: { 'content-type': 'application/json' },
+	});
 }
 
 export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<void> {
@@ -560,8 +550,6 @@ async function runSyncMode(execution: AdmittedWorkflowExecution): Promise<Respon
 		JSON.stringify({
 			result: result === undefined ? null : result,
 			runId: execution.runId,
-			streamUrl: execution.streamUrl,
-			offset: execution.offset,
 		}),
 		{ headers: { 'content-type': 'application/json' } },
 	);

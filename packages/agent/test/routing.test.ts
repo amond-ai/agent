@@ -15,7 +15,7 @@ import {
 } from '../src/runtime/flue-app.ts';
 import { InMemorySessionStore } from '../src/session.ts';
 import { createNoopSessionEnv } from './fixtures/session-env.ts';
-import { agentRecord, nodeRuntime, workflowRecord } from './helpers/runtime-config.ts';
+import { agentRecord, cloudflareRuntime, nodeRuntime, workflowRecord } from './helpers/runtime-config.ts';
 import { createTestEventStreamStore } from './helpers/test-event-stream-store.ts';
 
 afterEach(() => {
@@ -695,7 +695,7 @@ describe('flue()', () => {
 		await store.createStream('runs/run_01DAILYREPORT');
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { route: async (c) => c.json({ blocked: true }, 401) })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
 			runStore,
 			eventStreamStore: store,
 
@@ -707,6 +707,88 @@ describe('flue()', () => {
 
 		expect(response.status).toBe(401);
 		expect(await response.json()).toEqual({ blocked: true });
+	});
+
+	it('returns run_not_found for an unknown run without invoking runs middleware', async () => {
+		const runs = vi.fn(async (_c, next) => next());
+		configureFlueRuntime(nodeRuntime({
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs })],
+			runStore: new InMemoryRunStore(),
+		}));
+		const app = new Hono();
+		app.route('/api', flue());
+
+		const response = await app.fetch(new Request('http://localhost/api/runs/run_01MISSING'));
+
+		expect(response.status).toBe(404);
+		expect((await response.json()) as unknown).toMatchObject({ error: { type: 'run_not_found' } });
+		expect(runs).not.toHaveBeenCalled();
+	});
+
+	it('returns run_not_found when the owning workflow does not expose runs', async () => {
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
+			runId: 'run_01DAILYREPORT',
+			workflowName: 'daily-report',
+			startedAt: '2026-06-01T10:00:00.000Z',
+			input: {},
+		});
+		configureFlueRuntime(nodeRuntime({
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { route: async (_c, next) => next() })],
+			runStore,
+		}));
+		const app = new Hono();
+		app.route('/api', flue());
+
+		const response = await app.fetch(new Request('http://localhost/api/runs/run_01DAILYREPORT'));
+
+		expect(response.status).toBe(404);
+		expect((await response.json()) as unknown).toMatchObject({ error: { type: 'run_not_found' } });
+	});
+
+	it('authorizes a known run before returning method_not_allowed', async () => {
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
+			runId: 'run_01DAILYREPORT',
+			workflowName: 'daily-report',
+			startedAt: '2026-06-01T10:00:00.000Z',
+			input: {},
+		});
+		const runs = vi.fn(async (_c, next) => next());
+		configureFlueRuntime(nodeRuntime({
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs })],
+			runStore,
+		}));
+		const app = new Hono();
+		app.route('/api', flue());
+
+		const response = await app.fetch(new Request('http://localhost/api/runs/run_01DAILYREPORT', { method: 'DELETE' }));
+
+		expect(response.status).toBe(405);
+		expect(runs).toHaveBeenCalledOnce();
+	});
+
+	it('runs authorization before Cloudflare forwards run requests', async () => {
+		const runStore = new InMemoryRunStore();
+		await runStore.createRun({
+			runId: 'run_01DAILYREPORT',
+			workflowName: 'daily-report',
+			startedAt: '2026-06-01T10:00:00.000Z',
+			input: {},
+		});
+		const routeRunRequest = vi.fn(async () => new Response('forwarded'));
+		configureFlueRuntime(cloudflareRuntime({
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
+			createRunIndexForRequest: () => runStore,
+			routeRunRequest,
+		}));
+		const app = new Hono();
+		app.route('/api', flue());
+
+		const response = await app.fetch(new Request('http://localhost/api/runs/run_01DAILYREPORT'));
+
+		expect(response.status).toBe(401);
+		expect(routeRunRequest).not.toHaveBeenCalled();
 	});
 
 	it('serves the run record as plain JSON when GET /runs/:runId?meta is requested', async () => {
@@ -726,7 +808,7 @@ describe('flue()', () => {
 		});
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { route: async (_c, next) => next() })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (_c, next) => next() })],
 			runStore,
 			eventStreamStore: createTestEventStreamStore(),
 		}));
@@ -767,7 +849,7 @@ describe('flue()', () => {
 		});
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { route: async (c) => c.json({ blocked: true }, 401) })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
 			runStore,
 
 		}));
@@ -795,7 +877,7 @@ describe('flue()', () => {
 		});
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report-v2', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { route: async (_c, next) => next() })],
+			workflows: [workflowRecord('daily-report-v2', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (_c, next) => next() })],
 			runStore,
 			eventStreamStore: createTestEventStreamStore(),
 		}));
@@ -971,14 +1053,11 @@ describe('flue()', () => {
 		);
 
 		expect(response.status).toBe(200);
-		const body = (await response.json()) as { result: unknown; runId: string; streamUrl: string };
+		const body = (await response.json()) as { result: unknown; runId: string };
 		expect(body).toEqual({
 			result: null,
 			runId: expect.stringMatching(/^run_[0-9A-HJKMNP-TV-Z]{26}$/),
-			streamUrl: expect.any(String),
-			offset: '-1',
 		});
-		expect(body.streamUrl).toBe(`http://localhost/api/runs/${body.runId}`);
 	});
 
 	it('rejects a direct agent body when it does not contain a string message', async () => {

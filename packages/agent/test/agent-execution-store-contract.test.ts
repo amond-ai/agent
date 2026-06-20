@@ -207,10 +207,9 @@ describe('sqlite() PersistenceAdapter', () => {
 			input: { day: 'wednesday' },
 			result: { report: 'done' },
 		});
-		expect(await runStore2.lookupRun('run_01DAILYREPORT')).toMatchObject({
+		expect(await runStore2.lookupRun('run_01DAILYREPORT')).toEqual({
 			runId: 'run_01DAILYREPORT',
 			workflowName: 'daily-report',
-			status: 'completed',
 		});
 		const listed = await runStore2.listRuns();
 		expect(listed.runs).toHaveLength(1);
