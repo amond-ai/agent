@@ -39,9 +39,7 @@ export interface FlueEventStream<T = FlueEvent> extends AsyncIterable<T> {
 	 * event in that batch has been yielded, so resuming from a checkpointed
 	 * value never skips undelivered events — at worst it re-delivers events
 	 * of the batch in flight when the checkpoint was taken (at-least-once).
-	 * On workflow-run streams the event's `eventIndex` equals the stream
-	 * sequence and can serve as a per-event checkpoint instead. Agent streams
-	 * restart `eventIndex` per prompt, so there it is not an offset.
+	 * Event indexes identify and order events but are not stream offsets.
 	 */
 	readonly offset: string;
 }
