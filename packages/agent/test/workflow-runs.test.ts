@@ -839,25 +839,22 @@ describe('workflow run lifecycle', () => {
 		});
 	});
 
-	it('derives recovery event indexes from the stream head, not the event count', async () => {
+	it('continues recovery event indexes after the highest persisted event', async () => {
 		const db = new DatabaseSync(':memory:');
 		const eventStreamStore = createTestEventStreamStore(db);
 		const runId = 'run_01TESTRECOVERY';
 		const streamPath = `runs/${runId}`;
 		await eventStreamStore.createStream(streamPath);
-		for (let index = 0; index < 3; index++) {
+		for (const eventIndex of [0, 2, 6]) {
 			await eventStreamStore.appendEvent(streamPath, {
 				type: 'log',
 				level: 'info',
-				message: `m${index}`,
+				message: `m${eventIndex}`,
 				runId,
-				eventIndex: index,
+				eventIndex,
 			});
 		}
-		// Simulate a crash-induced gap: the head counter advanced past the
-		// stored rows (UPDATE committed, INSERT lost) — four appends never
-		// landed, so the stream holds 3 events but its head sits at seq 6.
-		db.prepare('UPDATE flue_event_streams SET next_offset = 7 WHERE path = ?').run(streamPath);
+		db.prepare('UPDATE flue_event_streams SET next_offset = 10 WHERE path = ?').run(streamPath);
 
 		await failRecoveredRun({
 			workflowName: 'report',
@@ -876,15 +873,13 @@ describe('workflow run lifecycle', () => {
 			}))
 			.filter((entry) => entry.data.type === 'run_resume' || entry.data.type === 'run_end');
 
-		// Counting events would restart at index 3 and mint duplicates; the
-		// head-derived index continues after the gap, keeping seq == eventIndex.
 		expect(recovered).toEqual([
 			{
-				offset: formatOffset(7),
+				offset: formatOffset(10),
 				data: expect.objectContaining({ type: 'run_resume', eventIndex: 7 }),
 			},
 			{
-				offset: formatOffset(8),
+				offset: formatOffset(11),
 				data: expect.objectContaining({ type: 'run_end', eventIndex: 8, isError: true }),
 			},
 		]);
