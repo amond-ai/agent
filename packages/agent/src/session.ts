@@ -89,6 +89,7 @@ import { getRegisteredApiKey, getRegisteredStoreResponses } from './runtime/prov
 import { reconstructInterruptedStream, StreamChunkWriter } from './runtime/stream-chunks.ts';
 import { createFlueFs } from './sandbox.ts';
 import { valibotToJsonSchema } from './schema.ts';
+import { getSkillReferenceDirectory } from './skill-package.ts';
 import {
 	createUserContextMessage,
 	renderSignalMessage,
@@ -306,12 +307,11 @@ interface InternalTaskOptions<S extends v.GenericSchema | undefined> extends Tas
 
 function getRegisteredPackagedSkills(
 	skills: Record<string, AgentConfig['skills'][string]>,
-	packagedSkills: Record<string, PackagedSkillDirectory> | undefined,
 ): Record<string, PackagedSkillDirectory> {
 	const registered: Record<string, PackagedSkillDirectory> = {};
 	for (const skill of Object.values(skills)) {
 		if (!('__flueSkillReference' in skill)) continue;
-		const packaged = packagedSkills?.[skill.id];
+		const packaged = getSkillReferenceDirectory(skill);
 		if (packaged) registered[skill.id] = packaged;
 	}
 	return registered;
@@ -1156,7 +1156,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	}
 
 	private resolvePackagedSkill(reference: SkillReference) {
-		const packaged = this.config.packagedSkills?.[reference.id];
+		const packaged = getSkillReferenceDirectory(reference);
 		if (!packaged)
 			throw new Error(
 				`[flue] Packaged skill "${reference.name}" is unavailable for this application build.`,
@@ -1375,7 +1375,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		const runTask = (params: TaskToolParams, signal?: AbortSignal) =>
 			this.runTaskForTool(params, tools, model, thinkingLevel, signal);
 		const packagedSkills = {
-			...getRegisteredPackagedSkills(this.config.skills, this.config.packagedSkills),
+			...getRegisteredPackagedSkills(this.config.skills),
 			...activePackagedSkills,
 		};
 		const skillNames = Object.keys(this.config.skills);

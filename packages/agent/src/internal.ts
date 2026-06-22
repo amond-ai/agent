@@ -116,6 +116,7 @@ export type {
 export { bashFactoryToSessionEnv } from './sandbox.ts';
 export { InMemorySessionStore } from './session.ts';
 export { parseSkillMarkdown } from './skill-frontmatter.ts';
+export { buildPackagedSkill, createSkillReference } from './skill-package.ts';
 export { createSqlRunStore } from './sql-run-store.ts';
 
 /**

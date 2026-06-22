@@ -72,25 +72,21 @@ export function parseSkillMarkdown(
 	};
 }
 
-// Mirrors skills-ref name validation: Unicode lowercase letters and numbers
-// plus hyphens, no leading/trailing/consecutive hyphens, NFKC-normalized
-// comparison against the directory name.
 function validateSkillName(name: string, options: ParseSkillMarkdownOptions): void {
-	const normalized = name.normalize('NFKC');
-	if ([...normalized].length > 64) {
+	if (name.length > 64) {
 		throw new Error(`[flue] Skill ${options.path} name must be at most 64 characters.`);
 	}
-	if (!/^[\p{L}\p{N}-]+$/u.test(normalized) || normalized !== normalized.toLowerCase()) {
+	if (!/^[a-z0-9-]+$/.test(name)) {
 		throw new Error(
-			`[flue] Skill ${options.path} frontmatter name "${name}" must contain only lowercase letters, numbers, and hyphens. Use a spec-compliant value such as "review-pr".`,
+			`[flue] Skill ${options.path} frontmatter name "${name}" must contain only lowercase ASCII letters, numbers, and hyphens. Use a spec-compliant value such as "review-pr".`,
 		);
 	}
-	if (normalized.startsWith('-') || normalized.endsWith('-') || normalized.includes('--')) {
+	if (name.startsWith('-') || name.endsWith('-') || name.includes('--')) {
 		throw new Error(
 			`[flue] Skill ${options.path} frontmatter name "${name}" must not start or end with a hyphen or contain consecutive hyphens. Use a spec-compliant value such as "review-pr".`,
 		);
 	}
-	if (normalized !== options.directoryName.normalize('NFKC')) {
+	if (name !== options.directoryName) {
 		throw new Error(
 			`[flue] Skill ${options.path} declares frontmatter name "${name}", but Agent Skills requires it to match directory "${options.directoryName}"; names must match. Rename the directory or change "name" so they match.`,
 		);

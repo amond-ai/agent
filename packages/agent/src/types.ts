@@ -304,7 +304,6 @@ export interface AgentConfig {
 	instructions?: string;
 	/** Agent-definition skills merged into each discovered skill catalog. */
 	definitionSkills?: Skill[];
-	packagedSkills?: Record<string, PackagedSkillDirectory>;
 	/** Discovered at runtime from .agents/skills/ in the session's cwd. */
 	skills: Record<string, Skill>;
 	subagents?: Record<string, AgentProfile>;

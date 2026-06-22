@@ -501,6 +501,19 @@ export class SessionDeletedError extends FlueError {
 	}
 }
 
+export class SkillDefinitionValidationError extends FlueError {
+	constructor({ issues }: { issues: readonly ValidationIssue[] }) {
+		super({
+			type: 'skill_definition_validation',
+			message: 'Skill definition is invalid.',
+			details: 'Correct the invalid skill fields and try again.',
+			dev: 'Pass a valid Agent Skills definition to defineSkill().',
+			meta: { issues },
+		});
+		this.name = 'SkillDefinitionValidationError';
+	}
+}
+
 export class SkillNotRegisteredError extends FlueError {
 	constructor({
 		skill,

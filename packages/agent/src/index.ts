@@ -32,6 +32,7 @@ export {
 	SessionBusyError,
 	SessionDeletedError,
 	SessionNotFoundError,
+	SkillDefinitionValidationError,
 	SkillNotRegisteredError,
 	SubagentNotDeclaredError,
 	SubmissionInterruptedError,
@@ -70,6 +71,7 @@ export type {
 	WorkflowRunPointer,
 } from './runtime/run-store.ts';
 export { bash, createSandboxSessionEnv, type SandboxApi } from './sandbox.ts';
+export { defineSkill, type DefineSkillOptions } from './skill-definition.ts';
 export { defineTool } from './tool.ts';
 export { defineWorkflow } from './workflow-definition.ts';
 export type { WorkflowDefinition } from './workflow-definition.ts';

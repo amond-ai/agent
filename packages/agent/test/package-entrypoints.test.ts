@@ -30,6 +30,7 @@ describe('package entrypoints', () => {
 			createSandboxSessionEnv: expect.any(Function),
 			defineAction: expect.any(Function),
 			defineAgentProfile: expect.any(Function),
+			defineSkill: expect.any(Function),
 			defineTool: expect.any(Function),
 			dispatch: expect.any(Function),
 			getRun: expect.any(Function),

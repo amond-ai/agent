@@ -128,7 +128,7 @@ describe('parseSkillMarkdown()', () => {
 				path: '/skills/PDF-processing/SKILL.md',
 			}),
 		).toThrow(
-			'[flue] Skill /skills/PDF-processing/SKILL.md frontmatter name "PDF-processing" must contain only lowercase letters, numbers, and hyphens. Use a spec-compliant value such as "review-pr".',
+			'[flue] Skill /skills/PDF-processing/SKILL.md frontmatter name "PDF-processing" must contain only lowercase ASCII letters, numbers, and hyphens. Use a spec-compliant value such as "review-pr".',
 		);
 	});
 
@@ -143,13 +143,15 @@ describe('parseSkillMarkdown()', () => {
 		);
 	});
 
-	it('accepts a unicode skill name when it matches the directory name', () => {
-		expect(
+	it('rejects a non-ASCII skill name when it matches the directory name', () => {
+		expect(() =>
 			parseSkillMarkdown('---\nname: café-notes\ndescription: Useful.\n---\nBody', {
 				directoryName: 'café-notes',
 				path: '/skills/café-notes/SKILL.md',
 			}),
-		).toMatchObject({ name: 'café-notes' });
+		).toThrow(
+			'[flue] Skill /skills/café-notes/SKILL.md frontmatter name "café-notes" must contain only lowercase ASCII letters, numbers, and hyphens. Use a spec-compliant value such as "review-pr".',
+		);
 	});
 
 	it('rejects a directory mismatch when a skill name differs from its directory', () => {
