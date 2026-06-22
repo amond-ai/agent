@@ -226,14 +226,9 @@ async function createGeneratedFixture(
 }
 
 async function startServer(root: string): Promise<{ url: string; close(): Promise<void> }> {
-	const entryPath = path.join(viteInputDir(root), '_entry.ts');
-	const viteConfig = createCloudflareViteConfig(
-		cloudflare,
-		root,
-		cloudflareViteConfigPath(root),
-		[entryPath],
-		{ persistState: false },
-	);
+	const viteConfig = createCloudflareViteConfig(cloudflare, root, cloudflareViteConfigPath(root), {
+		persistState: false,
+	});
 	const server: ViteDevServer = await createServer({
 		...viteConfig,
 		logLevel: 'silent',

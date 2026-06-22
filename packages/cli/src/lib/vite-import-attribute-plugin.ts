@@ -1,13 +1,11 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { PackagedSkillDirectory, PackagedSkillFile, SkillReference } from '@flue/runtime';
-import { parseSkillMarkdown } from '@flue/runtime/internal';
+import type { PackagedSkillDirectory } from '@flue/runtime';
+import { buildPackagedSkill, parseSkillMarkdown } from '@flue/runtime/internal';
 import { normalizePath, type Plugin, transformWithOxc } from 'vite';
 
 const MARKDOWN_MODULE_PREFIX = '\0flue-markdown:';
-const PACKAGED_SKILLS_MODULE_ID = 'virtual:flue/packaged-skills';
-const RESOLVED_PACKAGED_SKILLS_MODULE_ID = '\0virtual:flue/packaged-skills';
 const SKILL_MODULE_PREFIX = '\0flue-skill:';
 const ENCODED_SKILL_MODULE_PREFIX = '__x00__flue-skill:';
 const PACKAGED_FILE_WARNING_BYTES = 1024 * 1024;
@@ -23,21 +21,14 @@ const SENSITIVE_DIRECTORIES = new Set(['.aws', '.gnupg', '.ssh']);
 const EXCLUDED_FILES = new Set(['.netrc', '.npmrc', '.pypirc', '_netrc', 'credentials.json']);
 const SENSITIVE_FILE_PATTERNS = [/\.key$/i, /\.pem$/i, /\.p12$/i, /\.pfx$/i, /^secrets?(?:\.|$)/i];
 
-export interface ImportAttributePluginOptions {
-	bootstrapEntries?: readonly string[];
-}
-
 /**
  * Handles Flue's attributed imports — `with { type: 'markdown' }` and
  * `with { type: 'skill' }` — in one plugin so each module in the graph is
  * type-stripped and parsed once per (re)build, and so the two attribute
  * types cannot drift apart.
  */
-export function importAttributePlugin(options: ImportAttributePluginOptions): Plugin {
+export function importAttributePlugin(): Plugin {
 	let viteRoot = '';
-	const bootstrapEntries = new Set(
-		(options.bootstrapEntries ?? []).map((entry) => canonicalPath(path.resolve(entry))),
-	);
 	const internalModuleToken = randomUUID();
 	const internalSkillModulePrefix = `${SKILL_MODULE_PREFIX}${internalModuleToken}:`;
 	const encodedInternalSkillModulePrefix = `__x00__flue-skill:${internalModuleToken}:`;
@@ -125,14 +116,6 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 		},
 		resolveId(source, importer) {
 			if (source.startsWith(MARKDOWN_MODULE_PREFIX)) return source;
-			if (source === PACKAGED_SKILLS_MODULE_ID) {
-				if (!isAuthorizedPackagedStoreImporter(importer, bootstrapEntries)) {
-					throw new Error(
-						"[flue] Packaged skill contents are runtime-owned and cannot be imported from application modules. Import SKILL.md with { type: 'skill' }.",
-					);
-				}
-				return RESOLVED_PACKAGED_SKILLS_MODULE_ID;
-			}
 			const internalModuleId = decodeSkillModuleId(
 				source,
 				internalSkillModulePrefix,
@@ -166,13 +149,6 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 				for (const module of modules) this.environment.moduleGraph.invalidateModule(module);
 				return modules;
 			}
-			if (!/\.[cm]?[jt]sx?$/i.test(changedPath)) return;
-			const registry = this.environment.moduleGraph.getModuleById(
-				RESOLVED_PACKAGED_SKILLS_MODULE_ID,
-			);
-			if (!registry) return;
-			this.environment.moduleGraph.invalidateModule(registry);
-			return [registry, ...options.modules];
 		},
 		async load(id) {
 			if (id.startsWith(MARKDOWN_MODULE_PREFIX)) {
@@ -180,32 +156,15 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 				this.addWatchFile(markdownPath);
 				return `export default ${JSON.stringify(await fs.promises.readFile(markdownPath, 'utf8'))};`;
 			}
-			if (id === RESOLVED_PACKAGED_SKILLS_MODULE_ID) {
-				return [
-					'const packagedSkills = new Map();',
-					'export function registerPackagedSkill(skill) { packagedSkills.set(skill.id, skill); }',
-					'export function unregisterPackagedSkill(skill) { if (packagedSkills.get(skill.id) === skill) packagedSkills.delete(skill.id); }',
-					'export function getPackagedSkills() { return Object.fromEntries(packagedSkills); }',
-				].join('\n');
-			}
 			if (!id.startsWith(internalSkillModulePrefix)) return null;
 			const skillPath = id.slice(internalSkillModulePrefix.length);
 			const directory = path.dirname(skillPath);
 			trackedSkillDirectories.add(canonicalPath(directory));
 			const packagedSkill = await packageSkill(skillPath);
-			const reference: SkillReference = {
-				__flueSkillReference: true,
-				id: packagedSkill.id,
-				name: packagedSkill.name,
-				description: packagedSkill.description,
-			};
 			return [
-				`import { registerPackagedSkill, unregisterPackagedSkill } from ${JSON.stringify(PACKAGED_SKILLS_MODULE_ID)};`,
+				`import { createSkillReference } from '@flue/runtime/internal';`,
 				`const directory = ${JSON.stringify(packagedSkill)};`,
-				'registerPackagedSkill(directory);',
-				'if (import.meta.hot) import.meta.hot.dispose(() => unregisterPackagedSkill(directory));',
-				`const reference = ${JSON.stringify(reference)};`,
-				'export default reference;',
+				'export default createSkillReference(directory);',
 			].join('\n');
 		},
 	};
@@ -217,35 +176,20 @@ async function packageSkill(skillPath: string): Promise<PackagedSkillDirectory> 
 		directoryName: path.basename(directory),
 		path: skillPath,
 	});
-	const files: Record<string, PackagedSkillFile> = {};
-	const hash = createHash('sha256');
+	const files = [];
 	for (const filePath of await collectFiles(directory)) {
-		const relativePath = normalizePath(path.relative(directory, filePath));
 		const content = await fs.promises.readFile(filePath);
 		if (content.byteLength > PACKAGED_FILE_WARNING_BYTES) {
 			console.warn(
 				`[flue] Skill file "${filePath}" exceeds 1MB and will be packaged into the deployed application for lazy access.`,
 			);
 		}
-		const pathBuffer = Buffer.from(relativePath);
-		const lengths = Buffer.allocUnsafe(8);
-		lengths.writeUInt32BE(pathBuffer.byteLength, 0);
-		lengths.writeUInt32BE(content.byteLength, 4);
-		hash.update(lengths);
-		hash.update(pathBuffer);
-		hash.update(content);
-		files[relativePath] = {
-			encoding: 'base64',
-			kind: isTextContent(content) ? 'text' : 'binary',
-			content: content.toString('base64'),
-		};
+		files.push({
+			path: normalizePath(path.relative(directory, filePath)),
+			content: new Uint8Array(content),
+		});
 	}
-	return {
-		id: `skill:${parsed.name}:${hash.digest('hex').slice(0, 16)}`,
-		name: parsed.name,
-		description: parsed.description,
-		files,
-	};
+	return buildPackagedSkill({ name: parsed.name, description: parsed.description, files });
 }
 
 function canonicalPath(filePath: string): string {
@@ -327,12 +271,6 @@ function isExcludedFile(filename: string): boolean {
 	);
 }
 
-function isTextContent(content: Buffer): boolean {
-	if (content.includes(0)) return false;
-	const text = content.toString('utf8');
-	return Buffer.from(text, 'utf8').equals(content) && !text.includes('\uFFFD');
-}
-
 function decodeSkillModuleId(
 	source: string,
 	internalPrefix: string,
@@ -343,15 +281,6 @@ function decodeSkillModuleId(
 	if (encodedIndex !== -1)
 		return `${internalPrefix}${source.slice(encodedIndex + encodedInternalPrefix.length)}`;
 	return undefined;
-}
-
-function isAuthorizedPackagedStoreImporter(
-	importer: string | undefined,
-	bootstrapEntries: Set<string>,
-): boolean {
-	if (!importer) return false;
-	if (importer.startsWith(SKILL_MODULE_PREFIX)) return true;
-	return bootstrapEntries.has(canonicalPath(importer.split('?')[0] ?? importer));
 }
 
 function stripQueryAndHash(specifier: string): string {

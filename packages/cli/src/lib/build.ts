@@ -134,7 +134,7 @@ async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 			const pluginExternal = plugin.external ?? [];
 			const userExternals = getUserExternals(root);
 			const { build: viteBuild } = await import('vite');
-			const sharedViteConfig = createSharedViteConfig(root, [entryPath]);
+			const sharedViteConfig = createSharedViteConfig(root);
 			await viteBuild({
 				...sharedViteConfig,
 				logLevel: 'warn',
@@ -200,9 +200,7 @@ async function buildApplication(options: BuildOptions): Promise<BuildResult> {
 			import('@cloudflare/vite-plugin'),
 			import('vite'),
 		]);
-		const viteConfig = createCloudflareViteConfig(cloudflare, root, generatedConfigPath, [
-			entryPath,
-		]);
+		const viteConfig = createCloudflareViteConfig(cloudflare, root, generatedConfigPath);
 		await withTemporaryProcessEnv({ NODE_ENV: 'production' }, async () => {
 			const builder = await createBuilder({
 				...viteConfig,
@@ -355,11 +353,11 @@ export function cloudflareViteConfigPath(root: string): string {
 	return path.join(root, '.flue-vite.wrangler.jsonc');
 }
 
-function createSharedViteConfig(root: string, bootstrapEntries: readonly string[] = []) {
+function createSharedViteConfig(root: string) {
 	return {
 		configFile: false as const,
 		root,
-		plugins: [importAttributePlugin({ bootstrapEntries })],
+		plugins: [importAttributePlugin()],
 	};
 }
 
@@ -367,10 +365,9 @@ export function createCloudflareViteConfig(
 	cloudflare: typeof import('@cloudflare/vite-plugin').cloudflare,
 	root: string,
 	configPath: string,
-	bootstrapEntries: readonly string[] = [],
 	options: { persistState?: boolean } = {},
 ) {
-	const sharedConfig = createSharedViteConfig(root, bootstrapEntries);
+	const sharedConfig = createSharedViteConfig(root);
 	return {
 		...sharedConfig,
 		plugins: [

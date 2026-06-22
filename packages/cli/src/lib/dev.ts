@@ -23,7 +23,6 @@ import {
 	discoverAgents,
 	discoverChannels,
 	discoverWorkflows,
-	viteInputDir,
 } from './build.ts';
 import pc from 'picocolors';
 import { createEnvLoader, type EnvLoader, selectEnvFile } from './env.ts';
@@ -184,7 +183,7 @@ export async function dev(options: DevOptions): Promise<void> {
 	// ─── Lifecycle ───────────────────────────────────────────────────────────
 
 	let shuttingDown = false;
-	const shutdown = async (signal: string, exitCode: number) => {
+	const shutdown = async (_signal: string, exitCode: number) => {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		watcher.close();
@@ -598,16 +597,13 @@ class CloudflareReloader implements DevReloader {
 	private readonly sourceRoot: string;
 	private readonly port: number;
 	private readonly configPath: string;
-	private readonly entryPath: string;
 	url?: string;
 
 	constructor(opts: { root: string; sourceRoot: string; port: number }) {
 		this.root = opts.root;
 		this.sourceRoot = opts.sourceRoot;
 		this.port = opts.port;
-		const inputDir = viteInputDir(opts.root);
 		this.configPath = cloudflareViteConfigPath(opts.root);
-		this.entryPath = path.join(inputDir, '_entry.ts');
 	}
 
 	async start(): Promise<void> {
@@ -616,7 +612,7 @@ class CloudflareReloader implements DevReloader {
 			import('vite'),
 		]);
 		this.server = await createServer({
-			...createCloudflareViteConfig(cloudflare, this.root, this.configPath, [this.entryPath]),
+			...createCloudflareViteConfig(cloudflare, this.root, this.configPath),
 			logLevel: 'info',
 			server: { host: '127.0.0.1', port: this.port, strictPort: true },
 		});

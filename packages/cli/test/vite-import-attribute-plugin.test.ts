@@ -44,16 +44,10 @@ export const references = [local, review];`,
 			expect.objectContaining({ name: 'local', description: 'Use the local skill.' }),
 			expect.objectContaining({ name: 'review', description: 'Use the package skill.' }),
 		]);
-		expect(Object.values(result.packagedSkills)).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					files: expect.objectContaining({ 'LOCAL.txt': expect.anything() }),
-				}),
-				expect.objectContaining({
-					files: expect.objectContaining({ 'REVIEW.txt': expect.anything() }),
-				}),
-			]),
-		);
+		expect(result.files).toEqual([
+			expect.arrayContaining(['LOCAL.txt', 'SKILL.md']),
+			expect.arrayContaining(['REVIEW.txt', 'SKILL.md']),
+		]);
 	});
 
 	it('derives skill identity from packaged content', async () => {
@@ -87,7 +81,6 @@ export const references = [review];`,
 
 		expect(first.references[0]?.id).toBe(second.references[0]?.id);
 		expect(first.references[0]?.id).not.toBe(changed.references[0]?.id);
-		expect(Object.keys(first.packagedSkills)).toEqual([first.references[0]?.id]);
 	});
 
 	it('rejects a symbolic link inside a skill directory', async () => {
@@ -152,19 +145,19 @@ async function buildFixture(
 	source: string,
 ): Promise<{
 	references: Array<{ id: string; name: string; description: string }>;
-	packagedSkills: Record<string, { files: Record<string, unknown> }>;
+	files: string[][];
 }> {
 	const entryPath = path.join(root, 'entry.ts');
 	const output = path.join(root, 'dist');
 	fs.writeFileSync(
 		entryPath,
-		`${source}\nimport { getPackagedSkills } from 'virtual:flue/packaged-skills';\nexport const packagedSkills = getPackagedSkills();`,
+		`${source}\nconst key = Symbol.for('@flue/runtime/packaged-skill/v1');\nexport const files = references.map((reference) => Object.keys(reference[key].files));`,
 	);
 	await build({
 		configFile: false,
 		root,
 		logLevel: 'silent',
-		plugins: [importAttributePlugin({ bootstrapEntries: [entryPath] })],
+		plugins: [importAttributePlugin()],
 		build: {
 			ssr: entryPath,
 			outDir: output,
