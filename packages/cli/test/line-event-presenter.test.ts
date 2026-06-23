@@ -21,9 +21,9 @@ describe('createLineEventPresenter()', () => {
 		const lines: string[] = [];
 		const presenter = createLineEventPresenter({ write: (line) => lines.push(line) });
 
-		presenter.present({ type: 'tool_start', toolName: 'bash', toolCallId: '1', args: { command: 'pwd' } } as never);
+		presenter.present({ type: 'tool_start', toolName: 'bash', toolCallId: '1' } as never);
 		presenter.present({ type: 'log', level: 'info', message: 'ready' } as never);
 
-		expect(lines).toEqual(['tool bash  $ pwd', 'info ready']);
+		expect(lines).toEqual(['tool bash', 'info ready']);
 	});
 });

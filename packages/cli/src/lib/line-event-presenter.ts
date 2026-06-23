@@ -69,7 +69,7 @@ export function createLineEventPresenter(options: LineEventPresenterOptions): Li
 					break;
 				case 'tool_start':
 					flush();
-					options.write(`${dim('tool')} ${toolDetail(event.toolName, event.args)}`);
+					options.write(`${dim('tool')} ${event.toolName}`);
 					break;
 				case 'tool':
 					options.write(`${dim(`tool ${event.isError ? 'error' : 'done'}`)} ${event.toolName}`);
@@ -115,17 +115,4 @@ function writeLines(
 	for (const line of value.split('\n')) {
 		if (line) write(format(line));
 	}
-}
-
-function toolDetail(toolName: string, args: unknown): string {
-	if (!isRecord(args)) return toolName;
-	const key = toolName === 'bash' ? 'command' : toolName === 'grep' || toolName === 'glob' ? 'pattern' : 'path';
-	const value = args[key];
-	if (typeof value !== 'string') return toolName;
-	const detail = value.length > 120 ? `${value.slice(0, 120)}...` : value;
-	return toolName === 'bash' ? `${toolName}  $ ${detail}` : `${toolName}  ${detail}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null;
 }

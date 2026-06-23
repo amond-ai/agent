@@ -57,7 +57,7 @@ function reduceEvent(state: ConsoleTranscript, event: FlueEvent): ConsoleTranscr
 		return text ? append({ ...state, streaming }, text, 'normal') : { ...state, streaming };
 	}
 	if (event.type === 'thinking_start') return append(state, 'thinking', 'dim');
-	if (event.type === 'tool_start') return append(state, `tool  ${event.toolName} ${toolDetail(event.toolName, event.args)}`, 'dim');
+	if (event.type === 'tool_start') return append(state, `tool  ${event.toolName}`, 'dim');
 	if (event.type === 'tool') {
 		return append(
 			state,
@@ -160,13 +160,6 @@ function errorMessage(error: unknown): string {
 	if (error instanceof Error) return detail(error.message);
 	if (isRecord(error) && typeof error.message === 'string') return detail(error.message);
 	return detail(error);
-}
-
-function toolDetail(name: string, args: unknown): string {
-	if (!isRecord(args)) return '';
-	const key = name === 'bash' || name === 'shell' ? 'command' : name === 'grep' || name === 'glob' ? 'pattern' : 'path';
-	const value = args[key];
-	return typeof value === 'string' ? detail(value) : '';
 }
 
 function messageText(message: unknown): string {
