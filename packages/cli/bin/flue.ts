@@ -21,18 +21,14 @@ import { closeConsoleForSignal, closeExecutionForSignal } from '../src/lib/conso
 import { openConsoleUi } from '../src/lib/console-ui.tsx';
 import { DEFAULT_DEV_PORT, dev } from '../src/lib/dev.ts';
 import { createEnvLoader, type EnvLoader, selectEnvFile } from '../src/lib/env.ts';
-import { createExecutionLifecycle, type ExecutionLifecycle } from '../src/lib/execution-lifecycle.ts';
+import {
+	createExecutionLifecycle,
+	type ExecutionLifecycle,
+} from '../src/lib/execution-lifecycle.ts';
 import { createLineEventPresenter } from '../src/lib/line-event-presenter.ts';
 import { parseAgentInput, runTarget } from '../src/lib/run-controller.ts';
 import { parseHeaders, resolveServerUrl } from '../src/lib/run-http.ts';
-import {
-	brand,
-	brandRows,
-	error as cliError,
-	note,
-	row,
-	success,
-} from '../src/lib/terminal.ts';
+import { brand, brandRows, error as cliError, note, row, success } from '../src/lib/terminal.ts';
 import { BLUEPRINTS, KIND_ROOTS } from './_blueprints.generated.ts';
 
 interface ApplicationConfigArgs {
@@ -67,32 +63,35 @@ async function resolveCliConfig(args: {
 	explicitRoot: string | undefined;
 	explicitOutput: string | undefined;
 	configFile: string | undefined;
-}): Promise<{ cfg: FlueConfig; configPath?: string }> {
+}): Promise<{ cfg: FlueConfig; configPath?: string; viteConfig: import('vite').UserConfig }> {
 	const inline: UserFlueConfig = {};
 	if (args.target) inline.target = args.target;
 	if (args.explicitRoot) inline.root = args.explicitRoot;
 	if (args.explicitOutput) inline.output = args.explicitOutput;
 
 	try {
-		const { flueConfig, configPath } = await resolveConfig({
+		const { flueConfig, configPath, viteConfig } = await resolveConfig({
 			cwd: process.cwd(),
 			searchFrom: args.explicitRoot ?? process.cwd(),
 			configFile: args.configFile,
 			inline,
 		});
-		return { cfg: flueConfig, configPath };
+		return { cfg: flueConfig, configPath, viteConfig };
 	} catch (err) {
 		cliError(err instanceof Error ? err.message : String(err));
 		process.exit(1);
 	}
 }
 
-async function resolveApplicationCommand(
-	args: ApplicationConfigArgs,
-): Promise<{ cfg: FlueConfig; envLoader: EnvLoader; configPath?: string }> {
+async function resolveApplicationCommand(args: ApplicationConfigArgs): Promise<{
+	cfg: FlueConfig;
+	envLoader: EnvLoader;
+	configPath?: string;
+	viteConfig: import('vite').UserConfig;
+}> {
 	const envLoader = loadCliEnvironment(args);
-	const { cfg, configPath } = await resolveCliConfig(args);
-	return { cfg, envLoader, configPath };
+	const { cfg, configPath, viteConfig } = await resolveCliConfig(args);
+	return { cfg, envLoader, configPath, viteConfig };
 }
 
 // ─── Arg Parsing ────────────────────────────────────────────────────────────
@@ -101,9 +100,8 @@ function printUsage(log: (message: string) => void = console.error) {
 	log(
 		'Usage:\n' +
 			'  flue dev   [--target <node|cloudflare>] [--root <path>] [--output <path>] [--config <path>] [--port <number>] [--env <path>]\n' +
-			'  flue run     <name> [--target <node|cloudflare>] [--id <id>] [--input <json>] [--server <path|url>] [--header \'Name: value\'] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
-			'  flue console <name> [--target <node|cloudflare>] [--id <id>] [--input <json>] [--server <path|url>] [--header \'Name: value\'] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
-
+			"  flue run     <name> [--target <node|cloudflare>] [--id <id>] [--input <json>] [--server <path|url>] [--header 'Name: value'] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n" +
+			"  flue console <name> [--target <node|cloudflare>] [--id <id>] [--input <json>] [--server <path|url>] [--header 'Name: value'] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n" +
 			'  flue build   [--target <node|cloudflare>] [--root <path>] [--output <path>] [--config <path>] [--env <path>]\n' +
 			'  flue init  --target <node|cloudflare> [--root <path>] [--force]\n' +
 			'  flue add   [<kind> <name|url>] [--print]\n' +
@@ -114,7 +112,6 @@ function printUsage(log: (message: string) => void = console.error) {
 			'  dev    Long-running watch-mode dev server. Rebuilds and reloads on file changes.\n' +
 			'  run      Invoke one agent or workflow through its normal HTTP application, then exit.\n' +
 			'  console  Inspect one agent instance or workflow invocation in an interactive terminal.\n' +
-
 			'  build    Build a deployable artifact to ./dist (production deploys).\n' +
 			'  init   Scaffold a starter flue.config.ts in the target directory.\n' +
 			'  add    Fetch a blueprint implementation guide for an AI coding agent to follow.\n' +
@@ -138,7 +135,6 @@ function printUsage(log: (message: string) => void = console.error) {
 			'  flue dev --target cloudflare --port 8787\n' +
 			'  flue run hello --target node\n' +
 			'  flue run hello --target node --input \'{"name": "World"}\' --env .env.staging\n' +
-
 			'  flue build --target node\n' +
 			'  flue build --target cloudflare --root ./my-app\n' +
 			'  flue build --target node --output ./build\n' +
@@ -232,13 +228,7 @@ interface InitArgs {
 	force: boolean;
 }
 
-type ParsedArgs =
-	| RunArgs
-	| BuildArgs
-	| DevArgs
-	| BlueprintCommandArgs
-	| DocsArgs
-	| InitArgs;
+type ParsedArgs = RunArgs | BuildArgs | DevArgs | BlueprintCommandArgs | DocsArgs | InitArgs;
 
 type ParsedOptionToken = Extract<
 	NonNullable<ReturnType<typeof parseNodeArgs>['tokens']>[number],
@@ -683,7 +673,7 @@ function devConfigFiles(args: DevArgs): string[] {
 }
 
 async function devCommand(args: DevArgs) {
-	const { cfg, envLoader, configPath } = await resolveApplicationCommand(args);
+	const { cfg, envLoader, configPath, viteConfig } = await resolveApplicationCommand(args);
 	try {
 		// dev() blocks until SIGINT/SIGTERM exits the process. We don't expect
 		// it to return; if it ever does, just exit cleanly.
@@ -699,6 +689,7 @@ async function devCommand(args: DevArgs) {
 			envLoader,
 			configFiles: devConfigFiles(args),
 			configFile: configPath,
+			viteConfig,
 			onReady: () => process.send?.(INTERNAL_DEV_READY),
 		});
 	} catch (err) {
@@ -837,7 +828,9 @@ let activeConsoleUi: { close(): void } | undefined;
 
 async function consoleCommand(args: RunArgs) {
 	if (!process.stdin.isTTY || !process.stderr.isTTY) {
-		throw new Error('[flue] `flue console` requires an interactive TTY. Use `flue run` for non-interactive execution.');
+		throw new Error(
+			'[flue] `flue console` requires an interactive TTY. Use `flue run` for non-interactive execution.',
+		);
 	}
 	const input = args.input === undefined ? undefined : JSON.parse(args.input);
 	const outputBuffer: Array<{ line: string; stream: 'stdout' | 'stderr' }> = [];
@@ -975,7 +968,9 @@ async function run(args: RunArgs) {
 	} catch (err) {
 		presenter.flush();
 		if (!lifecycle.signal.aborted) {
-			cliError(`${resourceKind === 'agent' ? 'Agent' : resourceKind === 'workflow' ? 'Workflow' : 'Run'} failed: ${err instanceof Error ? err.message : String(err)}`);
+			cliError(
+				`${resourceKind === 'agent' ? 'Agent' : resourceKind === 'workflow' ? 'Workflow' : 'Run'} failed: ${err instanceof Error ? err.message : String(err)}`,
+			);
 			process.exitCode = 1;
 		}
 	} finally {
@@ -1487,9 +1482,11 @@ if (args.command !== 'dev') {
 	const shutdown = (signal: NodeJS.Signals) => {
 		if (activeConsole) {
 			const controller = activeConsole;
-			void closeConsoleForSignal(signal, controller, () => activeConsoleUi?.close()).catch((error) => {
-				cliError(error instanceof Error ? error.message : String(error));
-			});
+			void closeConsoleForSignal(signal, controller, () => activeConsoleUi?.close()).catch(
+				(error) => {
+					cliError(error instanceof Error ? error.message : String(error));
+				},
+			);
 		} else if (activeExecution) {
 			void closeExecutionForSignal(signal, activeExecution).catch((error) => {
 				cliError(error instanceof Error ? error.message : String(error));

@@ -9,6 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as v from 'valibot';
+import type { UserConfig as ViteUserConfig } from 'vite';
 import { CONFIG_BASENAMES } from './config-paths.ts';
 import { resolveSourceRoot } from './source-root.ts';
 
@@ -140,11 +141,10 @@ export function resolveConfigPath(opts: ResolveConfigPathOptions): string | unde
  *
  * Returns the raw module default — caller is responsible for validation.
  */
-async function loadConfigModule(absConfigPath: string): Promise<unknown> {
+async function loadConfigModule(absConfigPath: string): Promise<Record<string, unknown>> {
 	const fileUrl = `${pathToFileURL(absConfigPath).href}?t=${Date.now()}`;
 	try {
-		const mod = await import(fileUrl);
-		return mod.default ?? mod;
+		return await import(fileUrl);
 	} catch (err) {
 		const code = (err as { code?: string }).code;
 		if (code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX') {
@@ -195,6 +195,8 @@ export interface ResolvedConfigResult {
 	configPath: string | undefined;
 	/** The fully-resolved config consumed by the rest of the CLI. */
 	flueConfig: FlueConfig;
+	/** Native Vite config exported as `vite` from the selected config module. */
+	viteConfig: ViteUserConfig;
 }
 
 /**
@@ -223,8 +225,10 @@ export async function resolveConfig(opts: ResolveConfigOptions): Promise<Resolve
 			: resolveConfigPath({ cwd: searchFrom, configFile: undefined });
 
 	let fileConfig: UserFlueConfig = {};
+	let viteConfig: ViteUserConfig = {};
 	if (configPath) {
-		const raw = await loadConfigModule(configPath);
+		const configModule = await loadConfigModule(configPath);
+		const raw = configModule.default;
 		if (raw == null || typeof raw !== 'object') {
 			throw new Error(
 				`[flue] ${path.relative(cwd, configPath) || configPath} must export a config object as the default export.`,
@@ -235,6 +239,19 @@ export async function resolveConfig(opts: ResolveConfigOptions): Promise<Resolve
 			throw new Error(formatValidationError(configPath, result.issues));
 		}
 		fileConfig = result.output;
+		const rawViteConfig = configModule.vite;
+		if (rawViteConfig !== undefined) {
+			if (
+				rawViteConfig == null ||
+				typeof rawViteConfig !== 'object' ||
+				Array.isArray(rawViteConfig)
+			) {
+				throw new Error(
+					`[flue] ${path.relative(cwd, configPath) || configPath} must export \`vite\` as a Vite config object.`,
+				);
+			}
+			viteConfig = rawViteConfig as ViteUserConfig;
+		}
 	}
 
 	// The "config root" — the directory we resolve relative paths in the config
@@ -293,6 +310,7 @@ export async function resolveConfig(opts: ResolveConfigOptions): Promise<Resolve
 
 	return {
 		configPath,
+		viteConfig,
 		flueConfig: {
 			target: merged.target,
 			root,

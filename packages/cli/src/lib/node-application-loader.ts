@@ -1,5 +1,9 @@
 import * as path from 'node:path';
-import { createBuildContext, createSharedViteConfig, viteGeneratedEntryDependencyResolver } from './build.ts';
+import {
+	createBuildContext,
+	createSharedViteConfig,
+	viteGeneratedEntryDependencyResolver,
+} from './build.ts';
 import { NodePlugin } from './build-plugin-node.ts';
 import type { LocalHttpRuntimeOutput } from './local-http-runtime.ts';
 import type { LoadedNodeApplication } from './node-http-listener.ts';
@@ -20,8 +24,10 @@ export async function createNodeApplicationLoader(options: {
 	env?: NodeJS.ProcessEnv;
 	onOutput?: (output: LocalHttpRuntimeOutput) => void;
 	internalDevLogs?: boolean;
+	viteConfig?: import('vite').UserConfig;
+	onWatchChange?: (filePath: string) => void;
 }): Promise<NodeApplicationLoader> {
-	let server: Awaited<ReturnType<typeof import('vite')['createServer']>> | undefined;
+	let server: Awaited<ReturnType<(typeof import('vite'))['createServer']>> | undefined;
 
 	async function close(): Promise<void> {
 		const current = server;
@@ -31,7 +37,7 @@ export async function createNodeApplicationLoader(options: {
 
 	return {
 		async load() {
-			await close();
+			const previousServer = server;
 			const ctx = createBuildContext({
 				root: options.root,
 				sourceRoot: options.sourceRoot,
@@ -46,16 +52,23 @@ export async function createNodeApplicationLoader(options: {
 			}
 			const code = new NodePlugin().generateRuntimeEntryPoint(ctx);
 			const shared = createSharedViteConfig(options.root);
-			const { createServer } = await import('vite');
+			const { createServer, mergeConfig } = await import('vite');
+			const merged = mergeConfig(shared, options.viteConfig ?? {});
 			const viteServer = await createServer({
-				...shared,
+				...merged,
+				configFile: false,
+				root: options.root,
 				appType: 'custom',
 				logLevel: 'silent',
-				resolve: { preserveSymlinks: true },
-				optimizeDeps: { noDiscovery: true, include: [] },
-				server: { middlewareMode: true, hmr: false, watch: null },
+				resolve: { ...merged.resolve, preserveSymlinks: true },
+				optimizeDeps: { ...merged.optimizeDeps, noDiscovery: true, include: [] },
+				server: {
+					...merged.server,
+					middlewareMode: true,
+					hmr: false,
+				},
 				plugins: [
-					...shared.plugins,
+					...(merged.plugins ?? []),
 					{
 						name: 'flue-node-local-bootstrap',
 						resolveId(id: string) {
@@ -68,21 +81,29 @@ export async function createNodeApplicationLoader(options: {
 					viteGeneratedEntryDependencyResolver(options.root, { external: true }),
 				],
 			});
-			server = viteServer;
 			try {
 				const loaded = (await withScopedConsoleCapture(options.onOutput, () =>
 					viteServer.ssrLoadModule(virtualEntry),
 				)) as {
 					loadFlueNodeApplication(options: object): Promise<LoadedNodeApplication>;
 				};
-				return await loaded.loadFlueNodeApplication({
+				const application = await loaded.loadFlueNodeApplication({
 					local: true,
 					env: { ...process.env, ...options.env },
 					onOutput: options.onOutput,
 					internalDevLogs: options.internalDevLogs,
 				});
+				if (options.onWatchChange) {
+					const onChange = options.onWatchChange;
+					viteServer.watcher.on('all', (_event, filePath) => onChange(filePath));
+				}
+				server = viteServer;
+				try {
+					await previousServer?.close();
+				} catch {}
+				return application;
 			} catch (error) {
-				await close();
+				await viteServer.close();
 				throw error;
 			}
 		},

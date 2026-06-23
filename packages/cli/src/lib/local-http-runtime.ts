@@ -1,10 +1,6 @@
 import { createServer } from 'node:net';
 import * as path from 'node:path';
-import {
-	build,
-	cloudflareViteConfigPath,
-	createCloudflareViteConfig,
-} from './build.ts';
+import { build, cloudflareViteConfigPath, createCloudflareViteConfig } from './build.ts';
 import { createNodeLocalRuntime } from './node-local-runtime.ts';
 import type { BuildOptions } from './types.ts';
 
@@ -41,6 +37,8 @@ export interface StartCloudflareLocalRuntimeOptions {
 	port: number;
 	stopTimeoutMs?: number;
 	watch?: boolean;
+	viteConfig?: import('vite').UserConfig;
+	onWatchChange?: (filePath: string) => void;
 	cloudflareLogLevel?: 'silent' | 'info';
 }
 
@@ -120,9 +118,11 @@ export async function startCloudflareLocalRuntime(
 	const originalNoDeprecation = process.noDeprecation;
 	process.noDeprecation = true;
 	const originalNodeOptions = process.env.NODE_OPTIONS;
-	process.env.NODE_OPTIONS = [originalNodeOptions, '--disable-warning=DEP0040'].filter(Boolean).join(' ');
+	process.env.NODE_OPTIONS = [originalNodeOptions, '--disable-warning=DEP0040']
+		.filter(Boolean)
+		.join(' ');
 	try {
-		const [{ cloudflare }, { createServer }] = await Promise.all([
+		const [{ cloudflare }, { createServer, mergeConfig }] = await Promise.all([
 			import('@cloudflare/vite-plugin'),
 			import('vite'),
 		]);
@@ -131,10 +131,23 @@ export async function startCloudflareLocalRuntime(
 			options.root,
 			cloudflareViteConfigPath(options.root),
 		);
+		const merged = mergeConfig(baseConfig, options.viteConfig ?? {});
+		const watchPlugin = options.onWatchChange
+			? {
+					name: 'flue-dev-watch',
+					configureServer(server: Awaited<ReturnType<typeof createServer>>) {
+						server.watcher.on('all', (_event, filePath) => options.onWatchChange?.(filePath));
+					},
+				}
+			: undefined;
 		const server = await createServer({
-			...baseConfig,
+			...merged,
+			configFile: false,
+			root: options.root,
+			plugins: [...(merged.plugins ?? []), ...(watchPlugin ? [watchPlugin] : [])],
 			logLevel: options.cloudflareLogLevel ?? 'silent',
 			server: {
+				...merged.server,
 				host: '127.0.0.1',
 				port: options.port,
 				strictPort: true,
@@ -147,7 +160,8 @@ export async function startCloudflareLocalRuntime(
 			await closeViteServer(server, options.stopTimeoutMs ?? 5_000).catch(() => {});
 			throw error;
 		}
-		const url = server.resolvedUrls?.local[0]?.replace(/\/$/, '') ?? `http://127.0.0.1:${options.port}`;
+		const url =
+			server.resolvedUrls?.local[0]?.replace(/\/$/, '') ?? `http://127.0.0.1:${options.port}`;
 		let restored = false;
 		const restore = () => {
 			if (restored) return;
@@ -180,7 +194,7 @@ export async function startCloudflareLocalRuntime(
 }
 
 async function closeViteServer(
-	server: Awaited<ReturnType<typeof import('vite')['createServer']>>,
+	server: Awaited<ReturnType<(typeof import('vite'))['createServer']>>,
 	timeoutMs: number,
 ): Promise<void> {
 	const close = server.close();
@@ -206,11 +220,12 @@ function suppressPunycodeDeprecation(): () => void {
 	const original = process.emitWarning;
 	process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
 		const message = warning instanceof Error ? warning.message : String(warning);
-		const code = warning instanceof Error
-			? (warning as Error & { code?: string }).code
-			: typeof args[1] === 'string'
-				? args[1]
-				: undefined;
+		const code =
+			warning instanceof Error
+				? (warning as Error & { code?: string }).code
+				: typeof args[1] === 'string'
+					? args[1]
+					: undefined;
 		if (code === 'DEP0040' || message.includes('`punycode` module is deprecated')) return;
 		return Reflect.apply(original, process, [warning, ...args]);
 	}) as typeof process.emitWarning;

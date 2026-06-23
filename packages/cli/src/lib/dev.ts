@@ -16,18 +16,10 @@ import * as fs from 'node:fs';
 import { createServer } from 'node:net';
 import * as path from 'node:path';
 import createDebug from 'debug';
-import {
-	build,
-	discoverAgents,
-	discoverChannels,
-	discoverWorkflows,
-} from './build.ts';
+import { build, discoverAgents, discoverChannels, discoverWorkflows } from './build.ts';
 import pc from 'picocolors';
 import { createEnvLoader, type EnvLoader, selectEnvFile } from './env.ts';
-import {
-	type LocalHttpRuntime,
-	startCloudflareLocalRuntime,
-} from './local-http-runtime.ts';
+import { type LocalHttpRuntime, startCloudflareLocalRuntime } from './local-http-runtime.ts';
 import { createNodeLocalRuntime, type NodeLocalRuntime } from './node-local-runtime.ts';
 import { devLog, devServerBanner, error, note } from './terminal.ts';
 import type { BuildOptions } from './types.ts';
@@ -55,6 +47,7 @@ export interface DevOptions {
 	envLoader?: EnvLoader;
 	configFiles?: readonly string[];
 	configFile?: string;
+	viteConfig?: import('vite').UserConfig;
 	onReady?: () => void;
 }
 
@@ -106,10 +99,18 @@ export async function dev(options: DevOptions): Promise<void> {
 	const sourceRoot = path.resolve(options.sourceRoot);
 	const output = path.resolve(options.output ?? path.join(root, 'dist'));
 	const requestedPort = options.port ?? DEFAULT_DEV_PORT;
-	const port = options.target === 'node' && options.strictPort !== true
-		? await selectAvailableDevPort(requestedPort)
-		: requestedPort;
-	debugDev('starting target=%s root=%s source=%s output=%s port=%d', options.target, root, sourceRoot, output, port);
+	const port =
+		options.target === 'node' && options.strictPort !== true
+			? await selectAvailableDevPort(requestedPort)
+			: requestedPort;
+	debugDev(
+		'starting target=%s root=%s source=%s output=%s port=%d',
+		options.target,
+		root,
+		sourceRoot,
+		output,
+		port,
+	);
 
 	const envFile = options.envLoader?.file ?? selectEnvFile(options.envFile, root);
 	const envLoader = options.envLoader ?? createEnvLoader(envFile);
@@ -134,13 +135,49 @@ export async function dev(options: DevOptions): Promise<void> {
 		}
 		envLoader.restore();
 	}
-	const reloader: DevReloader =
+	let reloader!: DevReloader;
+	let rebuilder!: Rebuilder;
+	const configFiles = new Set((options.configFiles ?? []).map((file) => path.resolve(file)));
+	const onProjectChange = (filePath: string) => {
+		const absolutePath = path.resolve(filePath);
+		if (absolutePath === envFile || configFiles.has(absolutePath)) return;
+		const outputRelative = path.relative(output, absolutePath);
+		if (!outputRelative.startsWith('../') && !path.isAbsolute(outputRelative)) return;
+		const relPath = path.relative(root, absolutePath).replace(/\\/g, '/');
+		if (!relPath || relPath.startsWith('../') || path.isAbsolute(relPath)) return;
+		if (!reloader.shouldRebuildOn(relPath)) return;
+		devLog(`${pc.dim('changed')} ${relPath}`);
+		rebuilder.schedule();
+	};
+	reloader =
 		options.target === 'node'
-			? new NodeReloader({ root, sourceRoot, port })
-			: new CloudflareReloader({ root, sourceRoot, port });
+			? new NodeReloader({
+					root,
+					sourceRoot,
+					port,
+					viteConfig: options.viteConfig,
+					onProjectChange,
+				})
+			: new CloudflareReloader({
+					root,
+					sourceRoot,
+					port,
+					viteConfig: options.viteConfig,
+					onProjectChange,
+				});
+	const rebuild =
+		options.target === 'cloudflare'
+			? () => envLoader.withApplied(() => build(buildOptions))
+			: async () => ({ changed: true });
+	rebuilder = createRebuilder(reloader, rebuild);
 
 	await reloader.start();
-	debugDev('ready target=%s url=%s duration=%dms', options.target, reloader.url, Date.now() - startedAt);
+	debugDev(
+		'ready target=%s url=%s duration=%dms',
+		options.target,
+		reloader.url,
+		Date.now() - startedAt,
+	);
 
 	if (reloader.url) {
 		devServerBanner(
@@ -157,31 +194,17 @@ export async function dev(options: DevOptions): Promise<void> {
 
 	// ─── Watch loop ──────────────────────────────────────────────────────────
 
-	const rebuild =
-		options.target === 'cloudflare'
-			? () => envLoader.withApplied(() => build(buildOptions))
-			: async () => ({ changed: true });
-	const rebuilder = createRebuilder(reloader, rebuild);
-	const watcher = createWatcher({
-		root,
-		sourceRoot,
-		output,
-		envFile,
-		configFiles: options.configFiles ?? [],
-		onChange: (relPath) => {
-			const isEnvFile = relPath === envFile;
-			if (!isEnvFile && !reloader.shouldRebuildOn(relPath)) return;
-			if (isEnvFile && options.target === 'node') {
-				try {
-					envLoader.apply();
-				} catch (err) {
-					error(`Environment reload failed: ${err instanceof Error ? err.message : String(err)}`);
-					return;
-				}
+	const envWatcher = watchEnvFile(envFile, () => {
+		if (options.target === 'node') {
+			try {
+				envLoader.apply();
+			} catch (err) {
+				error(`Environment reload failed: ${err instanceof Error ? err.message : String(err)}`);
+				return;
 			}
-			devLog(`${pc.dim('changed')} ${relPath}`);
-			rebuilder.schedule(isEnvFile);
-		},
+		}
+		devLog(`${pc.dim('changed')} ${path.relative(root, envFile) || envFile}`);
+		rebuilder.schedule(true);
 	});
 
 	// ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -190,7 +213,7 @@ export async function dev(options: DevOptions): Promise<void> {
 	const shutdown = async (_signal: string, exitCode: number) => {
 		if (shuttingDown) return;
 		shuttingDown = true;
-		watcher.close();
+		envWatcher?.close();
 		try {
 			await reloader.stop();
 		} catch (err) {
@@ -297,116 +320,16 @@ function createRebuilder(
 
 // ─── Watcher ────────────────────────────────────────────────────────────────
 
-interface WatcherOptions {
-	root: string;
-	sourceRoot: string;
-	/**
-	 * Absolute path to the build output directory. Anything inside this
-	 * directory is ignored by the watcher — otherwise build writes would
-	 * trigger spurious rebuilds (and an infinite loop).
-	 */
-	output: string;
-	/** Absolute path of the selected env file to watch. */
-	envFile: string;
-	configFiles: readonly string[];
-	onChange: (relPath: string) => void;
-}
-
-interface WatcherHandle {
-	close(): void;
-}
-
-/**
- * Watch the root for changes. Uses `fs.watch` recursive (Node 20+).
- *
- * Watched roots:
- *   - `<root>` — authored source and any project-local modules it imports,
- *     plus project configuration files, including Wrangler configuration.
- *
- * Ignored:
- *   - The build output directory (`output`, defaults to `<root>/dist`).
- *     Critical to break the build → file-change → rebuild loop.
- *   - `node_modules/`
- *   - Dotfiles and dot-directories (any path segment starting with `.`),
- *     with one exception: `.flue/` is allowed through only when it is the
- *     selected source directory.
- *   - Editor backup/swap suffixes
- */
-function createWatcher(options: WatcherOptions): WatcherHandle {
-	const { root, sourceRoot, output, envFile, configFiles, onChange } = options;
-	const watchers: fs.FSWatcher[] = [];
-	const watchesDotFlue = sourceRoot === path.join(root, '.flue');
-	const ignoredConfigFiles = new Set(configFiles.map((file) => path.resolve(file)));
-
-	// Pre-compute the root-relative path of output for fast prefix
-	// checks. If output lives outside root, the recursive watcher
-	// won't see writes there at all — but we still ignore any path that
-	// resolves into it, just to be safe across platforms.
-	const outputRelToRoot = path.relative(root, output).split(path.sep).join('/');
-
-	const isIgnoredPath = (relPath: string): boolean => {
-		const normalized = relPath.replace(/\\/g, '/');
-		if (ignoredConfigFiles.has(path.resolve(root, relPath))) return true;
-		if (watchesDotFlue && (normalized === '.flue' || normalized.startsWith('.flue/'))) {
-			return false;
-		}
-		// Anything inside the build output dir — even when the user redirects
-		// it via --output to something other than `dist/` — must be ignored,
-		// or the build's own writes would trigger an infinite rebuild loop.
-		if (
-			outputRelToRoot &&
-			!outputRelToRoot.startsWith('..') &&
-			(normalized === outputRelToRoot || normalized.startsWith(`${outputRelToRoot}/`))
-		) {
-			return true;
-		}
-		const parts = normalized.split('/');
-		for (const part of parts) {
-			if (part === 'node_modules') return true;
-			if (part.startsWith('.')) return true;
-		}
-		const base = parts[parts.length - 1] ?? '';
-		if (!base) return true;
-		if (base.endsWith('~') || base.endsWith('.swp') || base.endsWith('.swx')) return true;
-		return false;
-	};
-
-	try {
-		const w = fs.watch(root, { recursive: true }, (event, filename) => {
-			if (!filename) return;
-			const rel = filename.toString();
-			if (isIgnoredPath(rel)) {
-				debugWatch('ignored event=%s path=%s', event, rel);
-				return;
-			}
-			debugWatch('changed event=%s path=%s', event, rel);
-			onChange(rel);
-		});
-		watchers.push(w);
-	} catch (err) {
-		error(`Failed to watch ${root}: ${err instanceof Error ? err.message : String(err)}`);
-	}
-
+function watchEnvFile(envFile: string, onChange: () => void): fs.FSWatcher | undefined {
 	try {
 		const envDirectory = path.dirname(envFile);
 		const envBasename = path.basename(envFile);
-		const w = fs.watch(envDirectory, (_event, filename) => {
-			if (filename?.toString() === envBasename) onChange(envFile);
+		return fs.watch(envDirectory, (_event, filename) => {
+			if (filename?.toString() === envBasename) onChange();
 		});
-		watchers.push(w);
-	} catch {}
-
-	return {
-		close() {
-			for (const w of watchers) {
-				try {
-					w.close();
-				} catch {
-					// ignore
-				}
-			}
-		},
-	};
+	} catch {
+		return undefined;
+	}
 }
 
 // ─── Node reloader ──────────────────────────────────────────────────────────
@@ -416,12 +339,22 @@ class NodeReloader implements DevReloader {
 	private readonly root: string;
 	private readonly sourceRoot: string;
 	private readonly port: number;
+	private readonly viteConfig: import('vite').UserConfig | undefined;
+	private readonly onProjectChange: (filePath: string) => void;
 	url: string;
 
-	constructor(opts: { root: string; sourceRoot: string; port: number }) {
+	constructor(opts: {
+		root: string;
+		sourceRoot: string;
+		port: number;
+		viteConfig?: import('vite').UserConfig;
+		onProjectChange: (filePath: string) => void;
+	}) {
 		this.root = opts.root;
 		this.sourceRoot = opts.sourceRoot;
 		this.port = opts.port;
+		this.viteConfig = opts.viteConfig;
+		this.onProjectChange = opts.onProjectChange;
 		this.url = `http://localhost:${this.port}`;
 	}
 
@@ -434,6 +367,8 @@ class NodeReloader implements DevReloader {
 			temporaryLocalExposure: false,
 			env: process.env,
 			internalDevLogs: true,
+			viteConfig: this.viteConfig,
+			onWatchChange: this.onProjectChange,
 			onOutput: ({ line }) => this.renderLine(line),
 		});
 		await this.runtime.start();
@@ -468,8 +403,14 @@ class NodeReloader implements DevReloader {
 		) {
 			return;
 		}
-		if (line.includes('ExperimentalWarning: SQLite is an experimental feature and might change at any time')) return;
-		if (line.trim() === '(Use `node --trace-warnings ...` to show where the warning was created)') return;
+		if (
+			line.includes(
+				'ExperimentalWarning: SQLite is an experimental feature and might change at any time',
+			)
+		)
+			return;
+		if (line.trim() === '(Use `node --trace-warnings ...` to show where the warning was created)')
+			return;
 		const lifecycle = line.match(/^(\[(?:agent|workflow)\]\s+)(\S+@\S+)(.*)$/);
 		devLog(lifecycle ? `${lifecycle[1]}${pc.blue(lifecycle[2] ?? '')}${lifecycle[3]}` : line);
 	}
@@ -482,12 +423,22 @@ class CloudflareReloader implements DevReloader {
 	private readonly root: string;
 	private readonly sourceRoot: string;
 	private readonly port: number;
+	private readonly viteConfig: import('vite').UserConfig | undefined;
+	private readonly onProjectChange: (filePath: string) => void;
 	url?: string;
 
-	constructor(opts: { root: string; sourceRoot: string; port: number }) {
+	constructor(opts: {
+		root: string;
+		sourceRoot: string;
+		port: number;
+		viteConfig?: import('vite').UserConfig;
+		onProjectChange: (filePath: string) => void;
+	}) {
 		this.root = opts.root;
 		this.sourceRoot = opts.sourceRoot;
 		this.port = opts.port;
+		this.viteConfig = opts.viteConfig;
+		this.onProjectChange = opts.onProjectChange;
 	}
 
 	async start(): Promise<void> {
@@ -495,6 +446,8 @@ class CloudflareReloader implements DevReloader {
 			root: this.root,
 			port: this.port,
 			watch: true,
+			viteConfig: this.viteConfig,
+			onWatchChange: this.onProjectChange,
 			cloudflareLogLevel: 'info',
 		});
 		this.runtime = { target: 'cloudflare', ...started };

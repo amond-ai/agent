@@ -60,7 +60,10 @@ test('restarts after discovered config changes and recovers after invalid config
 		assert.doesNotMatch(dev.logs(), /flue connect|➜/);
 		assert.equal(fs.existsSync(path.join(root, 'dist-one', 'server.mjs')), false);
 
-		fs.writeFileSync(path.join(root, 'agents', 'support.mjs'), `import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: false }));\n`);
+		fs.writeFileSync(
+			path.join(root, 'agents', 'support.mjs'),
+			`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: false }));\n`,
+		);
 		await dev.waitForLog('changed agents/support.mjs');
 		await dev.waitForLog('reloaded in');
 		assert.match(dev.logs(), /\d{2}:\d{2}:\d{2} changed agents\/support\.mjs/);
@@ -86,6 +89,31 @@ test('restarts after discovered config changes and recovers after invalid config
 		await dev.waitForLog('flue.config.ts changed; restarting');
 		await dev.waitForLog(`http://localhost:${port}`, 2);
 		await waitForServer(port);
+	} finally {
+		await dev.stop();
+	}
+});
+
+test('ignores paths configured through the Vite watcher', async () => {
+	const root = createFixtureRoot();
+	const port = await getAvailablePort();
+	writeWorkflow(root);
+	fs.writeFileSync(
+		path.join(root, 'flue.config.mjs'),
+		`export default { target: 'node' };\nexport const vite = { server: { watch: { ignored: ['**/evals/results/**'] } } };\n`,
+	);
+	fs.mkdirSync(path.join(root, 'evals', 'results'), { recursive: true });
+
+	const dev = startDev(root, ['--port', String(port)]);
+	try {
+		await waitForServer(port, dev.logs);
+		fs.writeFileSync(path.join(root, 'evals', 'results', 'output.json'), '{}');
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		assert.doesNotMatch(dev.logs(), /changed evals\/results\/output\.json/);
+
+		fs.appendFileSync(path.join(root, 'workflows', 'smoke.mjs'), '\n');
+		await dev.waitForLog('changed workflows/smoke.mjs');
+		await dev.waitForLog('reloaded in');
 	} finally {
 		await dev.stop();
 	}
@@ -254,11 +282,14 @@ function startDev(cwd, args, env = {}) {
 
 async function waitForSelectedPort(logs) {
 	let selected;
-	await waitFor(() => {
-		const match = logs().match(/http:\/\/localhost:(\d+)/);
-		selected = match ? Number(match[1]) : undefined;
-		return selected !== undefined;
-	}, () => `Timed out waiting for selected dev port\n\n${logs()}`);
+	await waitFor(
+		() => {
+			const match = logs().match(/http:\/\/localhost:(\d+)/);
+			selected = match ? Number(match[1]) : undefined;
+			return selected !== undefined;
+		},
+		() => `Timed out waiting for selected dev port\n\n${logs()}`,
+	);
 	return selected;
 }
 

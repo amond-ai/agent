@@ -1,5 +1,8 @@
 import { resetProviderRuntime } from '@flue/runtime/internal';
-import { createNodeApplicationLoader, type NodeApplicationLoader } from './node-application-loader.ts';
+import {
+	createNodeApplicationLoader,
+	type NodeApplicationLoader,
+} from './node-application-loader.ts';
 import { createStableNodeListener, type LoadedNodeApplication } from './node-http-listener.ts';
 import type { LocalHttpRuntimeOutput } from './local-http-runtime.ts';
 
@@ -22,10 +25,14 @@ interface NodeLocalRuntimeOptions {
 	onOutput?: (output: LocalHttpRuntimeOutput) => void;
 	internalDevLogs?: boolean;
 	reloadTimeoutMs?: number;
+	viteConfig?: import('vite').UserConfig;
+	onWatchChange?: (filePath: string) => void;
 	createLoader?: () => Promise<NodeApplicationLoader>;
 }
 
-export async function createNodeLocalRuntime(options: NodeLocalRuntimeOptions): Promise<NodeLocalRuntime> {
+export async function createNodeLocalRuntime(
+	options: NodeLocalRuntimeOptions,
+): Promise<NodeLocalRuntime> {
 	const listener = createStableNodeListener({ port: options.port, hostname: options.hostname });
 	let loader: NodeApplicationLoader | undefined;
 	let application: LoadedNodeApplication | undefined;
@@ -134,7 +141,8 @@ export async function createNodeLocalRuntime(options: NodeLocalRuntimeOptions): 
 					errors.push(error);
 				}
 				if (errors.length === 1) throw errors[0];
-				if (errors.length > 1) throw new AggregateError(errors, 'Node local runtime shutdown failed.');
+				if (errors.length > 1)
+					throw new AggregateError(errors, 'Node local runtime shutdown failed.');
 			});
 			return stopPromise;
 		},
@@ -152,7 +160,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 		return await Promise.race([
 			promise,
 			new Promise<never>((_, reject) => {
-				timer = setTimeout(() => reject(new Error(`Runtime drain timed out after ${timeoutMs}ms.`)), timeoutMs);
+				timer = setTimeout(
+					() => reject(new Error(`Runtime drain timed out after ${timeoutMs}ms.`)),
+					timeoutMs,
+				);
 			}),
 		]);
 	} finally {

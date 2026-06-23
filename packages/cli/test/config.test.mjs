@@ -68,6 +68,18 @@ describe('resolveConfig()', () => {
 			await assert.rejects(resolveConfig({ cwd: root }), /Invalid config/);
 		});
 
+		it('loads a named Vite config export', async () => {
+			const root = createFixtureRoot();
+			fs.writeFileSync(
+				path.join(root, 'flue.config.mjs'),
+				`export default { target: 'node' };\nexport const vite = { server: { watch: { ignored: ['**/evals/results/**'] } } };\n`,
+			);
+
+			const { viteConfig } = await resolveConfig({ cwd: root });
+
+			assert.deepEqual(viteConfig.server?.watch?.ignored, ['**/evals/results/**']);
+		});
+
 		it('rejects an empty output path', async () => {
 			const root = createFixtureRoot();
 			await assert.rejects(
@@ -194,7 +206,13 @@ describe('flue run', () => {
 		);
 		const child = spawn(
 			process.execPath,
-			[cli.pathname, 'run', 'inspect-input', '--input', '{"value":"diskless","nested":{"count":1}}'],
+			[
+				cli.pathname,
+				'run',
+				'inspect-input',
+				'--input',
+				'{"value":"diskless","nested":{"count":1}}',
+			],
 			{ cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
 		);
 		let stderr = '';
