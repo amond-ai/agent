@@ -110,13 +110,13 @@ export type LlmMessage = LlmUserMessage | LlmAssistantMessage | LlmToolResultMes
 /** Purpose of a model turn emitted with model-turn events. */
 export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
 
-export type LlmTool = {
+type LlmTool = {
 	name: string;
 	description: string;
 	parameters: unknown;
 };
 
-export interface FlueErrorInfo {
+interface FlueErrorInfo {
 	type: string;
 	name?: string;
 	code?: string;
