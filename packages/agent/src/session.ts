@@ -421,13 +421,15 @@ function wrapProviderStream<T extends AsyncIterable<unknown> & { result(): Promi
 	return {
 		[Symbol.asyncIterator]() {
 			const iterator = stream[Symbol.asyncIterator]();
+			const returnIterator = iterator.return?.bind(iterator);
+			const throwIterator = iterator.throw?.bind(iterator);
 			return {
 				next: () => interceptExecution(operation, executionContext, () => iterator.next()),
-				return: iterator.return
-					? () => interceptExecution(operation, executionContext, () => iterator.return!())
+				return: returnIterator
+					? () => interceptExecution(operation, executionContext, returnIterator)
 					: undefined,
-				throw: iterator.throw
-					? (error: unknown) => interceptExecution(operation, executionContext, () => iterator.throw!(error))
+				throw: throwIterator
+					? (error: unknown) => interceptExecution(operation, executionContext, () => throwIterator(error))
 					: undefined,
 			};
 		},

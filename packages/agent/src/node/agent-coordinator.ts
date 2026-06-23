@@ -19,7 +19,6 @@ import { agentStreamPath } from '../runtime/event-stream-store.ts';
 import type { CreateAgentContextFn } from '../runtime/handle-agent.ts';
 import type { RuntimeActivityGate, RuntimeActivityLease } from '../runtime/runtime-activity-gate.ts';
 import { isStreamExcludedEvent } from '../runtime/run-store.ts';
-import { extractTraceCarrier } from '../execution-interceptor.ts';
 import { assertProductEventV3 } from '../product-event.ts';
 import { deleteSessionTree } from '../session.ts';
 import type {

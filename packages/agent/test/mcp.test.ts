@@ -14,6 +14,20 @@ import { connectMcpServerWithClient } from '../src/mcp.ts';
 import { getPreparedToolAdapter } from '../src/tool-adapter.ts';
 import { createNoopSessionEnv } from './fixtures/session-env.ts';
 
+function firstTool<T>(tools: readonly T[]): T {
+	const tool = tools[0];
+	expect(tool).toBeDefined();
+	if (!tool) throw new Error('Expected an MCP tool.');
+	return tool;
+}
+
+function firstPreparedTool(tools: readonly Parameters<typeof getPreparedToolAdapter>[0][]) {
+	const adapter = getPreparedToolAdapter(firstTool(tools));
+	expect(adapter).toBeDefined();
+	if (!adapter) throw new Error('Expected a prepared MCP tool.');
+	return adapter;
+}
+
 const transport = {} as Transport;
 const mcp = {
 	connectError: undefined as Error | undefined,
@@ -73,7 +87,7 @@ describe('connectMcpServerWithClient()', () => {
 				run: expect.any(Function),
 			}),
 		]);
-		expect(getPreparedToolAdapter(connection.tools[0]!)).toMatchObject({
+		expect(firstPreparedTool(connection.tools)).toMatchObject({
 			parameters: {
 				type: 'object',
 				properties: { query: { type: 'string' } },
@@ -196,7 +210,7 @@ describe('connectMcpServerWithClient()', () => {
 
 		const connection = await connectMcpServerWithClient('cache', mcp.client, transport);
 
-		expect(getPreparedToolAdapter(connection.tools[0]!)?.parameters).toEqual({
+		expect(firstPreparedTool(connection.tools).parameters).toEqual({
 			type: 'object',
 			properties: {},
 			required: undefined,
@@ -220,7 +234,7 @@ describe('connectMcpServerWithClient()', () => {
 		const controller = new AbortController();
 		const connection = await connectMcpServerWithClient('catalog', mcp.client, transport);
 
-		await getPreparedToolAdapter(connection.tools[0]!)?.execute({ query: 'flue' }, controller.signal);
+		await firstPreparedTool(connection.tools).execute({ query: 'flue' }, controller.signal);
 
 		expect(mcp.client.callTool).toHaveBeenCalledWith(
 			{
@@ -246,7 +260,7 @@ describe('connectMcpServerWithClient()', () => {
 			resetTimeoutOnProgress: true,
 		});
 
-		await getPreparedToolAdapter(connection.tools[0]!)?.execute({});
+		await firstPreparedTool(connection.tools).execute({});
 
 		expect(mcp.client.listTools).toHaveBeenCalledWith(undefined, {
 			timeout: 120_000,
@@ -278,9 +292,10 @@ describe('connectMcpServerWithClient()', () => {
 		};
 		mcp.callToolResult = { content: [{ type: 'text', text: 'Found through MCP.' }] };
 		const connection = await connectMcpServerWithClient('catalog', mcp.client, transport);
+		const tool = firstTool(connection.tools);
 		const decoratedTool = {
-			...connection.tools[0]!,
-			description: `${connection.tools[0]!.description} Decorated.`,
+			...tool,
+			description: `${tool.description} Decorated.`,
 		};
 		const provider = registerFauxProvider({ provider: `mcp-test-${crypto.randomUUID()}` });
 		let providerSchema: unknown;
@@ -357,7 +372,7 @@ describe('connectMcpServerWithClient()', () => {
 		};
 		const connection = await connectMcpServerWithClient('catalog', mcp.client, transport);
 
-		const result = await getPreparedToolAdapter(connection.tools[0]!)?.execute({});
+		const result = await firstPreparedTool(connection.tools).execute({});
 
 		expect(result).toContain('"count": 2');
 		expect(result).toContain('Inspection complete.');
@@ -394,7 +409,7 @@ describe('connectMcpServerWithClient()', () => {
 		mcp.callToolResult = { content: [], structuredContent: { count: 'two' } };
 		const connection = await connectMcpServerWithClient('catalog', mcp.client, transport);
 
-		await expect(getPreparedToolAdapter(connection.tools[0]!)?.execute({})).rejects.toThrow(
+		await expect(firstPreparedTool(connection.tools).execute({})).rejects.toThrow(
 			"Structured content does not match the tool's output schema:",
 		);
 	});
@@ -418,7 +433,7 @@ describe('connectMcpServerWithClient()', () => {
 		mcp.callToolResult = { content: [] };
 		const connection = await connectMcpServerWithClient('catalog', mcp.client, transport);
 
-		await expect(getPreparedToolAdapter(connection.tools[0]!)?.execute({})).rejects.toThrow(
+		await expect(firstPreparedTool(connection.tools).execute({})).rejects.toThrow(
 			'Tool lookup has an output schema but did not return structured content',
 		);
 	});
@@ -459,7 +474,7 @@ describe('connectMcpServerWithClient()', () => {
 		};
 		const connection = await connectMcpServerWithClient('catalog', mcp.client, transport);
 
-		await expect(getPreparedToolAdapter(connection.tools[0]!)?.execute({})).rejects.toThrow('Catalog unavailable.');
+		await expect(firstPreparedTool(connection.tools).execute({})).rejects.toThrow('Catalog unavailable.');
 	});
 
 	it('closes the MCP client when connection setup fails', async () => {
@@ -492,7 +507,7 @@ describe('connectMcpServer()', () => {
 			});
 
 			expect(connection.tools.map((tool) => tool.name)).toEqual(['mcp__catalog__lookup']);
-			await expect(getPreparedToolAdapter(connection.tools[0]!)?.execute({})).resolves.toBe('Found.');
+			await expect(firstPreparedTool(connection.tools).execute({})).resolves.toBe('Found.');
 			expect(
 				local.requests.some(
 					(request) => request.headers.get('mcp-session-id') === 'fixture-session',

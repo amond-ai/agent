@@ -919,19 +919,19 @@ export type LlmTool = {
 
 export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
 
-export interface FlueErrorInfo {
+interface FlueErrorInfo {
 	type: string;
 	name?: string;
 	code?: string;
 	message?: string;
 }
 
-export interface AgentInvocationInput {
+interface AgentInvocationInput {
 	text: string;
 	images?: Array<{ mimeType: string }>;
 }
 
-export type AgentInvocationOutput =
+type AgentInvocationOutput =
 	| { type: 'text'; text: string; finishReason: string }
 	| { type: 'data'; data: unknown };
 
@@ -979,8 +979,8 @@ export interface ModelResponse {
 	error?: FlueErrorInfo;
 }
 
-export type ToolOrigin = 'model' | 'caller' | 'framework' | 'adapter';
-export type ToolSemanticType = 'function' | 'extension' | 'datastore';
+type ToolOrigin = 'model' | 'caller' | 'framework' | 'adapter';
+type ToolSemanticType = 'function' | 'extension' | 'datastore';
 
 type FlueEventVariant =
 	| {

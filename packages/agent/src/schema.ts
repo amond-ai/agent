@@ -13,7 +13,7 @@ export type ReadonlyJsonSchema = Readonly<Record<string, ReadonlyJsonValue>>;
 
 const jsonSchemas = new WeakMap<object, ReadonlyJsonSchema>();
 
-export function isStandardSchema(value: unknown): value is object & { '~standard': object } {
+function isStandardSchema(value: unknown): value is object & { '~standard': object } {
 	if (!value || typeof value !== 'object') return false;
 	const marker = (value as { '~standard'?: unknown })['~standard'];
 	return typeof marker === 'object' && marker !== null;

@@ -586,14 +586,15 @@ async function generateSummary(
 
 	const context = { systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages };
 	const handle = observer?.start('compaction', model, context, completionOptions);
+	const observed = observer && handle ? { observer, handle } : undefined;
 	let response: AssistantMessage | undefined;
 	try {
-		response = handle
-			? await observer!.run(handle, () => completeSimple(model, context, completionOptions))
+		response = observed
+			? await observed.observer.run(observed.handle, () => completeSimple(model, context, completionOptions))
 			: await completeSimple(model, context, completionOptions);
-		if (handle) observer?.end('compaction', handle, model, response, undefined);
+		observed?.observer.end('compaction', observed.handle, model, response, undefined);
 	} catch (error) {
-		if (handle) observer?.end('compaction', handle, model, undefined, error);
+		observed?.observer.end('compaction', observed.handle, model, undefined, error);
 		throw error;
 	}
 
@@ -630,14 +631,15 @@ async function generateTurnPrefixSummary(
 
 	const context = { systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages };
 	const handle = observer?.start('compaction_prefix', model, context, completionOptions);
+	const observed = observer && handle ? { observer, handle } : undefined;
 	let response: AssistantMessage | undefined;
 	try {
-		response = handle
-			? await observer!.run(handle, () => completeSimple(model, context, completionOptions))
+		response = observed
+			? await observed.observer.run(observed.handle, () => completeSimple(model, context, completionOptions))
 			: await completeSimple(model, context, completionOptions);
-		if (handle) observer?.end('compaction_prefix', handle, model, response, undefined);
+		observed?.observer.end('compaction_prefix', observed.handle, model, response, undefined);
 	} catch (error) {
-		if (handle) observer?.end('compaction_prefix', handle, model, undefined, error);
+		observed?.observer.end('compaction_prefix', observed.handle, model, undefined, error);
 		throw error;
 	}
 

@@ -747,7 +747,7 @@ describe('custom tools', () => {
 		const store = new RecordingSessionStore();
 		provider.setResponses([
 			fauxAssistantMessage(fauxToolCall('lookup', { query: 'flue' }), { stopReason: 'toolUse' }),
-			(context) => {
+			() => {
 				const data = [...store.records.values()][0];
 				expect(data?.entries).toEqual([
 					expect.objectContaining({ message: expect.objectContaining({ role: 'user' }) }),
