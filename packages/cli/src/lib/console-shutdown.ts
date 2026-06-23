@@ -1,4 +1,3 @@
-import type { ConsoleController } from './console-controller.ts';
 import type { ExecutionLifecycle } from './execution-lifecycle.ts';
 
 const EXECUTION_SHUTDOWN_TIMEOUT_MS = 5000;
@@ -8,12 +7,7 @@ export interface BoundedShutdownOptions {
 	forceCloseSync(): void;
 	exitCode: number;
 	timeoutMs?: number;
-	beforeTerminate?: () => void;
 	terminate?: (code: number) => unknown;
-}
-
-export function consoleSignalExitCode(signal: NodeJS.Signals): 130 | 143 {
-	return signal === 'SIGINT' ? 130 : 143;
 }
 
 export async function boundedShutdown(options: BoundedShutdownOptions): Promise<void> {
@@ -36,29 +30,8 @@ export async function boundedShutdown(options: BoundedShutdownOptions): Promise<
 		if (timer) clearTimeout(timer);
 		if (timedOut) {
 			options.forceCloseSync();
-			options.beforeTerminate?.();
 			(options.terminate ?? process.exit)(options.exitCode);
 		}
-	}
-}
-
-export async function closeConsoleForSignal(
-	signal: NodeJS.Signals,
-	controller: ConsoleController,
-	closeUi: () => void,
-	terminate?: (code: number) => unknown,
-): Promise<void> {
-	const exitCode = consoleSignalExitCode(signal);
-	try {
-		await boundedShutdown({
-			close: () => controller.close(),
-			forceCloseSync: () => controller.forceCloseSync(),
-			exitCode,
-			beforeTerminate: closeUi,
-			terminate,
-		});
-	} finally {
-		closeUi();
 	}
 }
 
@@ -67,7 +40,7 @@ export function closeExecutionForSignal(
 	lifecycle: ExecutionLifecycle,
 	terminate?: (code: number) => unknown,
 ): Promise<void> {
-	const exitCode = consoleSignalExitCode(signal);
+	const exitCode = signal === 'SIGINT' ? 130 : 143;
 	lifecycle.cancel();
 	return boundedShutdown({
 		close: () => lifecycle.close(),
