@@ -266,7 +266,7 @@ function reduceThinkingEnd(
 
 function reduceToolStart(
 	state: AgentState,
-	event: StreamAgentEvent & { toolName: string; toolCallId: string; args?: unknown },
+	event: StreamAgentEvent & { toolName: string; toolCallId: string },
 ): AgentState {
 	let messages = state.messages;
 	let index = findToolMessage(messages, event.toolCallId);
@@ -292,7 +292,7 @@ function reduceToolStart(
 								type: 'dynamic-tool',
 								toolName: event.toolName,
 								toolCallId: part.toolCallId,
-								input: event.args ?? part.input,
+								input: part.input,
 								state: 'input-available',
 							}
 						: part,
@@ -304,7 +304,7 @@ function reduceToolStart(
 					toolName: event.toolName,
 					toolCallId: event.toolCallId,
 					state: 'input-available' as const,
-					input: event.args,
+					input: undefined,
 				},
 			];
 	return replaceMessageAt({ ...state, messages }, index, { ...current, parts });
@@ -379,16 +379,19 @@ function snapshotMessage(
 		}
 		if (block.type === 'toolCall') {
 			const prior = previous?.parts.find(
-				(part) => part.type === 'dynamic-tool' && part.toolCallId === block.id,
+				(part): part is Extract<UIMessagePart, { type: 'dynamic-tool' }> =>
+					part.type === 'dynamic-tool' && part.toolCallId === block.id,
 			);
 			parts.push(
-				prior ?? {
-					type: 'dynamic-tool',
-					toolName: block.name,
-					toolCallId: block.id,
-					state: 'input-available',
-					input: block.arguments,
-				},
+				prior
+					? { ...prior, toolName: block.name, input: block.arguments }
+					: {
+							type: 'dynamic-tool',
+							toolName: block.name,
+							toolCallId: block.id,
+							state: 'input-available',
+							input: block.arguments,
+						},
 			);
 		}
 		if (block.type === 'image') {

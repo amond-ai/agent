@@ -107,7 +107,6 @@ describe('reduceAgentEvent()', () => {
 				type: 'tool_start',
 				toolName: 'search',
 				toolCallId: 'tool-1',
-				args: { q: 'flue' },
 				eventIndex: 5,
 				submissionId: 'submission-1',
 				turnId: 'turn-1',
@@ -125,7 +124,7 @@ describe('reduceAgentEvent()', () => {
 				toolName: 'search',
 				toolCallId: 'tool-1',
 				state: 'input-available',
-				input: { q: 'flue' },
+				input: undefined,
 			},
 		]);
 	});
@@ -198,7 +197,6 @@ describe('reduceAgentEvent()', () => {
 			type: 'tool_start',
 			toolName: 'search',
 			toolCallId: 'tool-1',
-			args: { q: 'flue' },
 			eventIndex: 20,
 			turnId: 'turn-9',
 		});
@@ -214,7 +212,7 @@ describe('reduceAgentEvent()', () => {
 						toolName: 'search',
 						toolCallId: 'tool-1',
 						state: 'input-available',
-						input: { q: 'flue' },
+						input: undefined,
 					},
 				],
 			},
@@ -227,7 +225,6 @@ describe('reduceAgentEvent()', () => {
 			type: 'tool_start',
 			toolName: 'search',
 			toolCallId: 'tool-1',
-			args: { q: 'flue' },
 			eventIndex: 20,
 			turnId: 'turn-9',
 		});
@@ -276,7 +273,6 @@ describe('reduceAgentEvent()', () => {
 			type: 'tool_start',
 			toolName: 'search',
 			toolCallId: 'tool-1',
-			args: { q: 'flue' },
 			eventIndex: 2,
 			turnId: 'turn-1',
 		});
