@@ -20,6 +20,12 @@ interface NodeLocalRuntimeOptions {
 	sourceRoot: string;
 	port: number;
 	temporaryLocalExposure: boolean;
+	/**
+	 * Reflect the request Origin for separate-origin SPAs. Local dev only; kept
+	 * independent of `temporaryLocalExposure` so enabling dev CORS never also
+	 * exposes route-free resources (which would diverge dev routing from prod).
+	 */
+	cors: boolean;
 	hostname?: string;
 	env?: NodeJS.ProcessEnv;
 	onOutput?: (output: LocalHttpRuntimeOutput) => void;
@@ -38,7 +44,7 @@ export async function createNodeLocalRuntime(
 		hostname: options.hostname,
 		// Reflect Origin for separate-origin SPAs in local dev only. Deployed
 		// node servers keep CORS as an explicit application concern.
-		cors: options.temporaryLocalExposure,
+		cors: options.cors,
 	});
 	let loader: NodeApplicationLoader | undefined;
 	let application: LoadedNodeApplication | undefined;

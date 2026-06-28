@@ -30,6 +30,7 @@ describe('NodeLocalRuntime', () => {
 			sourceRoot: '/fixture',
 			port: 0,
 			temporaryLocalExposure: false,
+			cors: false,
 			createLoader: async () => loader,
 		});
 		runtimes.push(runtime);
@@ -71,6 +72,7 @@ describe('NodeLocalRuntime', () => {
 			sourceRoot: '/fixture',
 			port: 0,
 			temporaryLocalExposure: false,
+			cors: false,
 			createLoader: async () => loader,
 		});
 		runtimes.push(runtime);

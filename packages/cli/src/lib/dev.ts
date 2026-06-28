@@ -334,7 +334,11 @@ class NodeReloader implements DevReloader {
 			root: this.root,
 			sourceRoot: this.sourceRoot,
 			port: this.port,
+			// `flue dev` mirrors production routing (only resources that export a
+			// `route` are served), but enables CORS so a separate-origin SPA can
+			// call the dev server during local development.
 			temporaryLocalExposure: false,
+			cors: true,
 			env: process.env,
 			internalDevLogs: true,
 			viteConfig: this.viteConfig,

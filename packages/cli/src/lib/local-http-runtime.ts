@@ -90,6 +90,7 @@ async function startInMemoryNodeRuntime(
 		sourceRoot: options.sourceRoot,
 		port: options.port,
 		temporaryLocalExposure: true,
+		cors: true,
 		hostname: '127.0.0.1',
 		env: options.env,
 		onOutput: options.onOutput,
