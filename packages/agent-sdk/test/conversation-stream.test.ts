@@ -47,6 +47,18 @@ describe('applyConversationChunk()', () => {
 		expect(conversation.messages[0]?.parts[0]).toEqual({ type: 'text', text: 'hello', state: 'done' });
 	});
 
+	it('ignores a redelivered delta after the assistant message has completed', () => {
+		const conversation = reduce([
+			{ type: 'message-started', conversationId: 'c1', messageId: 'a1' },
+			{ type: 'message-delta', conversationId: 'c1', messageId: 'a1', kind: 'text', delta: 'hello' },
+			{ type: 'message-completed', conversationId: 'c1', messageId: 'a1' },
+			{ type: 'message-started', conversationId: 'c1', messageId: 'a1' },
+			{ type: 'message-delta', conversationId: 'c1', messageId: 'a1', kind: 'text', delta: 'hello' },
+			{ type: 'message-completed', conversationId: 'c1', messageId: 'a1' },
+		]);
+		expect(conversation.messages[0]?.parts).toEqual([{ type: 'text', text: 'hello', state: 'done' }]);
+	});
+
 	it('opens a new part when the delta kind changes from reasoning to text', () => {
 		const conversation = reduce([
 			{ type: 'message-started', conversationId: 'c1', messageId: 'a1' },

@@ -208,6 +208,21 @@ function appendDelta(
 		if (index < 0) return messages;
 		const message = messages[index] as FlueConversationMessage;
 		const last = message.parts[message.parts.length - 1];
+		// A finalized text/reasoning block is terminal. A trailing `done`
+		// text/reasoning part is only reachable through `message-completed`
+		// (mid-stream the trailing block is always `streaming`, or a tool/kind
+		// boundary makes the last part a tool or a fresh streaming part), so a
+		// delta arriving against it is a post-completion redelivery. The live
+		// transport applies each delta exactly once (see observe.ts), so this
+		// never fires on a healthy connection; ignoring it keeps a redelivered
+		// batch from appending a duplicate completed part. Batch-level
+		// exactly-once delivery remains the transport's contract — the
+		// append protocol is intentionally not delta-idempotent before
+		// completion, where a legitimate repeat is indistinguishable from a
+		// replay.
+		if (last && (last.type === 'text' || last.type === 'reasoning') && last.state === 'done') {
+			return messages;
+		}
 		const parts = [...message.parts];
 		if (last && last.type === chunk.kind && last.state === 'streaming') {
 			parts[parts.length - 1] = { ...last, text: last.text + chunk.delta };
