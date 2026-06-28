@@ -71,7 +71,7 @@ export type AgentReducerEvent =
 	| {
 			type: 'local_observation';
 			conversation: FlueConversationState | undefined;
-			phase: 'loading' | 'connecting' | 'live' | 'up-to-date' | 'absent' | 'error' | 'closed';
+			phase: 'loading' | 'connecting' | 'live' | 'absent' | 'error' | 'closed';
 			error?: Error;
 	  };
 

@@ -73,34 +73,6 @@ describe('AgentSession', () => {
 		expect(observation.close).toHaveBeenCalled();
 	});
 
-	it('forwards a finite live mode and settles to idle once up-to-date', () => {
-		const observation = createFakeObservation();
-		const observe = vi.fn().mockReturnValue(observation);
-		const session = new AgentSession(
-			client({ agents: { observe } as unknown as FlueClient['agents'] }),
-			'agent',
-			'id',
-			false,
-		);
-
-		session.start();
-		expect(observe).toHaveBeenCalledWith('agent', 'id', { live: false });
-
-		observation.emit({
-			conversation: conversation(),
-			offset: 'offset-final',
-			phase: 'up-to-date',
-			error: undefined,
-		});
-
-		expect(session.getSnapshot()).toMatchObject({
-			status: 'idle',
-			historyReady: true,
-			error: undefined,
-		});
-		session.dispose();
-	});
-
 	it('reconciles an optimistic send with canonical user-message identity', async () => {
 		const observation = createFakeObservation();
 		const observe = vi.fn().mockReturnValue(observation);

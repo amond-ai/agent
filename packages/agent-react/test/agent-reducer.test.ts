@@ -5,7 +5,7 @@ import { conversation } from './fixtures/observation.ts';
 
 function observed(
 	state: FlueConversationState | undefined,
-	phase: 'loading' | 'connecting' | 'live' | 'up-to-date' | 'absent' | 'error' | 'closed' = 'live',
+	phase: 'loading' | 'connecting' | 'live' | 'absent' | 'error' | 'closed' = 'live',
 	error?: Error,
 ): AgentReducerEvent {
 	return { type: 'local_observation', conversation: state, phase, error };
