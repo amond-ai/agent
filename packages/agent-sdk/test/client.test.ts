@@ -117,6 +117,10 @@ describe('createFlueClient', () => {
 	describe('agents.observe()', () => {
 		it('materializes history before following updates from the snapshot offset', async () => {
 			const seen: string[] = [];
+			let resolveFollowed!: () => void;
+			const followed = new Promise<void>((resolve) => {
+				resolveFollowed = resolve;
+			});
 			const client = createFlueClient({
 				baseUrl: 'https://flue.test',
 				fetch: async (input) => {
@@ -131,33 +135,23 @@ describe('createFlueClient', () => {
 							settlements: [],
 						});
 					}
+					resolveFollowed();
 					return dsJsonResponse([], {
 						nextOffset: '0000000000000000_0000000000000001',
 						upToDate: true,
+						closed: true,
 					});
 				},
 			});
-			const observation = client.agents.observe('agent', 'id', { live: false });
-			const completed = new Promise<void>((resolve) => {
-				const unsubscribe = observation.subscribe(() => {
-					if (observation.getSnapshot().phase === 'up-to-date') {
-						unsubscribe();
-						resolve();
-					}
-				});
-			});
-
-			await completed;
+			const observation = client.agents.observe('agent', 'id');
+			observation.subscribe(() => {});
+			await followed;
 
 			expect(observation.getSnapshot()).toMatchObject({
-				phase: 'up-to-date',
 				offset: '0000000000000000_0000000000000001',
 				conversation: { conversationId: 'conversation-1', messages: [{ id: 'entry-user' }] },
 			});
-			expect(seen).toEqual([
-				'history:',
-				'updates:0000000000000000_0000000000000001',
-			]);
+			expect(seen).toEqual(['history:', 'updates:0000000000000000_0000000000000001']);
 			observation.close();
 		});
 
@@ -181,10 +175,11 @@ describe('createFlueClient', () => {
 					return dsJsonResponse([], {
 						nextOffset: '0000000000000000_0000000000000001',
 						upToDate: true,
+						closed: true,
 					});
 				},
 			});
-			const observation = client.agents.observe('agent', 'id', { live: false });
+			const observation = client.agents.observe('agent', 'id');
 			const absent = new Promise<void>((resolve) => {
 				const unsubscribe = observation.subscribe(() => {
 					if (observation.getSnapshot().phase === 'absent') {
@@ -195,20 +190,19 @@ describe('createFlueClient', () => {
 			});
 			await absent;
 
-			const complete = new Promise<void>((resolve) => {
+			const rehydrated = new Promise<void>((resolve) => {
 				const unsubscribe = observation.subscribe(() => {
-					if (observation.getSnapshot().phase === 'up-to-date') {
+					if (observation.getSnapshot().conversation) {
 						unsubscribe();
 						resolve();
 					}
 				});
 			});
 			observation.refresh();
-			await complete;
+			await rehydrated;
 
-			expect(observation.getSnapshot()).toMatchObject({
-				phase: 'up-to-date',
-				conversation: { conversationId: 'conversation-1' },
+			expect(observation.getSnapshot().conversation).toMatchObject({
+				conversationId: 'conversation-1',
 			});
 			observation.close();
 		});

@@ -8,28 +8,27 @@ import {
 import type { FlueEventStream } from './stream.ts';
 
 /**
- * Live mode for conversation observation. Deliberately excludes `'sse'`.
+ * Live mode for conversation observation: always long-poll. `true` and
+ * `'long-poll'` are equivalent; there is intentionally no one-shot or SSE mode.
+ * For a single point-in-time read with no live updates, use
+ * `client.agents.history()` instead.
  *
  * The `message-delta` protocol is append-style with no per-delta sequence: a
  * delta extends the current streaming part. Correct application therefore
  * requires the transport to deliver each batch atomically with its resume
  * offset, so a reconnect never re-delivers a batch that was already applied.
- * Long-poll (`true` / `'long-poll'`) and one-shot (`false`) satisfy this — each
- * batch arrives with its `Stream-Next-Offset` in one response. SSE does not: it
- * splits a batch across `data` and `control` frames, and the durable-stream
- * client transparently reconnects from the pre-batch offset if the connection
- * drops between them, re-delivering (and thus double-applying) the batch. Across
- * reconnects, `observe()` rehydrates a fresh snapshot rather than resuming, so
- * the only redelivery risk is that intra-session SSE window — which excluding
- * SSE removes entirely.
+ * Long-poll satisfies this — each batch arrives with its `Stream-Next-Offset` in
+ * one response. SSE does not: it splits a batch across `data` and `control`
+ * frames, and the durable-stream client transparently reconnects from the
+ * pre-batch offset if the connection drops between them, re-delivering (and thus
+ * double-applying) the batch — so SSE is excluded.
  */
-export type ConversationLiveMode = boolean | 'long-poll';
+export type ConversationLiveMode = true | 'long-poll';
 
 export type AgentConversationObservationPhase =
 	| 'loading'
 	| 'connecting'
 	| 'live'
-	| 'up-to-date'
 	| 'absent'
 	| 'error'
 	| 'closed';
@@ -136,7 +135,7 @@ export function createAgentConversationObservation(
 
 	const follow = async (value: number, offset: string) => {
 		if (!isCurrent(value)) return;
-		publish({ ...snapshot, phase: options.live === false ? 'connecting' : 'live', error: undefined });
+		publish({ ...snapshot, phase: 'live', error: undefined });
 		let nextStream: FlueEventStream<ConversationStreamChunk>;
 		try {
 			nextStream = source.updates({
@@ -158,18 +157,13 @@ export function createAgentConversationObservation(
 				publish({
 					conversation: streamState,
 					offset: nextStream.offset,
-					phase: options.live === false ? 'connecting' : 'live',
+					phase: 'live',
 					error: undefined,
 				});
 				reconnectAttempt = 0;
 			}
 			if (!isCurrent(value) || stream !== nextStream) return;
-			const nextOffset = nextStream.offset;
 			stream = undefined;
-			if (options.live === false) {
-				publish({ ...snapshot, offset: nextOffset, phase: 'up-to-date', error: undefined });
-				return;
-			}
 			scheduleRetry(value, new Error('Agent conversation stream ended unexpectedly.'));
 		} catch (error) {
 			if (!isCurrent(value) || stream !== nextStream) return;
