@@ -13,7 +13,6 @@ import { ConversationRecordWriter } from '../src/conversation-writer.ts';
 import {
 	defineAgent,
 	defineTool,
-	ModelNotConfiguredError,
 	observe,
 	SessionBusyError,
 } from '../src/index.ts';
@@ -343,15 +342,6 @@ describe('session.prompt()', () => {
 			provider: provider.getModel().provider,
 			id: 'override-model',
 		});
-	});
-
-	it('rejects a model operation when neither the agent nor the call configures a model', async () => {
-		const provider = createProvider();
-		const ctx = createContext(provider);
-		const harness = await ctx.initializeRootHarness(defineAgent(() => ({ model: false })));
-		const session = await harness.session();
-
-		await expect(session.prompt('Review this workspace.')).rejects.toThrow(ModelNotConfiguredError);
 	});
 
 	it('applies a call-level thinking level when a prompt overrides the agent default', async () => {

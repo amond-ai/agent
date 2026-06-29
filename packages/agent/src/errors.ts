@@ -705,17 +705,6 @@ export class CloudflareAIBindingError extends FlueError {
 	}
 }
 
-export class ModelNotConfiguredError extends FlueError {
-	constructor({ callSite }: { callSite: string }) {
-		super({
-			type: 'model_not_configured',
-			message: `No model is configured for ${callSite}.`,
-			details: '',
-			dev: 'Pass `{ model: "provider-id/model-id" }` to the call, or configure a model on the agent definition.',
-		});
-	}
-}
-
 export class DelegationDepthExceededError extends FlueError {
 	constructor({ maxDepth }: { maxDepth: number }) {
 		super({

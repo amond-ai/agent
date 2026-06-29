@@ -2,8 +2,9 @@ import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFlueContext } from '../src/client.ts';
-import { ModelNotConfiguredError } from '../src/errors.ts';
+import { DelegationDepthExceededError } from '../src/errors.ts';
 import { defineAgent, defineWorkflow } from '../src/index.ts';
+import { resolveModel } from '../src/internal.ts';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
 import { MAX_IMAGE_DATA_LENGTH } from '../src/persisted-images.ts';
 import {
@@ -311,7 +312,7 @@ describe('flue()', () => {
 			target: 'node',
 			agents: [agentRecord('assistant', { route: async (_c, next) => next() })],
 			createAgentAdmission: (_agentName, ) => async () => {
-					throw new ModelNotConfiguredError({ callSite: 'this prompt() call' });
+					throw new DelegationDepthExceededError({ maxDepth: 8 });
 				},
 			createWorkflowContext: createTestContext,
 			eventStreamStore: createTestEventStreamStore(),
@@ -331,9 +332,9 @@ describe('flue()', () => {
 			expect(response.status).toBe(500);
 			expect(await response.json()).toEqual({
 				error: {
-					type: 'model_not_configured',
-					message: 'No model is configured for this prompt() call.',
-					details: '',
+					type: 'delegation_depth_exceeded',
+					message: 'Maximum delegation depth (8) exceeded.',
+					details: 'The chain of delegated Tasks and Actions is too deep.',
 				},
 			});
 		} finally {
@@ -376,7 +377,7 @@ describe('flue()', () => {
 				workflowRecord(
 					'daily-report',
 					defineWorkflow({
-						agent: defineAgent(() => ({ model: false })),
+						agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 						run: async () => ({ delivered: true }),
 					}),
 					{ route: async (_c, next) => next() },
@@ -463,7 +464,7 @@ describe('flue()', () => {
 	it('rejects non-POST workflow requests with a method envelope when a path targets an HTTP workflow', async () => {
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { route: async (_c, next) => next() })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { route: async (_c, next) => next() })],
 		}));
 		const app = new Hono();
 		app.route('/api', flue());
@@ -583,7 +584,7 @@ describe('flue()', () => {
 		await store.createStream('runs/run_01DAILYREPORT');
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
 			runStore,
 			eventStreamStore: store,
 
@@ -600,7 +601,7 @@ describe('flue()', () => {
 	it('returns run_not_found for an unknown run without invoking runs middleware', async () => {
 		const runs = vi.fn(async (_c, next) => next());
 		configureFlueRuntime(nodeRuntime({
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { runs })],
 			runStore: new InMemoryRunStore(),
 		}));
 		const app = new Hono();
@@ -622,7 +623,7 @@ describe('flue()', () => {
 			input: {},
 		});
 		configureFlueRuntime(nodeRuntime({
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { route: async (_c, next) => next() })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { route: async (_c, next) => next() })],
 			runStore,
 		}));
 		const app = new Hono();
@@ -644,7 +645,7 @@ describe('flue()', () => {
 		});
 		const runs = vi.fn(async (_c, next) => next());
 		configureFlueRuntime(nodeRuntime({
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { runs })],
 			runStore,
 		}));
 		const app = new Hono();
@@ -666,7 +667,7 @@ describe('flue()', () => {
 		});
 		const routeRunRequest = vi.fn(async () => new Response('forwarded'));
 		configureFlueRuntime(cloudflareRuntime({
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
 			createRunIndexForRequest: () => runStore,
 			routeRunRequest,
 		}));
@@ -696,7 +697,7 @@ describe('flue()', () => {
 		});
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (_c, next) => next() })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { runs: async (_c, next) => next() })],
 			runStore,
 			eventStreamStore: createTestEventStreamStore(),
 		}));
@@ -737,7 +738,7 @@ describe('flue()', () => {
 		});
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
+			workflows: [workflowRecord('daily-report', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { runs: async (c) => c.json({ blocked: true }, 401) })],
 			runStore,
 
 		}));
@@ -765,7 +766,7 @@ describe('flue()', () => {
 		});
 		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			workflows: [workflowRecord('daily-report-v2', defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }), { runs: async (_c, next) => next() })],
+			workflows: [workflowRecord('daily-report-v2', defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }), { runs: async (_c, next) => next() })],
 			runStore,
 			eventStreamStore: createTestEventStreamStore(),
 		}));
@@ -923,7 +924,7 @@ describe('flue()', () => {
 				workflowRecord(
 					'daily-report',
 					defineWorkflow({
-						agent: defineAgent(() => ({ model: false })),
+						agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 						run: async () => undefined,
 					}),
 					{ route: async (_c, next) => next() },
@@ -1027,7 +1028,7 @@ describe('flue()', () => {
 				workflowRecord(
 					'internal-report',
 					defineWorkflow({
-						agent: defineAgent(() => ({ model: false })),
+						agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 						run: async () => {
 							seen.push('workflow');
 							return 'done';
@@ -1071,7 +1072,7 @@ describe('flue()', () => {
 			workflows: [
 				workflowRecord(
 					'internal-report',
-					defineWorkflow({ agent: defineAgent(() => ({ model: false })), run: async () => undefined }),
+					defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), run: async () => undefined }),
 				),
 			],
 		}));
@@ -1177,7 +1178,7 @@ describe('flue() agent attachments route', () => {
 				agents: [
 					{
 						name: 'assistant',
-						definition: defineAgent(() => ({ model: false })),
+						definition: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 						attachments: async (c) => c.text('forbidden', 403),
 					},
 				],
@@ -1200,7 +1201,7 @@ describe('flue() agent attachments route', () => {
 				agents: [
 					{
 						name: 'assistant',
-						definition: defineAgent(() => ({ model: false })),
+						definition: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 						attachments: async (_c, next) => {
 							await next();
 						},
@@ -1230,7 +1231,7 @@ function createTestContext({ runId, request }: { runId: string; request: Request
 		env: {},
 		req: request,
 		agentConfig: {
-			resolveModel: () => undefined,
+			resolveModel: () => resolveModel('anthropic/claude-haiku-4-5'),
 		},
 		createDefaultEnv: async () => createNoopSessionEnv(),
 	});

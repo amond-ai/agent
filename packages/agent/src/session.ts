@@ -78,7 +78,6 @@ import {
 	AttachmentNotAvailableError,
 	ConversationRecordInvariantError,
 	DelegationDepthExceededError,
-	ModelNotConfiguredError,
 	OperationFailedError,
 	SessionBusyError,
 	SkillNotRegisteredError,
@@ -354,7 +353,6 @@ interface CallOverrides {
 	tools: ToolDefinition[];
 	model?: string;
 	thinkingLevel?: ThinkingLevel;
-	callSite: string;
 	/**
 	 * Framework-injected pi-agent-core tools spliced in alongside builtins and custom
 	 * tools for the duration of this call. Used by the result-schema flow to
@@ -1060,7 +1058,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					thinkingLevel: options?.thinkingLevel,
 					images: options?.images,
 					errorLabel: 'prompt',
-					callSite: 'this prompt() call',
 					signal,
 				});
 			}),
@@ -1558,7 +1555,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					thinkingLevel: options?.thinkingLevel,
 					images: options?.images,
 					errorLabel: `skill("${skillName}")`,
-					callSite: `this skill("${skillName}") call`,
 					activePackagedSkills,
 					signal,
 				});
@@ -1642,25 +1638,21 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		return this.closePromise;
 	}
 
-	/** Precedence: call-level > agent-level default. */
-	private resolveModelForCall(modelSpecifier: string | undefined, callSite: string): Model<any> {
-		const model = modelSpecifier ? this.config.resolveModel(modelSpecifier) : this.config.model;
-		return this.requireModel(model, callSite);
+	/**
+	 * Precedence: call-level > agent-level default. A call-level specifier
+	 * resolves via `resolveModel` (which throws on an invalid specifier and never
+	 * returns undefined for a defined one); the agent default is always present.
+	 */
+	private resolveModelForCall(modelSpecifier: string | undefined): Model<any> {
+		if (!modelSpecifier) return this.config.model;
+		const model = this.config.resolveModel(modelSpecifier);
+		if (!model) throw new Error(`[flue] Model "${modelSpecifier}" could not be resolved.`);
+		return model;
 	}
 
 	/** Precedence: call-level > agent-level default > 'medium'. */
 	private resolveThinkingLevelForCall(callValue: ThinkingLevel | undefined): ThinkingLevel {
 		return callValue ?? this.config.thinkingLevel ?? 'medium';
-	}
-
-	/**
-	 * Throws a clear, actionable error when no model is configured for a call.
-	 * Use with the resolved model (post-precedence) to guarantee we never hand
-	 * `undefined` to the underlying agent.
-	 */
-	private requireModel(model: Model<any> | undefined, callSite: string): Model<any> {
-		if (model) return model;
-		throw new ModelNotConfiguredError({ callSite });
 	}
 
 	private getProviderApiKey(providerId: string): string | undefined {
@@ -2118,7 +2110,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		const previousModel = this.agentLoop.state.model;
 		const previousThinkingLevel = this.agentLoop.state.thinkingLevel;
 
-		const resolvedModel = this.resolveModelForCall(options.model, options.callSite);
+		const resolvedModel = this.resolveModelForCall(options.model);
 		this.agentLoop.state.model = resolvedModel;
 		this.agentLoop.state.thinkingLevel = this.resolveThinkingLevelForCall(options.thinkingLevel);
 		const builtinToolGroups = this.createBuiltinToolGroups(
@@ -2819,7 +2811,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			const compactionConfig =
 				this.config.compaction === false ? undefined : this.config.compaction;
 			const summarizationModel = compactionConfig?.model
-				? (this.config.resolveModel(compactionConfig.model) ?? sessionModel)
+				? this.resolveModelForCall(compactionConfig.model)
 				: sessionModel;
 
 			const canonicalConversation = await this.requireConversation();
@@ -3091,7 +3083,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				};
 			},
 			errorLabel: `dispatch(${input.dispatchId})`,
-			callSite: 'this dispatched input',
 			onInputApplied: options?.onInputApplied,
 			submissionAttempt: options?.submissionAttempt,
 			startedAt: options?.startedAt,
@@ -3218,7 +3209,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 							// `assistant_message_started.modelInfo` instead.
 							model: undefined,
 							thinkingLevel: undefined,
-							callSite: 'this resumed task',
 						},
 						async () => {
 							await this.recoverInterruptedStream();
@@ -3280,7 +3270,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				};
 			},
 			errorLabel: `direct(${input.submissionId})`,
-			callSite: 'this direct input',
 			onInputApplied: options?.onInputApplied,
 			submissionAttempt: options?.submissionAttempt,
 			startedAt: options?.startedAt,
@@ -3308,7 +3297,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		startedAt?: number;
 		timeoutAt?: number;
 		errorLabel: string;
-		callSite: string;
 		onInputApplied?: (durability: SubmissionDurability) => Promise<void> | void;
 		submissionAttempt?: import('./agent-execution-store.ts').SubmissionAttemptRef;
 		signal: AbortSignal;
@@ -3318,7 +3306,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				tools: [],
 				model: undefined,
 				thinkingLevel: undefined,
-				callSite: options.callSite,
 			},
 			async ({ resolvedModel }) => {
 				this.activeSubmissionId = options.submissionAttempt?.submissionId;
@@ -3369,7 +3356,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		thinkingLevel: ThinkingLevel | undefined;
 		images: ImageContent[] | undefined;
 		errorLabel: string;
-		callSite: string;
 		activePackagedSkills?: Record<string, PackagedSkillDirectory>;
 		signal: AbortSignal;
 	}): Promise<PromptResponse | PromptResultResponse<unknown>> {
@@ -3387,7 +3373,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				tools: args.tools ?? [],
 				model: args.model,
 				thinkingLevel: args.thinkingLevel,
-				callSite: args.callSite,
 				extraTools: resultBundle?.tools,
 				activePackagedSkills: args.activePackagedSkills,
 			},

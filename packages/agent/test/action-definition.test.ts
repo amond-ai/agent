@@ -158,7 +158,7 @@ describe('defineAction()', () => {
 
 describe('defineWorkflow()', () => {
 	it('creates extracted and inline branded workflows with required agents', () => {
-		const agent = defineAgent(() => ({ model: false }));
+		const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		const action = defineAction({
 			name: 'review',
 			description: 'Reviews input.',
@@ -179,7 +179,7 @@ describe('defineWorkflow()', () => {
 	});
 
 	it('delegates inline schema validation to defineAction()', () => {
-		const agent = defineAgent(() => ({ model: false }));
+		const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 
 		expect(() =>
 			defineWorkflow({
@@ -191,7 +191,7 @@ describe('defineWorkflow()', () => {
 	});
 
 	it('excludes undefined-producing inline output schemas from the public type', () => {
-		const agent = defineAgent(() => ({ model: false }));
+		const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		const invalidOutput = v.undefined();
 		expectTypeOf(invalidOutput).not.toMatchTypeOf<ActionOutputSchema>();
 		defineWorkflow({
@@ -202,13 +202,13 @@ describe('defineWorkflow()', () => {
 	});
 
 	it('rejects forged AgentDefinition and Action brands', () => {
-		const agent = defineAgent(() => ({ model: false }));
+		const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		const action = defineAction({
 			name: 'review',
 			description: 'Reviews input.',
 			run: async () => undefined,
 		});
-		const forgedAgent = { __flueAgentDefinition: true, initialize: async () => ({ model: false }) };
+		const forgedAgent = { __flueAgentDefinition: true, initialize: async () => ({ model: 'anthropic/claude-haiku-4-5' }) };
 		const forgedAction = {
 			__flueAction: true,
 			name: 'forged',
@@ -223,7 +223,7 @@ describe('defineWorkflow()', () => {
 	});
 
 	it('rejects definitions that provide both an action and inline run', () => {
-		const agent = defineAgent(() => ({ model: false }));
+		const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		const action = defineAction({
 			name: 'review',
 			description: 'Reviews input.',

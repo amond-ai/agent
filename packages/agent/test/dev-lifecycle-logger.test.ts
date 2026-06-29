@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createFlueContext, installDevLifecycleLogger } from '../src/internal.ts';
+import { createFlueContext, installDevLifecycleLogger, resolveModel } from '../src/internal.ts';
 
 function createContext(runId: string) {
 	return createFlueContext({
 		id: runId,
 		runId,
 		env: {},
-		agentConfig: { resolveModel: () => undefined },
+		agentConfig: { resolveModel: () => resolveModel('anthropic/claude-haiku-4-5') },
 		createDefaultEnv: async () => {
 			throw new Error('unexpected sandbox initialization');
 		},

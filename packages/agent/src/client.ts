@@ -251,11 +251,15 @@ export async function initializeRootHarness(
 	);
 	if (!hasInitModel(resolvedOptions)) {
 		throw new Error(
-			'[flue] defineAgent() requires a model. Return { model: "provider-id/model-id" }, { model: false }, or a profile with a model.',
+			'[flue] defineAgent() requires a model. Return { model: "provider-id/model-id" } or a profile with a model.',
 		);
 	}
-	if (definition.model !== false && typeof definition.model !== 'string') {
-		throw new Error('[flue] defineAgent() model must be a model specifier or false.');
+	if (typeof definition.model !== 'string') {
+		throw new Error('[flue] defineAgent() model must be a model specifier.');
+	}
+	const resolvedModel = config.agentConfig.resolveModel(definition.model);
+	if (!resolvedModel) {
+		throw new Error(`[flue] defineAgent() model "${definition.model}" could not be resolved.`);
 	}
 	const { env: baseEnv, toolFactory } = await resolveSessionEnv(
 		config.id,
@@ -282,7 +286,7 @@ export async function initializeRootHarness(
 				.filter((candidate): candidate is AgentProfile & { name: string } => candidate.name !== undefined)
 				.map((candidate) => [candidate.name, candidate]),
 		),
-		model: config.agentConfig.resolveModel(definition.model),
+		model: resolvedModel,
 		thinkingLevel: definition.thinkingLevel ?? config.agentConfig.thinkingLevel,
 		compaction: definition.compaction ?? config.agentConfig.compaction,
 		durability: definition.durability,

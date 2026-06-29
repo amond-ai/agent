@@ -13,7 +13,6 @@ import { type Api, getModel, type KnownProvider, type Model } from '@earendil-wo
 export { Bash, InMemoryFs } from 'just-bash';
 
 import { resolveRegisteredModel } from './runtime/providers.ts';
-import type { ModelConfig } from './types.ts';
 
 export type {
 	AgentDispatchAdmission,
@@ -151,9 +150,7 @@ export { createSqlRunStore } from './sql-run-store.ts';
  * catalog provider IDs hydrate metadata from the catalog with the
  * registration's options layered on top.
  */
-export function resolveModel(model: ModelConfig | undefined): Model<Api> | undefined {
-	if (model === false || model === undefined) return undefined;
-
+export function resolveModel(model: string): Model<Api> {
 	const modelSpecifier = model;
 
 	const slash = modelSpecifier.indexOf('/');

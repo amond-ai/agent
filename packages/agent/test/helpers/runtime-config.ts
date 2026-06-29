@@ -21,7 +21,7 @@ export function agentRecord(
 ): AgentRecord {
 	return {
 		name,
-		definition: options.definition ?? defineAgent(() => ({ model: false })),
+		definition: options.definition ?? defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 		...(options.description === undefined ? {} : { description: options.description }),
 		...(options.route === undefined ? {} : { route: options.route }),
 	};

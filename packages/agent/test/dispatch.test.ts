@@ -95,7 +95,7 @@ describe('dispatch()', () => {
 	});
 
 	it('resolves a discovered agent name when dispatch() receives an agent definition target', async () => {
-		const moderator = defineAgent(() => ({ model: false }));
+		const moderator = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		const admitted: DispatchInput[] = [];
 		configureFlueRuntime({
 			...nodeRuntime(),
@@ -123,7 +123,7 @@ describe('dispatch()', () => {
 	});
 
 	it('rejects an agent definition target when the built application cannot resolve its identity', async () => {
-		const localModerator = defineAgent(() => ({ model: false }));
+		const localModerator = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		configureFlueRuntime({
 			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),

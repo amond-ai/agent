@@ -6,7 +6,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import { defineAgent } from '../src/index.ts';
 import type { FlueContextConfig } from '../src/internal.ts';
-import { createFlueContext } from '../src/internal.ts';
+import { createFlueContext, resolveModel } from '../src/internal.ts';
 import type { FlueEvent, SessionEnv } from '../src/types.ts';
 
 const providers: FauxProviderRegistration[] = [];
@@ -84,7 +84,7 @@ function createContext(overrides: Partial<FlueContextConfig> = {}) {
 		id: 'context-instance',
 		env: {},
 		agentConfig: {
-			resolveModel: () => undefined,
+			resolveModel: () => resolveModel('anthropic/claude-haiku-4-5'),
 		},
 		createDefaultEnv: async () => createEnv(),
 		...overrides,
@@ -281,7 +281,7 @@ describe('FlueContext', () => {
 		let attempt = 0;
 		const ctx = createContext();
 		const agent = defineAgent(() => ({
-			model: false,
+			model: 'anthropic/claude-haiku-4-5',
 			sandbox: {
 				createSessionEnv: async () => {
 					attempt += 1;

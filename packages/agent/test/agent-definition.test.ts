@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-	defineAgent,
 	defineAction,
+	defineAgent,
 	defineAgentProfile,
 	defineTool,
-	ModelNotConfiguredError,
 } from '../src/index.ts';
 import type { FlueContextConfig } from '../src/internal.ts';
-import { createFlueContext } from '../src/internal.ts';
-import type { AgentProfile, AgentDefinition, ToolDefinition } from '../src/types.ts';
+import { createFlueContext, resolveModel } from '../src/internal.ts';
+import type { AgentDefinition, AgentProfile, ToolDefinition } from '../src/types.ts';
 import { createNoopSessionEnv } from './fixtures/session-env.ts';
 
 function createContext(overrides: Partial<FlueContextConfig> = {}) {
@@ -16,7 +15,7 @@ function createContext(overrides: Partial<FlueContextConfig> = {}) {
 		id: 'agent-instance',
 		env: { API_KEY: 'secret' },
 		agentConfig: {
-			resolveModel: () => undefined,
+			resolveModel: () => resolveModel('anthropic/claude-haiku-4-5'),
 		},
 		createDefaultEnv: async () => createNoopSessionEnv(),
 		...overrides,
@@ -38,7 +37,7 @@ describe('defineAgent()', () => {
 
 	it('invokes the initializer with id and env when a runner initializes the agent definition', async () => {
 		const env = { API_KEY: 'secret' };
-		const initialize = vi.fn(() => ({ model: false as const }));
+		const initialize = vi.fn(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		const ctx = createContext({ id: 'workflow-run', env });
 
 		await ctx.initializeRootHarness(defineAgent(initialize));
@@ -48,7 +47,7 @@ describe('defineAgent()', () => {
 	});
 
 	it('rejects unknown runtime fields when an initializer returns unsupported configuration', async () => {
-		const agent = defineAgent(() => ({ model: false, unsupported: true }) as never);
+		const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5', unsupported: true }) as never);
 
 		await expect(createContext().initializeRootHarness(agent)).rejects.toThrow(
 			'unknown runtime config field "unsupported"',
@@ -56,14 +55,14 @@ describe('defineAgent()', () => {
 	});
 
 	it('rejects a top-level name when an initializer returns one', async () => {
-		const agent = defineAgent(() => ({ model: false, name: 'support' }) as never);
+		const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5', name: 'support' }) as never);
 
 		await expect(createContext().initializeRootHarness(agent)).rejects.toThrow(
 			'unknown runtime config field "name"',
 		);
 	});
 
-	it('rejects harness initialization when the initializer does not explicitly select a model or model false', async () => {
+	it('rejects harness initialization when the initializer does not select a model', async () => {
 		await expect(createContext().initializeRootHarness(defineAgent(() => ({})))).rejects.toThrow(
 			'defineAgent() requires a model',
 		);
@@ -73,7 +72,7 @@ describe('defineAgent()', () => {
 		interface Env {
 			DB: { query(sql: string): unknown };
 		}
-		const typed = defineAgent<Env>(() => ({ model: false }));
+		const typed = defineAgent<Env>(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 		const bare: AgentDefinition = typed;
 
 		expect(bare.__flueAgentDefinition).toBe(true);
@@ -82,7 +81,7 @@ describe('defineAgent()', () => {
 
 describe('defineAgentProfile()', () => {
 	it('rejects unknown profile fields when a profile contains unsupported configuration', () => {
-		expect(() => defineAgentProfile({ model: false, unsupported: true } as never)).toThrow(
+		expect(() => defineAgentProfile({ model: 'anthropic/claude-haiku-4-5', unsupported: true } as never)).toThrow(
 			'unknown agent profile field "unsupported"',
 		);
 	});
@@ -104,7 +103,7 @@ describe('defineAgentProfile()', () => {
 		});
 		const harness = await createContext().initializeRootHarness(
 			defineAgent(() => ({
-				profile: defineAgentProfile({ model: false, actions: [profileAction] }),
+				profile: defineAgentProfile({ model: 'anthropic/claude-haiku-4-5', actions: [profileAction] }),
 				actions: [runtimeAction],
 			})),
 		);
@@ -142,7 +141,7 @@ describe('defineAgentProfile()', () => {
 	});
 
 	it('rejects a subagent when its name does not start with a letter', () => {
-		expect(() => defineAgentProfile({ subagents: [{ name: '1invalid', model: false }] })).toThrow(
+		expect(() => defineAgentProfile({ subagents: [{ name: '1invalid', model: 'anthropic/claude-haiku-4-5' }] })).toThrow(
 			'must start with a letter',
 		);
 	});
@@ -168,8 +167,8 @@ describe('defineAgentProfile()', () => {
 		expect(() =>
 			defineAgentProfile({
 				subagents: [
-					{ name: 'delegate', model: false },
-					{ name: 'delegate', model: false },
+					{ name: 'delegate', model: 'anthropic/claude-haiku-4-5' },
+					{ name: 'delegate', model: 'anthropic/claude-haiku-4-5' },
 				],
 			}),
 		).toThrow('duplicate subagent name');
@@ -182,52 +181,15 @@ describe('defineAgentProfile()', () => {
 		expect(() => defineAgentProfile(profile)).toThrow('circular subagents');
 	});
 
-	it('merges profile capabilities when an agent definition extends a reusable profile', async () => {
-		const profile = defineAgentProfile({
-			model: false,
-			skills: [{ name: 'profile_skill', description: 'Profile skill.' }],
-			tools: [createTool('profile_tool')],
-			subagents: [{ name: 'profile_agent', model: false }],
-		});
-		const harness = await createContext().initializeRootHarness(
-			defineAgent(() => ({
-				profile,
-				skills: [{ name: 'runtime_skill', description: 'Runtime skill.' }],
-				tools: [createTool('runtime_tool')],
-				subagents: [{ name: 'runtime_agent', model: false }],
-			})),
-		);
-		const session = await harness.session();
-
-		await expect(session.skill('profile_skill')).rejects.toThrow(ModelNotConfiguredError);
-		await expect(session.skill('runtime_skill')).rejects.toThrow(ModelNotConfiguredError);
-		await expect(session.task('Delegate work.', { agent: 'profile_agent' })).rejects.toThrow(
-			ModelNotConfiguredError,
-		);
-		await expect(session.task('Delegate work.', { agent: 'runtime_agent' })).rejects.toThrow(
-			ModelNotConfiguredError,
-		);
-	});
-
 	it('rejects duplicate tool names when an agent definition repeats a profile tool name', async () => {
 		await expect(
 			createContext().initializeRootHarness(
 				defineAgent(() => ({
-					profile: defineAgentProfile({ model: false, tools: [createTool('lookup')] }),
+					profile: defineAgentProfile({ model: 'anthropic/claude-haiku-4-5', tools: [createTool('lookup')] }),
 					tools: [createTool('lookup')],
 				})),
 			),
 		).rejects.toThrow('duplicate tool name "lookup"');
-	});
-
-	it('replaces scalar profile defaults when an agent definition supplies scalar overrides', async () => {
-		const profile = defineAgentProfile({ model: 'profile/model' });
-		const harness = await createContext().initializeRootHarness(defineAgent(() => ({ profile, model: false })));
-		const session = await harness.session();
-
-		await expect(session.prompt('Answer without a model.')).rejects.toThrow(
-			ModelNotConfiguredError,
-		);
 	});
 
 	it('accepts valid durability config on a profile', () => {
@@ -263,14 +225,14 @@ describe('defineAgentProfile()', () => {
 	it('rejects durability config when declared on a subagent profile', () => {
 		expect(() =>
 			defineAgentProfile({
-				subagents: [{ name: 'helper', model: false, durability: { maxAttempts: 3 } }],
+				subagents: [{ name: 'helper', model: 'anthropic/claude-haiku-4-5', durability: { maxAttempts: 3 } }],
 			}),
 		).toThrow('must not declare durability');
 	});
 
 	it('accepts durability config when an agent definition supplies it', async () => {
 		const harness = await createContext().initializeRootHarness(
-			defineAgent(() => ({ model: false, durability: { maxAttempts: 3, timeoutMs: 7_200_000 } })),
+			defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5', durability: { maxAttempts: 3, timeoutMs: 7_200_000 } })),
 		);
 		expect(harness).toBeDefined();
 	});

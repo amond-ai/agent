@@ -2,10 +2,10 @@ import * as v from 'valibot';
 import { isActionDefinition } from './action.ts';
 import { assertToolDefinition } from './tool.ts';
 import type {
+	AgentDefinition,
 	AgentInitializerContext,
 	AgentProfile,
 	AgentRuntimeConfig,
-	AgentDefinition,
 	Skill,
 	ThinkingLevel,
 	ToolDefinition,
@@ -26,7 +26,7 @@ const AgentProfileSchema = v.strictObject(
 	{
 		name: v.optional(v.string()),
 		description: v.optional(v.string()),
-		model: v.optional(v.union([v.string(), v.literal(false)])),
+		model: v.optional(v.string()),
 		instructions: v.optional(v.string()),
 		skills: v.optional(v.array(v.unknown())),
 		tools: v.optional(v.array(v.unknown())),
@@ -70,8 +70,8 @@ export function defineAgentProfile(profile: AgentProfile): AgentProfile {
  * The initializer runs whenever a runner initializes a root harness from the
  * agent definition. Do not treat it as a one-time
  * constructor for a persistent agent instance id. Return a runtime config
- * object with `model: '<provider>/<model>'`, `model: false`, or a profile with
- * its own model field.
+ * object with `model: '<provider>/<model>'` or a profile with its own model
+ * field.
  */
 export function defineAgent<TEnv = Record<string, any>>(
 	initialize: (

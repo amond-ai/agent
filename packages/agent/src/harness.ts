@@ -213,6 +213,12 @@ export class Harness implements FlueHarness {
 		const instructions = taskAgent ? taskAgent.instructions : this.config.instructions;
 		const definitionSkills = taskAgent ? taskAgent.skills : this.config.definitionSkills;
 		const localContext = await discoverSessionContext(taskEnv, instructions, definitionSkills);
+		const taskModel = taskAgent?.model !== undefined
+			? this.config.resolveModel(taskAgent.model)
+			: this.config.model;
+		if (!taskModel) {
+			throw new Error(`[flue] Subagent model "${taskAgent?.model}" could not be resolved.`);
+		}
 		const taskConfig: AgentConfig = {
 			...this.config,
 			systemPrompt: localContext.systemPrompt,
@@ -227,10 +233,7 @@ export class Harness implements FlueHarness {
 							.map((agent) => [agent.name, agent]),
 					)
 				: this.config.subagents,
-			model:
-				taskAgent?.model !== undefined
-					? this.config.resolveModel(taskAgent.model)
-					: this.config.model,
+			model: taskModel,
 			thinkingLevel: taskAgent?.thinkingLevel ?? this.config.thinkingLevel,
 			compaction: taskAgent?.compaction ?? this.config.compaction,
 		};

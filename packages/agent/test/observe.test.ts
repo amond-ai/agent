@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type FlueObservation, observe } from '../src/index.ts';
-import { createFlueContext } from '../src/internal.ts';
+import { createFlueContext, resolveModel } from '../src/internal.ts';
 
 function createContext(id: string) {
 	return createFlueContext({
 		id,
 		env: {},
 		agentConfig: {
-			resolveModel: () => undefined,
+			resolveModel: () => resolveModel('anthropic/claude-haiku-4-5'),
 		},
 		createDefaultEnv: async () => {
 			throw new Error('unexpected sandbox initialization');

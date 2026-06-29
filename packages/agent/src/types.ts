@@ -315,14 +315,10 @@ export interface AgentConfig {
 	skills: Record<string, Skill>;
 	subagents?: Record<string, AgentProfile>;
 	actions?: ActionDefinition[];
-	/**
-	 * Agent-wide default model. Undefined when the user explicitly passes
-	 * `defineAgent(() => ({ model: false }))`, so each model-using call must provide a
-	 * call-site override.
-	 */
-	model: Model<any> | undefined;
-	/** Resolve model config to a Model instance. Throws on invalid model specifiers. */
-	resolveModel: (model: ModelConfig | undefined) => Model<any> | undefined;
+	/** Agent-wide default model. Per-call values override this. */
+	model: Model<any>;
+	/** Resolve a model specifier to a Model instance. Throws on invalid specifiers. */
+	resolveModel: (model: string) => Model<any> | undefined;
 	/**
 	 * Agent-wide default reasoning effort. Per-call values override this. The
 	 * harness substitutes `"medium"` when unset; see `AgentRuntimeConfig.thinkingLevel`.
@@ -339,9 +335,6 @@ export interface AgentConfig {
 	durability?: DurabilityConfig;
 }
 
-/** Model specifier, or `false` to require call-level model selection. */
-export type ModelConfig = string | false;
-
 // ─── Agent Profile and Runtime Creation ─────────────────────────────────────
 
 /** Reusable agent behavior accepted by {@link defineAgentProfile}. */
@@ -349,8 +342,8 @@ export interface AgentProfile {
 	/** Profile name. Required when selecting this profile with `session.task()`. */
 	name?: string;
 	description?: string;
-	/** Default model specifier. Set to `false` to require call-level model selection. */
-	model?: ModelConfig;
+	/** Default model specifier. */
+	model?: string;
 	/** Instructions prepended to discovered workspace context. */
 	instructions?: string;
 	/** Registered skills available to sessions initialized from this profile. */
@@ -385,8 +378,8 @@ export interface AgentRuntimeConfig {
 	profile?: AgentProfile;
 	/** Optional human-facing description of what this agent does. */
 	description?: string;
-	/** Default model specifier. Set to `false` to require call-level model selection. */
-	model?: ModelConfig;
+	/** Default model specifier. */
+	model?: string;
 	/** Instructions prepended to discovered workspace context. */
 	instructions?: string;
 	/** Additional registered skills available to initialized sessions. */

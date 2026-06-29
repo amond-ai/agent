@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import * as v from 'valibot';
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { WorkflowInvokeRequest } from '../src/index.ts';
 import {
 	defineAgent,
 	defineWorkflow,
@@ -14,14 +15,14 @@ import {
 	WorkflowInvocationNotConfiguredError,
 	WorkflowNotDiscoveredError,
 } from '../src/index.ts';
-import type { WorkflowInvokeRequest } from '../src/index.ts';
 import {
+	admitDetachedWorkflow,
 	configureFlueRuntime,
 	createFlueContext,
-	admitDetachedWorkflow,
 	failRecoveredRun,
 	handleWorkflowRequest,
 	InMemoryRunStore,
+	resolveModel,
 } from '../src/internal.ts';
 import { flue } from '../src/routing.ts';
 import { formatOffset } from '../src/runtime/event-stream-store.ts';
@@ -50,7 +51,7 @@ function createContext({
 		initialEventIndex,
 		env: {},
 		agentConfig: {
-			resolveModel: () => undefined,
+			resolveModel: () => resolveModel('anthropic/claude-haiku-4-5'),
 		},
 		createDefaultEnv: async () => createNoopSessionEnv(),
 	});
@@ -62,7 +63,7 @@ function httpWorkflowRecord(name: string, definition: import('../src/internal.ts
 
 function workflow(run: (input: unknown) => any) {
 	return defineWorkflow({
-		agent: defineAgent(() => ({ model: false })),
+		agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 		input: v.looseObject({}),
 		async run({ input }) {
 			return run(input);
@@ -80,12 +81,12 @@ function createApp(runtime: Partial<import('../src/internal.ts').NodeRuntime>): 
 describe('invoke()', () => {
 	it('infers caller input from Workflow Action input semantics', () => {
 		const required = defineWorkflow({
-			agent: defineAgent(() => ({ model: false })),
+			agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 			input: v.object({ count: v.number() }),
 			run: async ({ input }) => input,
 		});
 		const omitted = defineWorkflow({
-			agent: defineAgent(() => ({ model: false })),
+			agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 			run: async () => undefined,
 		});
 
@@ -98,7 +99,7 @@ describe('invoke()', () => {
 
 	it('rejects supplied input when a Workflow Action declares no input', async () => {
 		const target = defineWorkflow({
-			agent: defineAgent(() => ({ model: false })),
+			agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 			run: async () => undefined,
 		});
 		const admitWorkflow = vi.fn(async () => ({ runId: 'run_no_input' }));
@@ -512,7 +513,7 @@ describe('workflow invocation', () => {
 	});
 
 	it('rejects invalid Action input before initializing the workflow Agent or sandbox', async () => {
-		const initialize = vi.fn(() => ({ model: false as const }));
+		const initialize = vi.fn(() => ({ model: 'anthropic/claude-haiku-4-5' as const }));
 		const createSessionEnv = vi.fn(async () => createNoopSessionEnv());
 		const invalidWorkflow = defineWorkflow({
 			agent: defineAgent(initialize),
@@ -529,7 +530,7 @@ describe('workflow invocation', () => {
 					runId,
 					req: request,
 					env: {},
-					agentConfig: { resolveModel: () => undefined },
+					agentConfig: { resolveModel: () => resolveModel('anthropic/claude-haiku-4-5') },
 					createDefaultEnv: createSessionEnv,
 							});
 			},
@@ -550,7 +551,7 @@ describe('workflow invocation', () => {
 	});
 
 	it('rejects explicit input for a no-input workflow before initializing its Agent or sandbox', async () => {
-		const initialize = vi.fn(() => ({ model: false as const }));
+		const initialize = vi.fn(() => ({ model: 'anthropic/claude-haiku-4-5' as const }));
 		const createSessionEnv = vi.fn(async () => createNoopSessionEnv());
 		const noInputWorkflow = defineWorkflow({
 			agent: defineAgent(initialize),
@@ -566,7 +567,7 @@ describe('workflow invocation', () => {
 					runId,
 					req: request,
 					env: {},
-					agentConfig: { resolveModel: () => undefined },
+					agentConfig: { resolveModel: () => resolveModel('anthropic/claude-haiku-4-5') },
 					createDefaultEnv: createSessionEnv,
 							});
 			},
@@ -641,7 +642,7 @@ describe('workflow run lifecycle', () => {
 		const runStore = new InMemoryRunStore();
 		const eventStreamStore = createTestEventStreamStore();
 		const createdWorkflow = defineWorkflow({
-			agent: defineAgent(() => ({ model: false })),
+			agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })),
 			async run({ harness }) {
 				const session = await harness.session();
 				void session.shell('slow operation');
@@ -659,7 +660,7 @@ describe('workflow run lifecycle', () => {
 					runId,
 					req: request,
 					env: {},
-					agentConfig: { resolveModel: () => undefined },
+					agentConfig: { resolveModel: () => resolveModel('anthropic/claude-haiku-4-5') },
 					createDefaultEnv: async () =>
 						createNoopSessionEnv({
 							async exec(_command, options) {
