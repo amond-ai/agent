@@ -172,7 +172,7 @@ export default {
 		try {
 			fs.writeFileSync(
 				path.join(root, 'src', 'agents', 'reviewer.ts'),
-				`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: false }));\n`,
+				`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n`,
 			);
 			fs.writeFileSync(
 				path.join(root, 'wrangler.jsonc'),
@@ -238,7 +238,7 @@ function createRunFixture(): string {
 	fs.mkdirSync(path.join(root, 'workflows'));
 	fs.writeFileSync(
 		path.join(root, 'workflows', 'checkpoint.mjs'),
-		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nconst agent = defineAgent(() => ({ model: false }));\nexport default defineWorkflow({ agent, async run({ log }) { log.info('checkpoint stream event'); return { checkpoint: 2 }; } });\n`,
+		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nconst agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\nexport default defineWorkflow({ agent, async run({ log }) { log.info('checkpoint stream event'); return { checkpoint: 2 }; } });\n`,
 	);
 	fs.writeFileSync(
 		path.join(root, 'app.mjs'),
@@ -300,7 +300,7 @@ async function createGeneratedFixture(
 	);
 	fs.writeFileSync(
 		path.join(root, 'src', 'agents', 'assistant.ts'),
-		`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: false }));\n`,
+		`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n`,
 	);
 	fs.writeFileSync(path.join(root, 'src', 'cloudflare.ts'), cloudflareSource);
 	fs.writeFileSync(

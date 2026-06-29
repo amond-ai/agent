@@ -174,7 +174,7 @@ describe('flue run', () => {
 		fs.writeFileSync(
 			path.join(root, 'agents', 'assistant.mjs'),
 			`import { defineAgent } from '@flue/runtime';\n` +
-				`export default defineAgent(() => ({ model: false }));\n`,
+				`export default defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n`,
 		);
 		const child = spawn(
 			process.execPath,
@@ -195,7 +195,9 @@ describe('flue run', () => {
 
 		assert.equal(exitCode, 1);
 		assert.match(stderr, /id\s+[0-9A-HJKMNP-TV-Z]{26}/);
-		assert.match(stderr, /No model is configured/);
+		// The agent runs past config and fails at model invocation (no API key in
+		// the test environment), confirming the route-free HTTP run reached the model.
+		assert.match(stderr, /No API key for provider/);
 		assert.equal(stdout, '');
 	});
 
@@ -302,7 +304,7 @@ describe('flue build', () => {
 		fs.writeFileSync(
 			path.join(root, '.flue', 'workflows', 'inner.mjs'),
 			`import { defineAgent, defineWorkflow } from '@flue/runtime';\n` +
-				`const agent = defineAgent(() => ({ model: false }));\n` +
+				`const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n` +
 				`export default defineWorkflow({ agent, async run() { return { ok: true }; } });\n`,
 		);
 
@@ -318,7 +320,7 @@ describe('flue build', () => {
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'outer.mjs'),
 			`import { defineAgent, defineWorkflow } from '@flue/runtime';\n` +
-				`const agent = defineAgent(() => ({ model: false }));\n` +
+				`const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n` +
 				`export default defineWorkflow({ agent, async run() { return { ok: true }; } });\n`,
 		);
 
@@ -359,7 +361,7 @@ function createNoInputWorkflowFixture() {
 	fs.writeFileSync(
 		path.join(root, 'workflows', 'no-input.mjs'),
 		`import { defineAgent, defineWorkflow } from '@flue/runtime';\n` +
-			`const agent = defineAgent(() => ({ model: false }));\n` +
+			`const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n` +
 			`export default defineWorkflow({ agent, async run() { return { ok: true }; } });\n`,
 	);
 	return root;
@@ -375,7 +377,7 @@ function createWorkflowFixture(optionalInput = false) {
 		`import * as v from 'valibot';\n` +
 			`import { defineAgent, defineWorkflow } from '@flue/runtime';\n` +
 			`console.log('authored module log');\n` +
-			`const agent = defineAgent(() => ({ model: false }));\n` +
+			`const agent = defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n` +
 			`export default defineWorkflow({\n` +
 			`  agent,\n` +
 			(optionalInput

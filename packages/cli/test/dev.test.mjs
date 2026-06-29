@@ -22,17 +22,17 @@ test('restarts after discovered config changes and recovers after invalid config
 	writeWorkflow(root);
 	fs.writeFileSync(
 		path.join(root, 'workflows', 'daily.report.mjs'),
-		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: false })), async run() { return { ok: true }; } });\n`,
+		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), async run() { return { ok: true }; } });\n`,
 	);
 	fs.writeFileSync(
 		path.join(root, 'workflows', 'weekly.mjs'),
-		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: false })), async run() { return { ok: true }; } });\n`,
+		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), async run() { return { ok: true }; } });\n`,
 	);
 	fs.mkdirSync(path.join(root, 'agents'));
 	for (const name of ['support', 'researcher', 'reviewer', 'writer', 'planner']) {
 		fs.writeFileSync(
 			path.join(root, 'agents', `${name}.mjs`),
-			`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: false }));\n`,
+			`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n`,
 		);
 	}
 	fs.mkdirSync(path.join(root, 'channels'));
@@ -62,7 +62,7 @@ test('restarts after discovered config changes and recovers after invalid config
 
 		fs.writeFileSync(
 			path.join(root, 'agents', 'support.mjs'),
-			`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: false }));\n`,
+			`import { defineAgent } from '@flue/runtime';\nexport default defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));\n`,
 		);
 		await dev.waitForLog('changed agents/support.mjs');
 		await dev.waitForLog('reloaded in');
@@ -229,7 +229,7 @@ test('resolves attributed Markdown imports from workspace package exports', asyn
 import explore from '@repo/workspace-content/explore/SKILL.md' with { type: 'skill' };
 import guide from '@repo/workspace-content/guide.md' with { type: 'markdown' };
 export const route = async (_c, next) => next();
-export default defineWorkflow({ agent: defineAgent(() => ({ model: false, skills: [explore] })), async run() { return { skill: explore.name, guide }; } });
+export default defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5', skills: [explore] })), async run() { return { skill: explore.name, guide }; } });
 `,
 	);
 
@@ -252,7 +252,7 @@ test('reloads the Node application when an external environment file changes', a
 	fs.mkdirSync(path.join(root, 'workflows'));
 	fs.writeFileSync(
 		path.join(root, 'workflows', 'environment.mjs'),
-		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport const route = async (_c, next) => next();\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: false })), async run() { return { value: process.env.FLUE_DEV_ENV_TEST }; } });\n`,
+		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport const route = async (_c, next) => next();\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), async run() { return { value: process.env.FLUE_DEV_ENV_TEST }; } });\n`,
 	);
 	fs.writeFileSync(envPath, 'FLUE_DEV_ENV_TEST=first\n');
 
@@ -327,7 +327,7 @@ function writeWorkflow(root, replace = false) {
 	fs.mkdirSync(path.join(root, 'workflows'), { recursive: replace });
 	fs.writeFileSync(
 		path.join(root, 'workflows', 'smoke.mjs'),
-		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport const route = async (_c, next) => next();\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: false })), async run() { return { ok: true }; } });\n`,
+		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport const route = async (_c, next) => next();\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: 'anthropic/claude-haiku-4-5' })), async run() { return { ok: true }; } });\n`,
 	);
 }
 
