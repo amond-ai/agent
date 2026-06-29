@@ -11,7 +11,7 @@ import {
 } from './runtime/attachment-store.ts';
 import type { SqlStorage } from './sql-storage.ts';
 
-export const ATTACHMENT_CHUNK_BYTE_LENGTH = 256 * 1024;
+export const ATTACHMENT_CHUNK_BYTE_LENGTH = 512 * 1024;
 
 interface SqlAttachmentRow {
 	mime_type: unknown;
