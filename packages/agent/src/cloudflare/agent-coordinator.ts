@@ -516,7 +516,7 @@ class CloudflareAgentCoordinator {
 		const conversationWriter = await this.ensureConversationWriter();
 		const agent = this.options.agents.find((record) => record.name === this.agentName)?.definition;
 		if (!agent) throw new Error('[flue] Agent target unavailable during durable reconciliation.');
-		const reconciled = await reconcileInterruptedSubmission(
+		const replacement = await reconcileInterruptedSubmission(
 			this.submissions,
 			submission,
 			agent,
@@ -525,8 +525,8 @@ class CloudflareAgentCoordinator {
 			{ ownerId: this.instance.ctx.id.toString(), leaseExpiresAt: 0 },
 			conversationWriter,
 		);
-		if (reconciled.disposition === 'replacement') {
-			await this.startSubmissionAttempt(reconciled.submission);
+		if (replacement) {
+			await this.startSubmissionAttempt(replacement);
 		}
 	}
 

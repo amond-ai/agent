@@ -173,27 +173,14 @@ export function agentSubmissionDispatchInput(input: DispatchAgentSubmissionInput
 }
 
 /**
- * Reconciliation disposition for an interrupted submission. Coordinators
- * use it for replacement-attempt scheduling:
- *
- * - `replacement` — a new attempt was claimed; start processing it.
- * - `completed` — the canonical response had already completed; the
- *   submission settled as success.
- * - `requeued` — provably-unstarted work went back to the queue.
- * - `failed` — the submission was terminalized with `error`.
- * - `stale` — another attempt owns or already settled the submission;
- *   nothing for this caller to notify or start.
- */
-type ReconciliationResult =
-	| { readonly disposition: 'replacement'; readonly submission: AgentSubmission }
-	| { readonly disposition: 'completed' }
-	| { readonly disposition: 'requeued' }
-	| { readonly disposition: 'failed'; readonly error: Error }
-	| { readonly disposition: 'stale' };
-
-/**
  * Shared reconciliation decision tree for an interrupted running submission.
  * Used by both the Cloudflare and Node agent coordinators.
+ *
+ * Returns the replacement submission when a new attempt was claimed and the
+ * coordinator should start processing it. Returns `undefined` for every
+ * other outcome (already completed, requeued, failed/terminalized, or stale)
+ * because all durable side effects have already been applied inside this
+ * function and the coordinator needs no further action.
  *
  * The `createContext` callback builds a `FlueContextInternal` for handler
  * execution. Submission input is delivered through the session handler rather
@@ -206,10 +193,10 @@ export async function reconcileInterruptedSubmission(
 	createContext: (dispatchId: string | undefined) => FlueContextInternal,
 	lease?: { ownerId: string; leaseExpiresAt: number },
 	conversationWriter?: ConversationRecordWriter,
-): Promise<ReconciliationResult> {
+): Promise<AgentSubmission | undefined> {
 	const { input } = submission;
 	const attempt = submissionAttemptRef(submission);
-	if (!attempt) return { disposition: 'stale' };
+	if (!attempt) return undefined;
 
 	// Inspect canonical session state first: a completed canonical response
 	// is finished provider work and settles as success unconditionally. The
@@ -235,7 +222,7 @@ export async function reconcileInterruptedSubmission(
 		} else {
 			await submissions.completeSubmission(attempt);
 		}
-		return { disposition: 'completed' };
+		return undefined;
 	}
 
 	// Abort requested before the owner could settle (it crashed, or the abort
@@ -243,12 +230,11 @@ export async function reconcileInterruptedSubmission(
 	// than retrying/resuming. Placed AFTER the completed-canonical check — a
 	// finished response still settles as success — and BEFORE the
 	// retry/timeout/resume branches so a crash-interrupted abort is never
-	// resurrected and the attempt budget/timeout cannot pre-empt it. A lost
-	// settle CAS returns `stale` and never falls through to a resurrecting branch.
+	// resurrected and the attempt budget/timeout cannot pre-empt it.
 	if (submission.abortRequestedAt !== undefined) {
 		const abortCtx = createContext(dispatchId);
 		if (submission.kind === 'direct') abortCtx.setSubmissionId?.(submission.submissionId);
-		const settled = await settleAbortedWithContext(
+		await settleAbortedWithContext(
 			submissions,
 			submission,
 			attempt,
@@ -256,8 +242,7 @@ export async function reconcileInterruptedSubmission(
 			abortCtx,
 			conversationWriter,
 		);
-		if (!settled) return { disposition: 'stale' };
-		return { disposition: 'failed', error: new SubmissionAbortedError() };
+		return undefined;
 	}
 
 	// Check retry budget. Pre-input exhaustion gets its own terminal error:
@@ -278,7 +263,7 @@ export async function reconcileInterruptedSubmission(
 						attemptCount: submission.attemptCount,
 						maxAttempts: submission.maxRetry,
 					});
-		return failInterruptedSubmission(
+		await failInterruptedSubmission(
 			submissions,
 			submission,
 			attempt,
@@ -286,15 +271,15 @@ export async function reconcileInterruptedSubmission(
 			'exhausted_retry_budget',
 			error,
 			createContext,
-			undefined,
 			conversationWriter,
 		);
+		return undefined;
 	}
 
 	// Check timeout.
 	if (submission.timeoutAt > 0 && Date.now() >= submission.timeoutAt) {
 		const error = new SubmissionTimeoutError();
-		return failInterruptedSubmission(
+		await failInterruptedSubmission(
 			submissions,
 			submission,
 			attempt,
@@ -302,9 +287,9 @@ export async function reconcileInterruptedSubmission(
 			'exceeded_timeout',
 			error,
 			createContext,
-			undefined,
 			conversationWriter,
 		);
+		return undefined;
 	}
 
 	// Canonical input exists but the operational input-applied marker did not
@@ -326,11 +311,11 @@ export async function reconcileInterruptedSubmission(
 				maxRetry: replacement.maxRetry,
 				timeoutAt: replacement.timeoutAt,
 			}))) {
-				return { disposition: 'stale' };
+				return undefined;
 			}
-			return { disposition: 'replacement', submission: replacement };
+			return replacement;
 		}
-		return { disposition: 'stale' };
+		return undefined;
 	}
 
 	// Resumable progress, or the one accepted degraded window. Both the
@@ -364,7 +349,7 @@ export async function reconcileInterruptedSubmission(
 			crypto.randomUUID(),
 			lease,
 		);
-		if (!replacement?.attemptId) return { disposition: 'stale' };
+		if (!replacement?.attemptId) return undefined;
 		if (state === 'continuable') {
 			const recoveryCtx = createContext(dispatchId);
 			if (submission.kind === 'direct') recoveryCtx.setSubmissionId?.(submission.submissionId);
@@ -375,7 +360,7 @@ export async function reconcileInterruptedSubmission(
 				}),
 			)(recoveryCtx);
 		}
-		return { disposition: 'replacement', submission: replacement };
+		return replacement;
 	}
 
 	// Only 'absent' remains here (completed/continuable/uncertain handled
@@ -384,13 +369,13 @@ export async function reconcileInterruptedSubmission(
 		// Crashed before any canonical input was persisted — requeue for a
 		// clean first attempt.
 		await submissions.requeueSubmissionBeforeInputApplied(attempt);
-		return { disposition: 'requeued' };
+		return undefined;
 	}
 
 	// The input-applied marker was written but the canonical input is absent
 	// (it could not be persisted before the crash): nothing to resume — fail.
 	const error = new SubmissionInterruptedError({ phase: 'after_input_application' });
-	return failInterruptedSubmission(
+	await failInterruptedSubmission(
 		submissions,
 		submission,
 		attempt,
@@ -398,9 +383,9 @@ export async function reconcileInterruptedSubmission(
 		'interrupted_after_input_application',
 		error,
 		createContext,
-		undefined,
 		conversationWriter,
 	);
+	return undefined;
 }
 
 /** Synthetic request for the submission's kind: an agent route for direct prompts, the dispatch path for dispatches. */
@@ -628,9 +613,8 @@ async function failInterruptedSubmission(
 	reason: AgentSubmissionInterruption['reason'],
 	error: Error,
 	createContext: (dispatchId: string | undefined) => FlueContextInternal,
-	interruptedTools?: ReadonlyArray<{ readonly name: string; readonly id: string }>,
 	conversationWriter?: ConversationRecordWriter,
-): Promise<ReconciliationResult> {
+): Promise<void> {
 	const { input } = submission;
 	const dispatchId = agentSubmissionDispatchId(input);
 	const ctx = createContext(dispatchId);
@@ -646,7 +630,6 @@ async function failInterruptedSubmission(
 				kind: submission.kind,
 				reason,
 				message: error.message,
-				interruptedTools,
 			}),
 		)(ctx);
 	} catch (terminalError) {
@@ -656,19 +639,18 @@ async function failInterruptedSubmission(
 			terminalError,
 		);
 	}
-	const settled =
-		submission.kind === 'direct'
-			? await settleDirectSubmission(
-					submissions,
-					attempt,
-					ctx,
-					'failed',
-					error,
-					conversationWriter,
-				)
-			: await submissions.failSubmission(attempt, error);
-	if (!settled) return { disposition: 'stale' };
-	return { disposition: 'failed', error };
+	if (submission.kind === 'direct') {
+		await settleDirectSubmission(
+			submissions,
+			attempt,
+			ctx,
+			'failed',
+			error,
+			conversationWriter,
+		);
+	} else {
+		await submissions.failSubmission(attempt, error);
+	}
 }
 
 /**
@@ -682,9 +664,6 @@ async function failInterruptedSubmission(
  * additionally settle through the two-phase outbox with `outcome: 'aborted'`,
  * the durable terminal record a reconnecting waiter observes; dispatch
  * submissions settle the operational row with `failSubmission`.
- *
- * Returns whether the terminal settle CAS won. Callers that lost the CAS must
- * not proceed as if they settled it (the first terminal state wins).
  */
 async function settleAbortedWithContext(
 	submissions: AgentSubmissionStore,
@@ -693,7 +672,7 @@ async function settleAbortedWithContext(
 	agent: AgentDefinition,
 	ctx: FlueContextInternal,
 	conversationWriter?: ConversationRecordWriter,
-): Promise<boolean> {
+): Promise<void> {
 	const error = new SubmissionAbortedError();
 	// Visible timeline advisory for both kinds.
 	try {
@@ -713,7 +692,7 @@ async function settleAbortedWithContext(
 		);
 	}
 	if (submission.kind === 'direct') {
-		return settleDirectSubmission(
+		await settleDirectSubmission(
 			submissions,
 			attempt,
 			ctx,
@@ -721,8 +700,9 @@ async function settleAbortedWithContext(
 			error,
 			conversationWriter,
 		);
+	} else {
+		await submissions.failSubmission(attempt, error);
 	}
-	return submissions.failSubmission(attempt, error);
 }
 
 async function settleDirectSubmission(

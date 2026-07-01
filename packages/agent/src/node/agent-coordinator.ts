@@ -523,7 +523,7 @@ export function createNodeAgentCoordinator(options: {
 			}
 			try {
 				const conversationWriter = await getConversationWriter(submission.input);
-				const reconciled = await reconcileInterruptedSubmission(
+				const replacement = await reconcileInterruptedSubmission(
 					submissions,
 					submission,
 					agent,
@@ -531,8 +531,8 @@ export function createNodeAgentCoordinator(options: {
 					{ ownerId, leaseExpiresAt: Date.now() + LEASE_DURATION_MS },
 					conversationWriter,
 				);
-				if (reconciled.disposition === 'replacement') {
-					spawnSubmissionTask(reconciled.submission);
+				if (replacement) {
+					spawnSubmissionTask(replacement);
 				}
 			} catch (error) {
 				console.error(
