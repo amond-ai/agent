@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { sanitizedChildEnv } from './child-env.mjs';
 
 const cli = new URL('../dist/flue.js', import.meta.url);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -21,12 +22,11 @@ function stripFrontmatter(source) {
 }
 
 async function runCli(args) {
-	const env = { ...process.env, FLUE_REGISTRY_URL: registryUrl };
-	for (const key of Object.keys(env)) {
-		if (key.startsWith('CODEX_')) delete env[key];
-	}
 	const child = spawn(process.execPath, [cli.pathname, ...args], {
-		env,
+		// Strip coding-agent markers (CLAUDECODE, CODEX_*, ...) so the CLI
+		// prints human instructions instead of raw blueprint Markdown when the
+		// tests themselves run under a coding agent.
+		env: sanitizedChildEnv({ FLUE_REGISTRY_URL: registryUrl }),
 		stdio: ['ignore', 'pipe', 'pipe'],
 	});
 	let stdout = '';

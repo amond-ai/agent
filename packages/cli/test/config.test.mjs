@@ -10,6 +10,12 @@ import { fileURLToPath } from 'node:url';
 // subpath exposes only the `flue.config.ts` authoring API), so test it at the
 // source boundary the CLI consumes.
 import { resolveConfig } from '../src/lib/config.ts';
+import { sanitizedChildEnv } from './child-env.mjs';
+
+// Strip model-provider credentials (ANTHROPIC_API_KEY, ...) from spawned CLI
+// children so runs that reach model invocation fail with "No API key for
+// provider" regardless of what the developer's shell exports.
+const childEnv = sanitizedChildEnv();
 
 const cli = new URL('../dist/flue.js', import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -112,6 +118,7 @@ describe('flue run', () => {
 		const root = createNoInputWorkflowFixture();
 		const child = spawn(process.execPath, [cli.pathname, 'run', 'no-input'], {
 			cwd: root,
+			env: childEnv,
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		let stderr = '';
@@ -128,6 +135,7 @@ describe('flue run', () => {
 		const root = createNoInputWorkflowFixture();
 		const child = spawn(process.execPath, [cli.pathname, 'run', 'no-input', '--input', '{}'], {
 			cwd: root,
+			env: childEnv,
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		let stderr = '';
@@ -146,7 +154,7 @@ describe('flue run', () => {
 		const child = spawn(
 			process.execPath,
 			[cli.pathname, 'run', 'inspect-input', '--input', '{"value":"weekly","nested":{"count":3}}'],
-			{ cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+			{ cwd: root, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] },
 		);
 		let stdout = '';
 		let stderr = '';
@@ -179,7 +187,7 @@ describe('flue run', () => {
 		const child = spawn(
 			process.execPath,
 			[cli.pathname, 'run', 'assistant', '--input', '{"message":"hello"}'],
-			{ cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+			{ cwd: root, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] },
 		);
 		let stdout = '';
 		let stderr = '';
@@ -215,7 +223,7 @@ describe('flue run', () => {
 				'--input',
 				'{"value":"diskless","nested":{"count":1}}',
 			],
-			{ cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+			{ cwd: root, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] },
 		);
 		let stderr = '';
 		child.stderr.setEncoding('utf8');
@@ -241,6 +249,7 @@ describe('flue run', () => {
 		const root = createWorkflowFixture(true);
 		const child = spawn(process.execPath, [cli.pathname, 'run', 'inspect-input'], {
 			cwd: root,
+			env: childEnv,
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		let stdout = '';
@@ -272,6 +281,7 @@ describe('flue build', () => {
 
 		const child = spawn(process.execPath, [cli.pathname, 'build'], {
 			cwd: root,
+			env: childEnv,
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		let output = '';
@@ -326,6 +336,7 @@ describe('flue build', () => {
 
 		const child = spawn(process.execPath, [cli.pathname, 'build'], {
 			cwd: root,
+			env: childEnv,
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		let output = '';
