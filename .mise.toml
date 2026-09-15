@@ -1,0 +1,7 @@
+[tools]
+bun = "1.4.2"
+node = "24"
+
+[tasks.setup]
+description = "Initialize project (dependencies + git hooks)"
+run = "bun install"

@@ -1,0 +1,62 @@
+{
+  "name": "agent",
+  "type": "module",
+  "private": true,
+  "packageManager": "bun@1.4.2",
+  "author": "Passion Factory Corp.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amond-ai/agent.git"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "check": "turbo run check",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "prepare": "husky",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@pleaseai/eslint-config": "catalog:",
+    "eslint": "catalog:",
+    "husky": "^9.1.7",
+    "jiti": "^2.6.1",
+    "lint-staged": "^17.5.1",
+    "turbo": "^2.8.0",
+    "typescript": "catalog:"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --cache --fix"
+    ],
+    "*.{md,mdx,mjs,yml,yaml,json,jsonc}": [
+      "eslint --cache --fix"
+    ]
+  },
+  "catalog": {
+    "@amond-ai/harness-claude-code": "0.1.0",
+    "@amond-ai/redact": "0.1.0",
+    "@amond-ai/sandbox": "0.1.0",
+    "@amond-ai/harness-transport": "0.1.0",
+    "@pleaseai/eslint-config": "^0.0.4",
+    "@vitest/coverage-istanbul": "^4.1.10",
+    "bun-types": "^1.4.2",
+    "eslint": "^10.7.0",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "zod": "4.5.2"
+  },
+  "catalogs": {
+    "workers-v5": {
+      "@cloudflare/workers-types": "^5.20260825.1"
+    }
+  }
+}
