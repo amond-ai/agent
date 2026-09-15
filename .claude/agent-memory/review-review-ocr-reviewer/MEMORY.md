@@ -1,0 +1,1 @@
+- [ocr scoping in amond repo](ocr_scoping_amond_repo.md) — no `.please/config.yml`; `*.md`/`*.test.ts` auto-excluded; `bun test`/`turbo run check|lint --force` verify findings fast.
