@@ -1,7 +1,7 @@
 {
   "name": "@amond-ai/agent-harness-claude-code",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The Claude Code harness adapter, over @amond-ai/harness-claude-code",
   "author": "Passion Factory Corp.",
   "license": "Apache-2.0",
@@ -14,7 +14,13 @@
   "bugs": {
     "url": "https://github.com/amond-ai/agent/issues"
   },
-  "keywords": ["agent", "harness", "claude-code", "adapter", "sandbox"],
+  "keywords": [
+    "agent",
+    "harness",
+    "claude-code",
+    "adapter",
+    "sandbox"
+  ],
   "sideEffects": false,
   "publishConfig": {
     "access": "public"

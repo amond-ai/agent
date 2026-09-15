@@ -1,7 +1,7 @@
 {
-  "packages/amond": "0.1.0",
-  "packages/core": "0.1.0",
-  "packages/durable": "0.1.0",
-  "packages/durable-cloudflare": "0.1.0",
-  "packages/harness-claude-code": "0.1.0"
+  "packages/amond": "0.2.0",
+  "packages/core": "0.2.0",
+  "packages/durable": "0.2.0",
+  "packages/durable-cloudflare": "0.2.0",
+  "packages/harness-claude-code": "0.2.0"
 }

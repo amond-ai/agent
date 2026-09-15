@@ -1,7 +1,7 @@
 {
   "name": "@amond-ai/agent-core",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The agent contract: the filesystem layout, the loader that resolves it, and the handlers a platform invokes",
   "author": "Passion Factory Corp.",
   "license": "Apache-2.0",
@@ -14,7 +14,13 @@
   "bugs": {
     "url": "https://github.com/amond-ai/agent/issues"
   },
-  "keywords": ["agent", "framework", "claude-code", "filesystem", "loader"],
+  "keywords": [
+    "agent",
+    "framework",
+    "claude-code",
+    "filesystem",
+    "loader"
+  ],
   "sideEffects": false,
   "publishConfig": {
     "access": "public"
