@@ -1,0 +1,52 @@
+.claude/agent-memory/github-pr-manager/pr-conventions-amond-ai-agent.md
+  s_1cce44367b65fd::t_f424a28781a000 1-18
+.claude/agent-memory/review-review-ocr-reviewer/ocr_scoping_amond_repo.md
+  s_7c6798ce885874::t_1df3fb6c0eae1d 16-22
+  s_a455d8015503ca::t_240f062185e3f6 1-15
+.claude/agent-memory/github-pr-manager/MEMORY.md
+  s_1cce44367b65fd::t_f424a28781a000 1
+.claude/agent-memory/review-review-ocr-reviewer/MEMORY.md
+  s_a455d8015503ca::t_deb66a06e05ac5 1
+.claude/settings.json
+  s_06b93d480f1377::t_c2d432155fa795 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "76abf37d039f515b8274f089b66017ec2e2a1a13",
+  "prompts": {},
+  "sessions": {
+    "s_06b93d480f1377": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4e9c7356-4ebe-4cc1-b928-ec028710b9d4",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_1cce44367b65fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "50aa50d9-33c0-4826-91a7-a305ccc2f5d0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_7c6798ce885874": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b09a605-0b34-4523-938a-2719985b3eac",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_a455d8015503ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4cf5fe61-f7a7-46ec-a8a6-63405c0f9206",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
