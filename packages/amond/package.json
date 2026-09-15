@@ -1,7 +1,7 @@
 {
   "name": "amond",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The amond CLI: scaffold an agent, run it locally, and generate the handlers a platform deploys",
   "author": "Passion Factory Corp.",
   "license": "Apache-2.0",
@@ -14,7 +14,13 @@
   "bugs": {
     "url": "https://github.com/amond-ai/agent/issues"
   },
-  "keywords": ["agent", "framework", "cli", "cloudflare", "vercel"],
+  "keywords": [
+    "agent",
+    "framework",
+    "cli",
+    "cloudflare",
+    "vercel"
+  ],
   "sideEffects": false,
   "publishConfig": {
     "access": "public"
