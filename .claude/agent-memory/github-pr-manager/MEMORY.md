@@ -1,0 +1,1 @@
+- [PR conventions: amond-ai/agent](pr-conventions-amond-ai-agent.md) — ready-not-draft (no AI review on open); template checklist should be ticked
