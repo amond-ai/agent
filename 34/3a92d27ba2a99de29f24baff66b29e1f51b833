@@ -1,0 +1,137 @@
+.release-please-manifest.json
+  s_95f730d671f751::t_06b74f4d54faa0 1-7
+README.md
+  s_95f730d671f751::t_aa04aab3c54fb5 1-109
+packages/amond/LICENSE
+  s_926069aa05d635::t_43fa719071eabf 1-201
+packages/amond/NOTICE
+  s_926069aa05d635::t_042ab6aa2b1b56 1-2
+packages/amond/README.md
+  s_95f730d671f751::t_b4314d90b1b1fe 1-6
+packages/amond/package.json
+  s_3598e23a871543::t_af1866199405be 1-59
+packages/amond/src/index.test.ts
+  s_95f730d671f751::t_2c8fa2438ac887 1-32
+packages/amond/src/index.ts
+  s_95f730d671f751::t_49114725604a0b 1-40
+packages/amond/tsconfig.json
+  s_926069aa05d635::t_90e993321a9b27 1-9
+packages/amond/vitest.config.ts
+  s_926069aa05d635::t_e1c43da5514dfe 1-10
+packages/core/LICENSE
+  s_926069aa05d635::t_c6efd7e78d5bde 1-201
+packages/core/NOTICE
+  s_926069aa05d635::t_bb3b684f986dbe 1-2
+packages/core/README.md
+  s_95f730d671f751::t_74b9883546cce5 1-6
+packages/core/package.json
+  s_95f730d671f751::t_781413cf39f64c 1-55
+packages/core/src/index.ts
+  s_95f730d671f751::t_cfe44644e20948 1-94
+packages/core/tsconfig.json
+  s_926069aa05d635::t_77706f69e5d18c 1-9
+packages/core/vitest.config.ts
+  s_926069aa05d635::t_1432eaa58b0b64 1-10
+packages/durable-cloudflare/LICENSE
+  s_926069aa05d635::t_18dc92bee54a7e 1-201
+packages/durable-cloudflare/NOTICE
+  s_926069aa05d635::t_eac1b3ca945dcc 1-2
+packages/durable-cloudflare/README.md
+  s_95f730d671f751::t_edeeb3a32e0c9f 1-6
+packages/durable-cloudflare/package.json
+  s_3598e23a871543::t_5a05f3b610355a 1-58
+packages/durable-cloudflare/src/index.ts
+  s_95f730d671f751::t_d175a5a7fa2f90 1-25
+packages/durable-cloudflare/tsconfig.json
+  s_926069aa05d635::t_ee2f34554ae9ad 1-9
+packages/durable-cloudflare/vitest.config.ts
+  s_926069aa05d635::t_2a5cbab8a4bd11 1-10
+packages/durable/LICENSE
+  s_926069aa05d635::t_62d3f30c457ad4 1-201
+packages/durable/NOTICE
+  s_926069aa05d635::t_75dd05c7740c9d 1-2
+packages/durable/README.md
+  s_95f730d671f751::t_d2ab6ccfb5d7f4 1-6
+packages/durable/package.json
+  s_95f730d671f751::t_2519da27bf867d 1-53
+packages/durable/src/index.ts
+  s_95f730d671f751::t_86bb501652c339 1-74
+packages/durable/src/memory.test.ts
+  s_ed97cf4a0e0035::t_3a8844e2332e16 1-128
+packages/durable/src/memory.ts
+  s_95f730d671f751::t_0c0fd1872267b4 1-90
+packages/durable/tsconfig.json
+  s_926069aa05d635::t_44c2b59f4b10ac 1-9
+packages/durable/vitest.config.ts
+  s_926069aa05d635::t_46eb4845a7bb05 1-10
+packages/harness-claude-code/LICENSE
+  s_926069aa05d635::t_322c2c895ed165 1-201
+packages/harness-claude-code/NOTICE
+  s_926069aa05d635::t_01e508032ea25f 1-2
+packages/harness-claude-code/README.md
+  s_95f730d671f751::t_bb094dd3e81197 1-6
+packages/harness-claude-code/package.json
+  s_95f730d671f751::t_87ec13da8b97af 1-57
+packages/harness-claude-code/src/index.ts
+  s_95f730d671f751::t_7506aba02a29b3 1-25
+packages/harness-claude-code/tsconfig.json
+  s_926069aa05d635::t_d833bcf8567842 1-9
+packages/harness-claude-code/vitest.config.ts
+  s_926069aa05d635::t_7c1cd4a9991761 1-10
+packages/harness-codex/LICENSE
+  s_926069aa05d635::t_21246f0535e0b1 1-201
+packages/harness-codex/NOTICE
+  s_926069aa05d635::t_9344b571c128fb 1-2
+packages/harness-codex/README.md
+  s_95f730d671f751::t_f08ea95c5b61b7 1-6
+packages/harness-codex/package.json
+  s_3598e23a871543::t_e67217d7bc7da5 1-53
+packages/harness-codex/src/index.ts
+  s_95f730d671f751::t_3191dfc4ff3de6 1-19
+packages/harness-codex/tsconfig.json
+  s_926069aa05d635::t_14271624e7959e 1-9
+packages/harness-codex/vitest.config.ts
+  s_926069aa05d635::t_8fd0bd49fe9749 1-10
+release-please-config.json
+  s_95f730d671f751::t_6f1e25476ea516 1-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "343a92d27ba2a99de29f24baff66b29e1f51b833",
+  "prompts": {},
+  "sessions": {
+    "s_3598e23a871543": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "121eceb9-d260-4110-b4e8-1b14de7086df",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_926069aa05d635": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cdf8566-426e-4c4f-914c-e93cd6beac73",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_95f730d671f751": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42bf4c89-711f-4168-bd0b-e9f95cea1951",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_ed97cf4a0e0035": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7b37502b-4edc-4376-9e04-9500edc214f9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
