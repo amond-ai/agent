@@ -1,0 +1,53 @@
+{
+  "name": "@amond-ai/agent-harness-codex",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spike: a second harness adapter, kept unpublished so the adapter seam is proven against two harnesses rather than one",
+  "author": "Passion Factory Corp.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/amond-ai/agent/tree/main/packages/harness-codex#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amond-ai/agent.git",
+    "directory": "packages/harness-codex"
+  },
+  "bugs": {
+    "url": "https://github.com/amond-ai/agent/issues"
+  },
+  "keywords": ["agent", "harness", "codex", "spike"],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "NOTICE",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --dts",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "bun --bun vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@amond-ai/agent-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@pleaseai/eslint-config": "catalog:",
+    "bun-types": "catalog:",
+    "eslint": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "@amond-ai/agent-harness-claude-code",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "The Claude Code harness adapter, over @amond-ai/harness-claude-code",
+  "author": "Passion Factory Corp.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/amond-ai/agent/tree/main/packages/harness-claude-code#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amond-ai/agent.git",
+    "directory": "packages/harness-claude-code"
+  },
+  "bugs": {
+    "url": "https://github.com/amond-ai/agent/issues"
+  },
+  "keywords": ["agent", "harness", "claude-code", "adapter", "sandbox"],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "NOTICE",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --dts",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "bun --bun vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@amond-ai/agent-core": "workspace:*",
+    "@amond-ai/harness-claude-code": "catalog:",
+    "@amond-ai/sandbox": "catalog:"
+  },
+  "devDependencies": {
+    "@pleaseai/eslint-config": "catalog:",
+    "bun-types": "catalog:",
+    "eslint": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

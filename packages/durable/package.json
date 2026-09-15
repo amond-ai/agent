@@ -1,0 +1,53 @@
+{
+  "name": "@amond-ai/agent-durable",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "The durable execution contract an agent session runs against, with the in-memory implementation every adapter is verified against",
+  "author": "Passion Factory Corp.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/amond-ai/agent/tree/main/packages/durable#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amond-ai/agent.git",
+    "directory": "packages/durable"
+  },
+  "bugs": {
+    "url": "https://github.com/amond-ai/agent/issues"
+  },
+  "keywords": ["agent", "durable", "contract", "workflow", "session"],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "NOTICE",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --dts",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "bun --bun vitest run --passWithNoTests"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@pleaseai/eslint-config": "catalog:",
+    "bun-types": "catalog:",
+    "eslint": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
