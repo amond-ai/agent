@@ -49,6 +49,15 @@ describe('resolving an agent tree', () => {
       .toEqual(['assign.ts', 'close-issue.ts', 'search-issues.ts'])
   })
 
+  it('accepts an indented top-level default export, which is still a default export', async () => {
+    const { tree } = await load({
+      ...COMPLETE_TREE,
+      'agent/tools/close-issue.ts': '  export default { name: \'close-issue\' }\n',
+    })
+
+    expect(tree.tools.map(file => path.basename(file))).toContain('close-issue.ts')
+  })
+
   it('accepts a tree that only has instructions and a harness', async () => {
     const { tree } = await load({
       'agent/instructions.md': 'Answer.\n',
@@ -147,6 +156,37 @@ describe('rejecting a tree', () => {
 
     expect(error.path).toBe(path.join(root, 'agent/channels/slack.ts'))
     expect(error.message).toContain('no default export')
+  })
+
+  it('names a declaration file, which the manifest would import with nothing behind it', async () => {
+    const { root, error } = await rejection({
+      ...COMPLETE_TREE,
+      'agent/tools/close-issue.d.ts': 'declare const tool: unknown\nexport default tool\n',
+    })
+
+    expect(error.path).toBe(path.join(root, 'agent/tools/close-issue.d.ts'))
+    expect(error.message).toContain('declaration file')
+  })
+
+  it('names agent.ts when the harness file is there but exports nothing', async () => {
+    const { root, error } = await rejection({
+      ...COMPLETE_TREE,
+      'agent/agent.ts': 'export const config = {}\n',
+    })
+
+    expect(error.path).toBe(path.join(root, 'agent/agent.ts'))
+    expect(error.message).toContain('no default export')
+  })
+
+  it('names an entry-point directory written as a file, rather than reading it as empty', async () => {
+    const { root, error } = await rejection({
+      'agent/instructions.md': 'Answer.\n',
+      'agent/agent.ts': 'export default {}\n',
+      'agent/tools': 'export default {}\n',
+    })
+
+    expect(error.path).toBe(path.join(root, 'agent/tools'))
+    expect(error.message).toContain('expected a directory')
   })
 
   it('names the SKILL.md a skill directory is missing', async () => {

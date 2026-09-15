@@ -25,15 +25,30 @@ export async function writeTree(
   created.push(root)
 
   for (const dir of dirs) {
-    await mkdir(path.join(root, dir), { recursive: true })
+    await mkdir(within(root, dir), { recursive: true })
   }
   for (const [relative, contents] of Object.entries(files)) {
-    const at = path.join(root, relative)
+    const at = within(root, relative)
     await mkdir(path.dirname(at), { recursive: true })
     await writeFile(at, contents)
   }
 
   return root
+}
+
+/**
+ * Resolve a fixture path against the tree's root, refusing one that does not stay inside it.
+ *
+ * `cleanupTrees` removes the roots this module made and nothing else, so a fixture written
+ * through `..` — or an absolute path, which resolves away from `root` entirely — would outlive
+ * the suite and leave whatever it overwrote behind. A test that asks for that has a typo.
+ */
+function within(root: string, relative: string): string {
+  const at = path.resolve(root, relative)
+  if (at !== root && !at.startsWith(root + path.sep)) {
+    throw new Error(`${relative}: a fixture path has to stay under the tree root`)
+  }
+  return at
 }
 
 /** Remove every tree written so far. Test files register this as their `afterEach`. */

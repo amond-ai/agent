@@ -49,7 +49,7 @@ export function emitManifestModule(tree: AgentTree, outDir: string): string {
   const channels = bind('channel', tree.channels)
 
   const imports = [...tools, ...schedules, ...channels]
-    .map(({ binding, file }) => `import ${binding} from '${specifier(outDir, file)}'`)
+    .map(({ binding, file }) => `import ${binding} from ${literal(specifier(outDir, file))}`)
 
   const skills = tree.skills
     .map(skill => `    { name: ${literal(skill.name)}, instructions: ${literal(skill.instructions)} },`)
@@ -59,7 +59,7 @@ export function emitManifestModule(tree: AgentTree, outDir: string): string {
     '//',
     `// The tree at ${tree.root}, resolved.`,
     `import type { AgentConfig, AgentManifest } from '@amond-ai/agent-core'`,
-    `import config from '${specifier(outDir, tree.config)}'`,
+    `import config from ${literal(specifier(outDir, tree.config))}`,
     ...imports,
     '',
     '// Named here rather than inlined below, so a config missing its harness fails against',
@@ -138,7 +138,12 @@ function literal(value: string): string {
   return JSON.stringify(value)
 }
 
-/** A relative, POSIX-separated import specifier — what a bundler and Bun both resolve. */
+/**
+ * A relative, POSIX-separated import specifier — what a bundler and Bun both resolve.
+ *
+ * Emitted through `literal`, never interpolated into quotes of our own: a filename is allowed an
+ * apostrophe, and one would otherwise close the string and leave a module that cannot be parsed.
+ */
 function specifier(from: string, to: string): string {
   const relative = path.relative(from, to).split(path.sep).join('/')
   return relative.startsWith('.') ? relative : `./${relative}`

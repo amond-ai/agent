@@ -17,11 +17,11 @@ describe('emitting the manifest module', () => {
   it('imports every resolved file statically, relative to where the module is written', async () => {
     const { module: emitted } = await emit()
 
-    expect(emitted).toContain(`import config from '../agent/agent.ts'`)
-    expect(emitted).toContain(`import tool0 from '../agent/tools/close-issue.ts'`)
-    expect(emitted).toContain(`import tool1 from '../agent/tools/search-issues.ts'`)
-    expect(emitted).toContain(`import schedule0 from '../agent/schedules/nightly.ts'`)
-    expect(emitted).toContain(`import channel0 from '../agent/channels/slack.ts'`)
+    expect(emitted).toContain(`import config from "../agent/agent.ts"`)
+    expect(emitted).toContain(`import tool0 from "../agent/tools/close-issue.ts"`)
+    expect(emitted).toContain(`import tool1 from "../agent/tools/search-issues.ts"`)
+    expect(emitted).toContain(`import schedule0 from "../agent/schedules/nightly.ts"`)
+    expect(emitted).toContain(`import channel0 from "../agent/channels/slack.ts"`)
     expect(emitted).toContain('tools: [tool0, tool1],')
     expect(emitted).toContain('schedules: [schedule0],')
     expect(emitted).toContain('channels: [channel0],')
@@ -41,6 +41,15 @@ describe('emitting the manifest module', () => {
     const { module: emitted } = await emit({ ...COMPLETE_TREE, 'agent/instructions.md': instructions })
 
     expect(emitted).toContain(`instructions: ${JSON.stringify(instructions)},`)
+  })
+
+  it('quotes a specifier as a literal, so an apostrophe in a filename stays inside the string', async () => {
+    const { module: emitted } = await emit({
+      ...COMPLETE_TREE,
+      'agent/tools/it\'s.ts': 'export default {}\n',
+    })
+
+    expect(emitted).toContain(`import tool1 from ${JSON.stringify('../agent/tools/it\'s.ts')}`)
   })
 
   it('emits empty collections rather than omitting them, so the manifest stays a manifest', async () => {

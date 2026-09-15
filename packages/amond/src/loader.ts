@@ -54,13 +54,14 @@ export class AgentTreeError extends Error {
 
 /**
  * Matches a module's default export, line-anchored because `export` is only legal at the top
- * level of a module — where formatters leave it at column zero.
+ * level of a module — with leading indentation allowed, because an indented top-level `export
+ * default` is still one, and rejecting it would fail the build with a false complaint.
  *
  * A deliberately shallow check: it is a guard that names the file at fault before a bundler
  * says something less useful, not a parser. A `export default` inside a block comment reads as
  * present here; the bundler catches that case, with the same file named.
  */
-const DEFAULT_EXPORT = /^export\s+default\b|^export\s*\{[^}]*\bas\s+default\b/m
+const DEFAULT_EXPORT = /^\s*export\s+default\b|^\s*export\s*\{[^}]*\bas\s+default\b/m
 
 /**
  * Resolve an `agent/` tree, or throw an {@link AgentTreeError} naming what is wrong and where.
@@ -76,19 +77,35 @@ export async function loadAgentTree(root: string): Promise<AgentTree> {
     throw new AgentTreeError(at, 'no agent tree here — expected a directory')
   }
 
-  const config = path.join(at, 'agent.ts')
-
   // Resolved in layout order rather than concurrently: a tree with two faults should always
   // report the same one first, and the walk is a handful of stats either way.
   return {
     root: at,
     instructions: await readRequiredText(path.join(at, 'instructions.md')),
-    config: await isFile(config) ? config : undefined,
+    config: await loadConfig(path.join(at, 'agent.ts')),
     tools: await loadEntryModules(path.join(at, 'tools')),
     schedules: await loadEntryModules(path.join(at, 'schedules')),
     channels: await loadEntryModules(path.join(at, 'channels')),
     skills: await loadSkills(path.join(at, 'skills')),
   }
+}
+
+/**
+ * Resolve `agent.ts`, the tree's harness, which is optional here on purpose: an absent one is
+ * reported as `undefined` so `emitManifestModule` can say what a manifest needs it for.
+ *
+ * One that is there is held to the same bar as a tool, because the manifest imports it the same
+ * way — a config with no default export would otherwise get through the loader and fail as a
+ * parse error from a bundler, with no file named.
+ */
+async function loadConfig(at: string): Promise<string | undefined> {
+  if (!await isFile(at)) {
+    return undefined
+  }
+  if (!DEFAULT_EXPORT.test(await readFile(at, 'utf8'))) {
+    throw new AgentTreeError(at, 'no default export — the config is what the manifest imports')
+  }
+  return at
 }
 
 /**
@@ -107,6 +124,12 @@ async function loadEntryModules(dir: string): Promise<string[]> {
     }
     if (!name.endsWith('.ts')) {
       throw new AgentTreeError(at, 'expected a .ts file')
+    }
+    // A declaration file clears the suffix check and can even carry a default export, but the
+    // manifest imports every entry point at runtime and a `.d.ts` has no implementation behind
+    // it — so the emitted module would resolve to nothing.
+    if (name.endsWith('.d.ts')) {
+      throw new AgentTreeError(at, 'expected a module, not a declaration file')
     }
     if (!DEFAULT_EXPORT.test(await readFile(at, 'utf8'))) {
       throw new AgentTreeError(at, 'no default export — the module is what the manifest imports')
@@ -139,6 +162,11 @@ async function loadSkills(dir: string): Promise<LoadedSkill[]> {
 /**
  * The names in a directory, sorted, with dotfiles dropped and a missing directory read as
  * empty. `.DS_Store` is not a tool, and every one of these directories is optional.
+ *
+ * A file where a directory belongs is a different thing from an absent one: `readdir` reports
+ * both as errnos this loader elsewhere folds into "not there", and folding them together here
+ * would emit an empty collection and let the build succeed with the tree's tools silently
+ * dropped. So `ENOTDIR` is named as the fault it is.
  */
 async function listDirectory(dir: string): Promise<string[]> {
   try {
@@ -146,8 +174,12 @@ async function listDirectory(dir: string): Promise<string[]> {
     return names.filter(name => !name.startsWith('.')).sort()
   }
   catch (cause) {
-    if (isMissing(cause)) {
+    const code = (cause as { code?: string } | null)?.code
+    if (code === 'ENOENT') {
       return []
+    }
+    if (code === 'ENOTDIR') {
+      throw new AgentTreeError(dir, 'expected a directory — this part of the tree is a file')
     }
     throw cause
   }
