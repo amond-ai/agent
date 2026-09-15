@@ -1,0 +1,101 @@
+.editorconfig
+  s_95f730d671f751::t_be6a50f3991135 1-16
+.github/DISCUSSION_TEMPLATE/ideas.yml
+  s_95f730d671f751::t_6642bf0a305a9b 1-27
+.github/ISSUE_TEMPLATE/bug_report.md
+  s_95f730d671f751::t_255bb612a715fe 1-31
+.github/ISSUE_TEMPLATE/config.yml
+  s_926069aa05d635::t_500cc28325feef 1-11
+.github/PULL_REQUEST_TEMPLATE.md
+  s_95f730d671f751::t_f34a01521d4b5e 1-18
+.github/dependabot.yml
+  s_95f730d671f751::t_41f05fe75ae349 1-18
+.github/workflows/ci.yml
+  s_95f730d671f751::t_01a66084ddf61b 1-46
+.github/workflows/release-please.yml
+  s_95f730d671f751::t_7ba6266a377fcf 1-67
+.github/workflows/zizmor.yml
+  s_95f730d671f751::t_bc90e6b074c736 1-28
+.gitignore
+  s_95f730d671f751::t_6cd8d515b9dffd 1-17
+.husky/commit-msg
+  s_95f730d671f751::t_2ab9b51120e95e 1
+.husky/pre-commit
+  s_95f730d671f751::t_14357617ec50bc 1-8
+.mise.toml
+  s_95f730d671f751::t_867393b26e0352 1-7
+.worktreeinclude
+  s_95f730d671f751::t_50e53f98a49d89 1-18
+CODE_OF_CONDUCT.md
+  s_95f730d671f751::t_be34aae272914e 1-132
+CONTRIBUTING.md
+  s_e7667352076035::t_62bd0c5486832e 1-61
+LICENSE
+  s_95f730d671f751::t_7cb2abcce581e6 1-201
+NOTICE
+  s_e7667352076035::t_106d95d5b16d33 1-4
+SECURITY.md
+  s_e7667352076035::t_cf0d8d7abb3896 1-39
+bun.lock
+  s_b12d6eca3376a2::t_a1b2bc5526af5a 1-1190
+bunfig.toml
+  s_95f730d671f751::t_905c5f1f52dd41 1-4
+commitlint.config.js
+  s_95f730d671f751::t_767cf54a9ff18b 1-5
+eslint.config.ts
+  s_95f730d671f751::t_b4a03318f601fe 1-13
+eslint.rules.ts
+  s_e7667352076035::t_a399768132b031 1-13
+orca.yaml
+  s_95f730d671f751::t_52ace217d934ba 1-17
+package.json
+  s_e7667352076035::t_42b9be67a58683 1-62
+scripts/publish.ts
+  s_926069aa05d635::t_482ae4385feeec 1-171
+tsconfig.json
+  s_95f730d671f751::t_58119d42767252 1-17
+turbo.json
+  s_95f730d671f751::t_0785d46b7a3b42 1-22
+vitest.shared.ts
+  s_926069aa05d635::t_8887695e98ebf6 1-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "ba3bc3f4b429d2974028c9991268f655d03e752a",
+  "prompts": {},
+  "sessions": {
+    "s_926069aa05d635": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cdf8566-426e-4c4f-914c-e93cd6beac73",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_95f730d671f751": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42bf4c89-711f-4168-bd0b-e9f95cea1951",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_b12d6eca3376a2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f078e33d-fa5e-4e0e-b6c5-6e00a0e9c9ca",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    },
+    "s_e7667352076035": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0067aa94-1c7c-4d12-9535-2b7154150ecb",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
