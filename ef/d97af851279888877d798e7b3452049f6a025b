@@ -1,0 +1,21 @@
+docs/adr/0001-filesystem-first-agent-definition.md
+  s_95f730d671f751::t_36774f8f5c5a3f 1-118
+docs/adr/0002-durable-execution-contract.md
+  s_95f730d671f751::t_ff09603557b2e6 1-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "efd97af851279888877d798e7b3452049f6a025b",
+  "prompts": {},
+  "sessions": {
+    "s_95f730d671f751": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42bf4c89-711f-4168-bd0b-e9f95cea1951",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
