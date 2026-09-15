@@ -13,7 +13,9 @@
  * What it emits is handlers; the wiring around them (`wrangler.jsonc`, `vercel.json`, cron
  * registration) stays the user's.
  */
+import path from 'node:path'
 import process from 'node:process'
+import { build } from './build'
 
 const COMMANDS = ['init', 'dev', 'build'] as const
 type Command = typeof COMMANDS[number]
@@ -22,19 +24,25 @@ function isCommand(value: string | undefined): value is Command {
   return COMMANDS.includes(value as Command)
 }
 
-export function main(argv: readonly string[] = process.argv.slice(2)): number {
-  const [command] = argv
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  const [command, directory] = argv
 
   if (!isCommand(command)) {
-    process.stderr.write(`usage: amond <${COMMANDS.join('|')}>\n`)
+    process.stderr.write(`usage: amond <${COMMANDS.join('|')}> [directory]\n`)
     return command === undefined ? 1 : 2
   }
 
-  // _TODO: dispatch once the loader and the emitters exist._
+  if (command === 'build') {
+    return build(path.resolve(directory ?? process.cwd()))
+  }
+
+  // _TODO: `init` and `dev`, once the scaffold and the local server exist._
   process.stderr.write(`amond ${command}: not implemented\n`)
   return 1
 }
 
 if (import.meta.main) {
-  process.exit(main())
+  // Not a top-level `await`: an unexpected failure should reach the terminal as a rejection
+  // with its stack, not as an exit code that says nothing about what broke.
+  void main().then(code => process.exit(code))
 }

@@ -53,6 +53,15 @@ export interface AgentManifest {
 }
 
 /**
+ * What `agent/agent.ts` default-exports: the choices ADR-0001 keeps in typed code because the
+ * filesystem cannot express them. The loader never reads this value — `amond build` emits a
+ * static import of the module and the manifest takes its `harness` from here.
+ */
+export interface AgentConfig {
+  readonly harness: HarnessAdapter
+}
+
+/**
  * The harness seam. Chosen explicitly in `agent.ts` (ADR-0001) rather than inferred, because
  * harness differences are load-bearing: what a turn costs, what it can be interrupted at, and
  * what a deferred tool means all differ between them.
@@ -91,4 +100,18 @@ export interface AgentHandlers {
   readonly fetch: (request: Request) => Promise<Response>
   /** Cron entry: the platform passes the firing time. */
   readonly scheduled: (now: Date) => Promise<void>
+}
+
+/**
+ * Build the handlers for a manifest. The entry point `amond build` emits calls this and
+ * re-exports what comes back, so this name is the seam between a generated entry point and the
+ * routing behind it.
+ *
+ * _TODO: route channels and schedules through the durable runtime._
+ *
+ * Deliberately unimplemented rather than stubbed with a plausible body: handlers that answered
+ * every request with a shaped 200 would make a build look deployable while routing nothing.
+ */
+export function createHandlers(_manifest: AgentManifest): AgentHandlers {
+  throw new Error('not implemented')
 }

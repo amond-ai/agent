@@ -28,9 +28,11 @@ Three things shape it, and each is written down as a decision rather than assume
 ## Status
 
 **Pre-alpha — the contracts are in place, most implementations are not.** The durable contract
-and its in-memory runtime work and are tested. The harness adapters, the Cloudflare adapter and
-the CLI are scaffolding with typed surfaces and no bodies; they throw rather than return
-something plausible, on purpose. Nothing is published to npm yet.
+and its in-memory runtime work and are tested, and `amond build` resolves an `agent/` tree into
+a manifest and a per-target entry point. The harness adapters, the Cloudflare adapter, the
+handlers those entry points call and `amond init` / `amond dev` are scaffolding with typed
+surfaces and no bodies; they throw rather than return something plausible, on purpose. Nothing
+is published to npm yet.
 
 ## Packages
 
