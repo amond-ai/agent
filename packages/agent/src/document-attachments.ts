@@ -38,7 +38,7 @@ export const DOCUMENT_MIME_TYPES = ['application/pdf'] as const;
 const documentMimeTypes: ReadonlySet<string> = new Set(DOCUMENT_MIME_TYPES);
 
 /** Model APIs that receive documents as native document content. */
-export const NATIVE_DOCUMENT_APIS: ReadonlySet<string> = new Set([
+const NATIVE_DOCUMENT_APIS: ReadonlySet<string> = new Set([
 	'anthropic-messages',
 	'openai-responses',
 	'azure-openai-responses',
@@ -53,14 +53,14 @@ const DEFAULT_DOCUMENT_FILENAME = 'document.pdf';
  * with a document `mimeType`, plus the uploader's filename when known (pi
  * ignores the extra field; Flue's payload rewrite reads it).
  */
-export type DocumentContextBlock = ImageContent & { filename?: string };
+type DocumentContextBlock = ImageContent & { filename?: string };
 
 export function isDocumentMimeType(mimeType: string): boolean {
 	return documentMimeTypes.has(mimeType);
 }
 
 /** True for a context block that carries a document rather than an image. */
-export function isDocumentContextBlock(block: unknown): block is DocumentContextBlock {
+function isDocumentContextBlock(block: unknown): block is DocumentContextBlock {
 	if (!block || typeof block !== 'object') return false;
 	const candidate = block as { type?: unknown; mimeType?: unknown; data?: unknown };
 	return (
@@ -72,7 +72,7 @@ export function isDocumentContextBlock(block: unknown): block is DocumentContext
 }
 
 /** Reject unsupported document MIME types on the in-code operation surface. */
-export function assertSupportedDocuments(documents: readonly PromptDocument[] | undefined): void {
+function assertSupportedDocuments(documents: readonly PromptDocument[] | undefined): void {
 	for (const document of documents ?? []) {
 		if (!isDocumentMimeType(document.mimeType)) {
 			throw new Error(
@@ -214,7 +214,7 @@ function replaceDocumentsWithPlaceholder(context: Context, api: string): Context
  * when nothing needed rewriting (or the payload shape is not recognized).
  * Only top-level user-message content is rewritten.
  */
-export function rewriteDocumentPayload(
+function rewriteDocumentPayload(
 	payload: unknown,
 	api: string,
 	filenames: ReadonlyMap<string, string | undefined>,

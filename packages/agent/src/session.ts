@@ -1645,13 +1645,15 @@ export class Session implements FlueSession, AgentSubmissionSession {
 				await driveContinuation();
 				continue;
 			}
+			if ((this.outputChannel?.agentFinishes ?? []).length === 0) return;
+			// The loop only re-renders between turns of one run, never after its
+			// last turn — re-render here so the hooks' closures and guards observe
+			// state written during the run (and by earlier cycles' callbacks).
+			await this.prepareRerenderTurn();
 			const hooks = this.outputChannel?.agentFinishes ?? [];
-			if (hooks.length === 0) return;
 			const cycle = await this.countAgentFinishCycles(submissionId);
 			const toolCalls = await this.collectResponseToolCalls(submissionId);
 			const before = this.pendingSignalAppends.length;
-			// Re-read declarations each cycle: render-per-turn agents re-render on
-			// continuation turns, refreshing the closures.
 			for (const [index, hook] of hooks.entries()) {
 				await this.executeAgentFinishHook(index, hook, toolCalls, options.signal);
 			}
