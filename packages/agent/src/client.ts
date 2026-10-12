@@ -489,7 +489,10 @@ async function initializeRootHarness(
 		toolFactory,
 		conversationWriter: config.conversationWriter,
 		attachmentStore: config.attachmentStore,
-		executionContext: { instanceId: config.id },
+		executionContext: {
+			instanceId: config.id,
+			...(config.agentName === undefined ? {} : { agentName: config.agentName }),
+		},
 		hookState,
 		rerender,
 		output: outputChannel,

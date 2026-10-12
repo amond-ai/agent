@@ -2198,7 +2198,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			type: 'turn',
 			turnId,
 			purpose,
-			durationMs: durationSince(this.modelRequests.get(turnId)?.startedAt),
+			durationMs: response?.durationMs ?? durationSince(this.modelRequests.get(turnId)?.startedAt),
 			request,
 			response: {
 				responseId: response?.responseId,
@@ -2600,6 +2600,10 @@ export class Session implements FlueSession, AgentSubmissionSession {
 					}
 					const outcomeKey = `${encodeCanonicalId(assistantMessageId)}_${encodeCanonicalId(event.toolCallId)}`;
 					const messageId = `entry_tool_outcome_${outcomeKey}`;
+					// pi's monotonic `execute()` time, reused for both the durable
+					// record and the ephemeral `tool` event so the two can never
+					// disagree. pi omits it when the tool never ran.
+					const toolDurationMs = event.durationMs ?? durationSince(call.startedAt);
 					const result = event.result as AgentToolResult<any>;
 					const outcomeContent = await this.persistToolResultContent(result, messageId);
 					const details = result.details as { output?: unknown } | undefined;
@@ -2608,9 +2612,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 						typeof details === 'object' &&
 						details !== null &&
 						'output' in details;
-					// Measure once and reuse for both the durable record and the
-					// ephemeral `tool` event so the two can never disagree.
-					const toolDurationMs = durationSince(call.startedAt);
 					await this.appendCanonical([
 						{
 							...this.canonicalEnvelope('tool_outcome', `record_tool_outcome_${outcomeKey}`),
