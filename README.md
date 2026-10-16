@@ -16,7 +16,7 @@ Five decisions shape it, recorded in
 
 - **Flue's code, our packages.** Flue's runtime, Vite plugin and CLI will move into this
   repository, be renamed in source and be published as `@amond-ai/agent`, `@amond-ai/agent-vite`
-  and `amond`. Upstream changes will be ported by cherry-pick; `vendor/flue` is a read-only
+  and `amond`. Upstream changes will be ported by hand; `vendor/flue` is a read-only
   reference.
 - **Flue's agent model.** Agents are `'use agent'` modules built with the Vite plugin. Flue's
   durable submissions and persistence replace the filesystem layout and durable contract from
