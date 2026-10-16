@@ -1,0 +1,25 @@
+.gitmodules
+  s_4bb86ebd636f39::t_4738936b3e0ca7 1-8
+eslint.config.ts
+  s_4bb86ebd636f39::t_586a774776c132 10
+vendor/eve
+  s_4bb86ebd636f39::t_6c06b53f42d99f 1
+vendor/flue
+  s_4bb86ebd636f39::t_d9c80bc47e29f4 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b0bf1c93abc91fc8c4c4ab98e4aa5a82c308dd91",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
