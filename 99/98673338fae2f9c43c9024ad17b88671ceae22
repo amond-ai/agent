@@ -1,0 +1,23 @@
+docs/adr/0003-build-on-flue-with-ai-sdk-harness.md
+  s_4bb86ebd636f39::t_bff7eed4736f96 1-136
+docs/adr/0001-filesystem-first-agent-definition.md
+  s_4bb86ebd636f39::t_8175cf94f3973d 5,118
+docs/adr/0002-durable-execution-contract.md
+  s_4bb86ebd636f39::t_ddad80fa1de5f4 5,116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9998673338fae2f9c43c9024ad17b88671ceae22",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
