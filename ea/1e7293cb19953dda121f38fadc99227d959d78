@@ -1,0 +1,24 @@
+docs/adr/0004-ship-flue-as-amond-packages.md
+  s_4bb86ebd636f39::t_ae3d53afa94147 15-16
+  s_4bb86ebd636f39::t_befa3f287e4632 128
+  s_4bb86ebd636f39::t_7f96f0215a3aa1 74-78
+  s_4bb86ebd636f39::t_e128c1981b7f46 5
+README.md
+  s_4bb86ebd636f39::t_0be92debd5f284 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea1e7293cb19953dda121f38fadc99227d959d78",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
