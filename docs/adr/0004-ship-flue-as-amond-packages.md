@@ -21,8 +21,8 @@ Flue-derived name such as `@amond-ai/flue-runtime`. Installing our fork through 
 
 **The brand runs deeper than package names.** Flue's packages import each other as `@flue/*`, and
 the code its Vite plugin generates does the same. Beyond imports, the brand is in what a user
-touches: the `flue` command, `flue.config.ts`, about a dozen `FLUE_*` environment variables,
-`virtual:flue/*` module ids, and the `Flue<Name>Agent` Durable Object classes — 23 source files
+touches: the `flue` command, `flue.config.ts`, three `FLUE_*` environment variables
+(`FLUE_DEV_SQLITE_PATH`, `FLUE_REGISTRY_URL`, `FLUE_REGISTRY_TIMEOUT_MS`), `virtual:flue/*` module ids, and the `Flue<Name>Agent` Durable Object classes — 23 source files
 across the runtime, Vite plugin and CLI. Rewriting names in the build output at publish time can
 reach package names and specifiers, but not a config filename, a CLI name or a class prefix.
 
@@ -60,7 +60,7 @@ A separate fork would need all of that rebuilt on pnpm, Biome and its own releas
    the first release.
 
 2. **Brand surfaces are renamed with the packages.** The `flue` command becomes `amond`;
-   `flue.config.ts` becomes `amond.config.ts`; `FLUE_*` becomes `AMOND_*`; `virtual:flue/*` becomes
+   `flue.config.ts` becomes `amond.config.ts`; `FLUE_*` environment variables and constants become `AMOND_*`; `virtual:flue/*` becomes
    `virtual:amond/*`; `Flue<Name>Agent` becomes `Amond<Name>Agent`. The `'use agent'` directive is
    not a brand and stays.
 
