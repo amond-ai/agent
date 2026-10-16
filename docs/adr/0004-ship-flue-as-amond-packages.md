@@ -14,9 +14,11 @@ ADR-0003 made Flue the base as a fork, `amond-ai/flue`, kept close enough to ups
 agent-loop seam could be offered back. It did not say how the result reaches users. The product is
 an npm-published framework under the amond name, and that changes what the fork has to be.
 
-**Flue's names cannot ship as ours.** The `@flue/*` scope belongs to withastro on npm, and
-Apache-2.0 §6 grants no trademark rights, so the framework cannot be published as Flue or under a
-Flue-derived name such as `@amond-ai/flue-runtime`. Installing our fork through an npm alias
+**Flue's names are not ours to ship under.** The `@flue/*` scope belongs to withastro on npm, so
+publishing there is not an option. Elsewhere it is a branding choice: the product is amond, so it
+is not published as Flue or under a Flue-derived name such as `@amond-ai/flue-runtime`. Apache-2.0
+§6 grants no trademark rights beyond describing where the code came from, so building a product
+name on Flue's would rest on no grant at all. Installing our fork through an npm alias
 (`"@flue/runtime": "npm:@amond-ai/..."`) would still put Flue's name in every user's imports.
 
 **The brand runs deeper than package names.** Flue's packages import each other as `@flue/*`, and
@@ -117,8 +119,8 @@ ADR-0002. Their work now happens in this repository instead of the fork.
   Rejected because it splits the framework across two repositories and needs a second release
   setup, while this repository already publishes under `@amond-ai`.
 - **Publish the fork as `@amond-ai/flue-*` and wrap it**: smallest change. Rejected because it ships
-  under Flue's name, which Apache-2.0 does not license, and the wrapped packages still leak through
-  imports and generated code.
+  under Flue's name rather than ours, with no trademark grant behind that use, and the wrapped
+  packages still leak through imports and generated code.
 - **Copy Flue's sources without history**: simplest import. Rejected because history is cheap to
   keep with `git subtree` and is what makes later cherry-picks and blame workable.
 
@@ -134,4 +136,4 @@ ADR-0002. Their work now happens in this repository instead of the fork.
 
 **Created**: 2026-10-16
 **Author**: Minsu Lee
-**Last Updated**: 2026-10-16
+**Last Updated**: 2026-10-17
