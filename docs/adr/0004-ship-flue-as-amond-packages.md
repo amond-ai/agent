@@ -97,8 +97,9 @@ ADR-0002. Their work now happens in this repository instead of the fork.
 
 - Upstream fixes stop arriving for free. Each one is a deliberate port, and the cost grows as the
   code diverges.
-- The import is a one-time migration with real work in it: Flue builds with pnpm, Biome and
-  TypeScript 7, this repository with bun, ESLint and TypeScript 5.9. Lint and type differences
+- The import is a one-time migration with real work in it: Flue v2.3.0, the revision
+  `vendor/flue` pins, builds with pnpm, Biome and TypeScript 7 (`typescript: ^7.0.2`), this
+  repository with bun, ESLint and TypeScript 5.9. Lint and type differences
   have to be resolved before the imported packages pass `check` and `lint`.
 - The loop seam can no longer be offered upstream as a clean patch; it would have to be
   re-derived against upstream.
