@@ -1,0 +1,37 @@
+# .gemini/config.yaml
+# Gemini Code Assist repository review settings.
+# Docs: https://developers.google.com/gemini-code-assist/docs/customize-repo-review
+
+have_fun: false
+
+memory_config:
+  disabled: false
+
+code_review:
+  disable: false
+  comment_severity_threshold: MEDIUM
+  max_review_comments: -1
+  pull_request_opened:
+    help: false
+    summary: true
+    code_review: true
+    include_drafts: false
+
+ignore_patterns:
+  - '**/*.generated.*'
+  - '**/generated/**'
+  - '**/dist/**'
+  - '**/build/**'
+  - '**/.next/**'
+  - '**/.nuxt/**'
+  - '**/.output/**'
+  - '**/node_modules/**'
+  - '**/bun.lockb'
+  - '**/bun.lock'
+  - '**/package-lock.json'
+  - '**/pnpm-lock.yaml'
+  - '**/yarn.lock'
+  - '**/*.min.js'
+  - '**/*.min.css'
+  - '**/coverage/**'
+  - '**/__snapshots__/**'
