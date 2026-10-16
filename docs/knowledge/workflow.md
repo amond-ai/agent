@@ -104,12 +104,12 @@ automatically in the husky hooks.
 - Mock external dependencies
 - Test both success and failure cases
 
-### Contract testing
+### Imported upstream code
 
-- The in-memory durable runtime is the reference implementation. Every durable adapter is verified
-  against the same shared suite.
-- Every harness adapter is verified against the same harness seam, so the Codex spike keeps the
-  seam honest.
+- Code imported from Flue keeps its own tests. Port them to Vitest together with the code.
+- A behaviour-preserving refactor of imported code, such as the agent-loop seam, lands as its own
+  commit, separate from behaviour changes.
+- A ported upstream fix is a cherry-pick that names the upstream commit.
 
 ## Commit guidelines
 

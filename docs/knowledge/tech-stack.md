@@ -40,33 +40,69 @@ choices were made. Update this file before a change that adds or replaces any of
 
 ## Libraries
 
+Current dependencies of the packages in `packages/`:
+
 | Library | Purpose | Used by |
 | --- | --- | --- |
 | `@amond-ai/harness-claude-code` 0.1.0 | Claude Code turn execution | `agent-harness-claude-code` |
 | `@amond-ai/sandbox` 0.1.0 | Sandbox contract (e2b, Cloudflare, local) | `agent-harness-claude-code` |
 | `@cloudflare/workers-types` v5 | Workers type definitions | `agent-durable-cloudflare` (peer) |
-| `zod` 4.5 | Tool input schemas. `agent-core` keeps the schema type opaque so it does not pin the caller's zod version | Root catalog only |
+| `zod` 4.5 | Schema validation | Root catalog only |
 | `@amond-ai/harness-transport` 0.1.0 | Not yet determined | Root catalog only |
 | `@amond-ai/redact` 0.1.0 | Not yet determined | Root catalog only |
+
+Planned by [ADR-0003](../adr/0003-build-on-flue-with-ai-sdk-harness.md), not yet dependencies:
+
+| Library | Purpose |
+| --- | --- |
+| `@ai-sdk/harness` | `HarnessV1`, `HarnessAgent`, and `HarnessV1SandboxProvider`. Experimental; `@amond-ai/harness` pins 1.0.87 |
+| `@amond-ai/harness-sandbox` | Adapts a sandbox provider to `HarnessV1SandboxProvider` |
+| `@amond-ai/harness-transport-cloudflare` | Reaches harness turns running in Cloudflare Sandbox containers |
+| `@amond-ai/sandbox-cloudflare` | Cloudflare sandbox provider, to be added to `amond-ai/harness` |
+| Cloudflare Sandbox SDK (`@cloudflare/sandbox`) | The container each harness turn runs in |
+| Vite | Flue's build, which turns each `'use agent'` module into a Durable Object class |
+
+## Upstream code
+
+| Path | Points at | Role |
+| --- | --- | --- |
+| `vendor/flue` | `withastro/flue` at `deee93b` (2.3.0) | Read-only reference. Flue's packages are imported into `packages/` with `git subtree` and renamed ([ADR-0004](../adr/0004-ship-flue-as-amond-packages.md)) |
+| `vendor/eve` | `vercel/eve` at `0857ff4` | Read-only reference |
+
+Flue builds with pnpm, Biome, and TypeScript 7. Imported packages move onto this repository's bun,
+ESLint, tsdown, Vitest, and TypeScript 5.9 toolchain before they pass `check` and `lint`. Upstream
+changes are ported by cherry-pick.
 
 ## Deployment targets
 
 | Target | Role | Status |
 | --- | --- | --- |
-| Cloudflare Workers and Workflows | First production durable adapter | Scaffolding |
-| Vercel Workflow | Later adapter, written against the public SDK API, no directive transform | Planned |
-| In-memory runtime | Reference implementation, test double, and `amond dev` backend | Implemented |
+| Cloudflare Workers, Durable Objects, and Sandbox containers | First deployment target. Each agent is a Durable Object; each harness turn runs in a Sandbox container | Planned |
+| Node | Development target, kept because Flue keeps it | Planned |
+| Other platforms | Out of scope until the Cloudflare path ships | Not planned |
 
 ## Packages
 
-| Package | Depends on | Published |
+Packages in `packages/` today:
+
+| Package | Depends on | Future |
 | --- | --- | --- |
-| `amond` (CLI, `bin: amond`) | agent-core, agent-durable | Yes |
-| `@amond-ai/agent-core` | agent-durable | Yes |
-| `@amond-ai/agent-durable` | none | Yes |
-| `@amond-ai/agent-durable-cloudflare` | agent-durable | Yes |
-| `@amond-ai/agent-harness-claude-code` | agent-core, harness-claude-code, sandbox | Yes |
-| `@amond-ai/agent-harness-codex` | agent-core | No, spike |
+| `amond` (CLI, `bin: amond`) | agent-core, agent-durable | Retiring in [#18](https://github.com/amond-ai/agent/issues/18); the name passes to the CLI imported from Flue |
+| `@amond-ai/agent-core` | agent-durable | Retiring in #18 |
+| `@amond-ai/agent-durable` | none | Retiring in #18 |
+| `@amond-ai/agent-durable-cloudflare` | agent-durable | Retiring in #18 |
+| `@amond-ai/agent-harness-claude-code` | agent-core, harness-claude-code, sandbox | Reassessed once the agent-loop seam exists |
+| `@amond-ai/agent-harness-codex` | agent-core | Unpublished spike; reassessed with the seam |
+
+Packages imported from Flue in [#20](https://github.com/amond-ai/agent/issues/20):
+
+| Flue package | Published as |
+| --- | --- |
+| `@flue/runtime` | `@amond-ai/agent` |
+| `@flue/vite` | `@amond-ai/agent-vite` |
+| `@flue/cli` | `amond` |
+| `@flue/sdk` | `@amond-ai/agent-sdk` |
+| `@flue/react` | `@amond-ai/agent-react` |
 
 ## CI and release
 

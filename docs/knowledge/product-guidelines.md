@@ -26,18 +26,20 @@ Read it before writing documentation, an ADR, or a new package API.
 
 ## API and design principles
 
-1. **One concern per file.** The change unit is a file, because the expected editor is an agent.
-   This applies to the framework's own code as much as to agent definitions.
-2. **Convention is API.** A directory name in the agent layout is a public contract. Renaming one
-   is a breaking change.
-3. **Explicit over hidden.** Choices that decide which adapter runs, such as the harness, live in
-   typed code that the user writes.
-4. **Narrow contracts, escape hatches for the rest.** A contract expresses what an agent session
-   needs and nothing else. Platform-specific capabilities stay reachable without being lifted into
-   the contract.
-5. **Fail loudly.** An unimplemented surface throws. It never returns a plausible placeholder.
-6. **Do not own the user's deploy config.** The framework emits handlers. Platform config files
-   stay with the user.
+1. **One brand in the public surface.** Users install, import, configure, and run amond names
+   only: `@amond-ai/*`, the `amond` command, `amond.config.ts`, `AMOND_*`, `virtual:amond/*`, and
+   `Amond<Name>Agent`. Flue's name appears only in `NOTICE` and in each imported package's README.
+2. **What ships is what the source says.** Renames happen in source, never as a publish-time
+   rewrite, so stack traces, source, and packages agree.
+3. **Keep upstream reachable.** Imported Flue code keeps its history. Keep changes to it focused,
+   so an upstream fix can still be judged and cherry-picked.
+4. **The harness is the agent.** Agent turns run through the AI SDK harness inside a sandbox. Do
+   not add a host-side model loop.
+5. **One sandbox object.** Flue's tools and the harness share the same sandbox session. Extend the
+   AI SDK sandbox shape rather than adding a parallel one.
+6. **Fail loudly.** An unimplemented surface throws. It never returns a plausible placeholder.
+7. **Do not own the user's deploy config.** `wrangler.jsonc`, including the Sandbox container,
+   stays with the user.
 
 ## Code conventions
 
@@ -50,10 +52,9 @@ Read it before writing documentation, an ADR, or a new package API.
 
 ## Developer experience
 
-- `amond dev` runs the full durable model locally with no cloud account.
-- Adding a tool, skill, schedule, or channel requires adding a file and nothing else.
-- Error messages for convention violations, such as a mistyped filename, should name the file and
-  the expected layout, because the loader turns these into runtime discoveries.
+- `amond dev` runs agents locally on Node, the development target.
+- Error messages name the file, option, or environment variable at fault, using its amond name.
+- Documentation and examples are our own. Flue's docs use Flue's names and do not apply as written.
 
 ## Contribution flow
 
