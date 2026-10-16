@@ -1,0 +1,24 @@
+README.md
+  s_4bb86ebd636f39::t_3db9a8af5676b8 7,9-11,13-15,17-22
+docs/adr/0004-ship-flue-as-amond-packages.md
+  s_4bb86ebd636f39::t_73a48051a691f9 131
+  s_4bb86ebd636f39::t_7b9247c6cb32bd 1-130,132-137
+docs/adr/0003-build-on-flue-with-ai-sdk-harness.md
+  s_4bb86ebd636f39::t_1bfab552f510bf 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "98e1dcf243f3d4f9810518956baa6ec7696d84b4",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
