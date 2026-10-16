@@ -48,7 +48,7 @@ agent-loop seam exists.
 
 | Package | What it does |
 | --- | --- |
-| `amond` | *Retiring.* The CLI that resolves an ADR-0001 `agent/` tree into a manifest; Flue's Vite build replaces it. |
+| `amond` | *Retiring.* The CLI that resolves an ADR-0001 `agent/` tree into a manifest; Flue's Vite build replaces it. The `amond` name then passes to the CLI imported from Flue (ADR-0004). |
 | `@amond-ai/agent-core` | *Retiring.* The ADR-0001 contract — filesystem layout, harness seam, platform handlers. |
 | `@amond-ai/agent-durable` | *Retiring.* The ADR-0002 durable contract and its in-memory runtime. |
 | `@amond-ai/agent-durable-cloudflare` | *Retiring.* Cloudflare Workflows behind that contract, never implemented. |
