@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — supersedes ADR-0001 and ADR-0002
+Accepted — supersedes ADR-0001 and ADR-0002; decision 1 superseded by ADR-0004 (0004-ship-flue-as-amond-packages.md)
 
 ## Date
 

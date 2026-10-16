@@ -4,19 +4,22 @@
 
 Run coding-agent harnesses as Flue agents, in sandbox containers, on Cloudflare.
 
-`amond/agent` builds on [Flue](https://github.com/withastro/flue), through the fork
-[`amond-ai/flue`](https://github.com/amond-ai/flue) vendored at `vendor/flue`, and on
+`amond/agent` is derived from [Flue](https://github.com/withastro/flue) and built on
 [`amond/harness`](https://github.com/amond-ai/harness), which already runs a coding-agent turn
-inside a sandbox and survives a dropped socket. Flue supplies what an agent *is*, how a request,
-schedule or event starts one, and how a session stays durable. The harness supplies the turn
-itself.
+inside a sandbox and survives a dropped socket. Flue's code supplies what an agent *is*, how a
+request, schedule or event starts one, and how a session stays durable. The harness supplies the
+turn itself.
 
-Four decisions shape it, all recorded in
-[ADR-0003](./docs/adr/0003-build-on-flue-with-ai-sdk-harness.md):
+Five decisions shape it, recorded in
+[ADR-0003](./docs/adr/0003-build-on-flue-with-ai-sdk-harness.md) and
+[ADR-0004](./docs/adr/0004-ship-flue-as-amond-packages.md):
 
-- **Flue is the base, as a fork.** Agents are Flue `'use agent'` modules, built with Flue's Vite
-  plugin. Its durable submissions and persistence replace the filesystem layout and durable
-  contract from ADR-0001 and ADR-0002, which are superseded.
+- **Flue's code, our packages.** Flue's runtime, Vite plugin and CLI live in this repository,
+  renamed in source and published as `@amond-ai/agent`, `@amond-ai/agent-vite` and `amond`.
+  Upstream changes are ported by cherry-pick; `vendor/flue` is a read-only reference.
+- **Flue's agent model.** Agents are `'use agent'` modules built with the Vite plugin. Flue's
+  durable submissions and persistence replace the filesystem layout and durable contract from
+  ADR-0001 and ADR-0002, which are superseded.
 - **Cloudflare first.** Each agent runs as a Flue Durable Object, and each harness turn runs in a
   Cloudflare Sandbox container. Node is the development target; other platforms wait until
   Cloudflare ships.
