@@ -2,78 +2,63 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-Define an agent with files, run it on the harness of your choice, deploy it to Cloudflare or
-Vercel.
+Run coding-agent harnesses as Flue agents, in sandbox containers, on Cloudflare.
 
-`amond/agent` is a TypeScript agent framework built on
+`amond/agent` builds on [Flue](https://github.com/withastro/flue), through the fork
+[`amond-ai/flue`](https://github.com/amond-ai/flue) vendored at `vendor/flue`, and on
 [`amond/harness`](https://github.com/amond-ai/harness), which already runs a coding-agent turn
-inside a sandbox and survives a dropped socket. This repository is the layer above it: what an
-agent *is*, how a schedule or an event starts one, and how a session stays alive across the days
-between a question and its answer.
+inside a sandbox and survives a dropped socket. Flue supplies what an agent *is*, how a request,
+schedule or event starts one, and how a session stays durable. The harness supplies the turn
+itself.
 
-Three things shape it, and each is written down as a decision rather than assumed:
+Four decisions shape it, all recorded in
+[ADR-0003](./docs/adr/0003-build-on-flue-with-ai-sdk-harness.md):
 
-- **The filesystem is the definition.** Instructions are Markdown, tools are one file each,
-  schedules and channels are entry points in their own directories. The expected author is
-  another agent, and a file is a change unit an agent can rewrite without disturbing its
-  neighbours ([ADR-0001](./docs/adr/0001-filesystem-first-agent-definition.md)).
-- **The harness is chosen, not hidden.** `claudeCode({ ... })` or `codex({ ... })` is something
-  you write. Harness differences decide what a turn costs and what it can be interrupted at, so
-  burying them would leak or over-constrain.
-- **Durability is ours, adapters are theirs.** A narrow contract — start, wait, resume, settle —
-  with Cloudflare Workflows and Vercel Workflow behind it, so no platform's beta status becomes
-  this framework's public API
-  ([ADR-0002](./docs/adr/0002-durable-execution-contract.md)).
+- **Flue is the base, as a fork.** Agents are Flue `'use agent'` modules, built with Flue's Vite
+  plugin. Its durable submissions and persistence replace the filesystem layout and durable
+  contract from ADR-0001 and ADR-0002, which are superseded.
+- **Cloudflare first.** Each agent runs as a Flue Durable Object, and each harness turn runs in a
+  Cloudflare Sandbox container. Node is the development target; other platforms wait until
+  Cloudflare ships.
+- **The AI SDK harness replaces Pi.** Flue's agent loop moves behind a seam implemented with the
+  AI SDK harness spec (`HarnessV1`), starting with Claude Code via `@amond-ai/harness-claude-code`.
+  Pi is then removed.
+- **One sandbox for Flue and the harness.** Flue's `Sandbox` extends the AI SDK's
+  `Experimental_SandboxSession`, so the object Flue's tools use is the one handed to the harness.
 
 ## Status
 
-**Pre-alpha — the contracts are in place, most implementations are not.** The durable contract
-and its in-memory runtime work and are tested, and `amond build` resolves an `agent/` tree into
-a manifest and a per-target entry point. The harness adapters, the Cloudflare adapter, the
-handlers those entry points call and `amond init` / `amond dev` are scaffolding with typed
-surfaces and no bodies; they throw rather than return something plausible, on purpose. Nothing
-is published to npm yet.
+**Pre-alpha — the direction is decided, the migration has not started.** The work is tracked
+phase by phase: the sandbox extension and a Cloudflare provider
+([#15](https://github.com/amond-ai/agent/issues/15)), the agent-loop seam
+([#16](https://github.com/amond-ai/agent/issues/16)), harness-driven turns
+([#17](https://github.com/amond-ai/agent/issues/17)), and removing Pi with a Cloudflare
+end-to-end example ([#18](https://github.com/amond-ai/agent/issues/18)). Nothing is published to
+npm yet.
 
 ## Packages
 
+The packages below predate ADR-0003. Those marked *retiring* overlap with Flue and are removed in
+[#18](https://github.com/amond-ai/agent/issues/18); the harness adapters are reassessed once the
+agent-loop seam exists.
+
 | Package | What it does |
 | --- | --- |
-| `amond` | The CLI: `init` an agent tree, `dev` it locally, `build` it into deployable handlers. |
-| `@amond-ai/agent-core` | The contract — the filesystem layout, the harness seam, and the handlers a platform invokes. |
-| `@amond-ai/agent-durable` | The durable execution contract, plus the in-memory runtime every adapter is verified against. |
-| `@amond-ai/agent-durable-cloudflare` | Cloudflare Workflows behind that contract. |
+| `amond` | *Retiring.* The CLI that resolves an ADR-0001 `agent/` tree into a manifest; Flue's Vite build replaces it. |
+| `@amond-ai/agent-core` | *Retiring.* The ADR-0001 contract — filesystem layout, harness seam, platform handlers. |
+| `@amond-ai/agent-durable` | *Retiring.* The ADR-0002 durable contract and its in-memory runtime. |
+| `@amond-ai/agent-durable-cloudflare` | *Retiring.* Cloudflare Workflows behind that contract, never implemented. |
 | `@amond-ai/agent-harness-claude-code` | The Claude Code adapter, over `@amond-ai/harness-claude-code`. |
-| `@amond-ai/agent-harness-codex` | A second adapter, unpublished — it exists to keep the harness seam honest before 1.0. |
+| `@amond-ai/agent-harness-codex` | A second adapter, unpublished. |
 
 ## What an agent looks like
 
-```text
-agent/
-  instructions.md           # what the agent is for
-  agent.ts                  # the harness, the model, the policy
-  tools/
-    search-issues.ts        # one tool per file, default-exported
-  skills/
-    triage/SKILL.md
-  schedules/
-    nightly.ts              # cron-triggered
-  channels/
-    slack.ts                # event-triggered
-```
-
-Adding a tool is adding a file. There is no registry to update and no import list to keep in
-sync — which is the point, because the thing editing these files is usually an agent.
-
-## Why the filesystem is not read at runtime
-
-A Worker has no `fs`, so scanning `tools/` when a request arrives is not portable. `amond build`
-walks the tree on your machine and emits a manifest whose imports are static; that manifest is
-what deploys. The filesystem is the authoring surface, the manifest is the deployed one, and the
-CLI is the seam between them.
-
-The build emits **handlers**, not deployment artifacts. `wrangler.jsonc`, `vercel.json` and cron
-registration stay yours — a framework that owns your deploy config has to chase two platforms'
-release notes forever, and you lose the escape hatch the first time you need it.
+An agent is a Flue module whose first statement is `'use agent'`. Every exported capitalised
+function is an agent; its body calls Flue hooks and returns its instructions. On Cloudflare,
+`flue()` and `cloudflare({ config: flueWorkerConfig() })` in `vite.config.ts` turn each agent into
+a Durable Object class, and `vite build && wrangler deploy` ships it. `wrangler.jsonc`, including
+the Sandbox container, stays yours. See Flue's
+[building agents](https://flueframework.com/docs/guide/building-agents/) guide for the hooks.
 
 ## Development
 
