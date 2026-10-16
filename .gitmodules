@@ -1,6 +1,6 @@
 [submodule "vendor/flue"]
 	path = vendor/flue
-	url = https://github.com/amond-ai/flue.git
+	url = https://github.com/withastro/flue.git
 	shallow = true
 [submodule "vendor/eve"]
 	path = vendor/eve

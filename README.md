@@ -4,19 +4,23 @@
 
 Run coding-agent harnesses as Flue agents, in sandbox containers, on Cloudflare.
 
-`amond/agent` builds on [Flue](https://github.com/withastro/flue), through the fork
-[`amond-ai/flue`](https://github.com/amond-ai/flue) vendored at `vendor/flue`, and on
+`amond/agent` is being derived from [Flue](https://github.com/withastro/flue) and built on
 [`amond/harness`](https://github.com/amond-ai/harness), which already runs a coding-agent turn
-inside a sandbox and survives a dropped socket. Flue supplies what an agent *is*, how a request,
-schedule or event starts one, and how a session stays durable. The harness supplies the turn
-itself.
+inside a sandbox and survives a dropped socket. Flue's code will supply what an agent *is*, how a
+request, schedule or event starts one, and how a session stays durable. The harness supplies the
+turn itself.
 
-Four decisions shape it, all recorded in
-[ADR-0003](./docs/adr/0003-build-on-flue-with-ai-sdk-harness.md):
+Five decisions shape it, recorded in
+[ADR-0003](./docs/adr/0003-build-on-flue-with-ai-sdk-harness.md) and
+[ADR-0004](./docs/adr/0004-ship-flue-as-amond-packages.md):
 
-- **Flue is the base, as a fork.** Agents are Flue `'use agent'` modules, built with Flue's Vite
-  plugin. Its durable submissions and persistence replace the filesystem layout and durable
-  contract from ADR-0001 and ADR-0002, which are superseded.
+- **Flue's code, our packages.** Flue's runtime, Vite plugin and CLI will move into this
+  repository, be renamed in source and be published as `@amond-ai/agent`, `@amond-ai/agent-vite`
+  and `amond`. Upstream changes will be ported by hand; `vendor/flue` is a read-only
+  reference.
+- **Flue's agent model.** Agents are `'use agent'` modules built with the Vite plugin. Flue's
+  durable submissions and persistence replace the filesystem layout and durable contract from
+  ADR-0001 and ADR-0002, which are superseded.
 - **Cloudflare first.** Each agent runs as a Flue Durable Object, and each harness turn runs in a
   Cloudflare Sandbox container. Node is the development target; other platforms wait until
   Cloudflare ships.
@@ -44,7 +48,7 @@ agent-loop seam exists.
 
 | Package | What it does |
 | --- | --- |
-| `amond` | *Retiring.* The CLI that resolves an ADR-0001 `agent/` tree into a manifest; Flue's Vite build replaces it. |
+| `amond` | *Retiring.* The CLI that resolves an ADR-0001 `agent/` tree into a manifest; Flue's Vite build replaces it. The `amond` name then passes to the CLI imported from Flue (ADR-0004). |
 | `@amond-ai/agent-core` | *Retiring.* The ADR-0001 contract — filesystem layout, harness seam, platform handlers. |
 | `@amond-ai/agent-durable` | *Retiring.* The ADR-0002 durable contract and its in-memory runtime. |
 | `@amond-ai/agent-durable-cloudflare` | *Retiring.* Cloudflare Workflows behind that contract, never implemented. |
