@@ -1,0 +1,8 @@
+[submodule "vendor/flue"]
+	path = vendor/flue
+	url = https://github.com/withastro/flue.git
+	shallow = true
+[submodule "vendor/eve"]
+	path = vendor/eve
+	url = https://github.com/vercel/eve.git
+	shallow = true
