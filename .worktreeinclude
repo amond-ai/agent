@@ -16,3 +16,6 @@ packages/*/.env.local
 
 # Turborepo 원격 캐시 팀 링크 (.turbo/cache 등 로컬 캐시는 제외)
 .turbo/config.json
+
+# please 개발자별 설정 override
+.please/config.local.yml
