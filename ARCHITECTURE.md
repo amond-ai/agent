@@ -256,7 +256,8 @@ Nothing is published to npm yet, and every package is pre-1.0.
 **Public**:
 
 - `@amond-ai/agent`: the runtime, through `.` and the subpaths `./node`, `./cloudflare`,
-  `./config`, `./tool`, `./adapter`, `./routing`, `./telemetry`, and `./test-utils`. The
+  `./cloudflare/workers-ai`, `./config`, `./tool`, `./adapter`, `./routing`, `./telemetry`,
+  `./test-utils`, `./test-utils/conversation-stream`, and `./test-utils/attachment-store`. The
   `./internal` and `./cloudflare/internal` subpaths are for sibling packages.
 - `@amond-ai/agent-vite`: `amond()` and `amondWorkerConfig()`. `./internal` serves the CLI.
 - `amond`: the `amond` binary and its commands `init`, `run`, `docs`, `add`, and `update`.

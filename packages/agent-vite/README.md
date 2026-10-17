@@ -7,7 +7,7 @@ powers `vite dev` and `vite build` for Node and Cloudflare targets.
 npm install @amond-ai/agent @amond-ai/agent-vite vite
 ```
 
-Requires Vite 8 or later.
+Requires Vite 8.
 
 ```ts
 // vite.config.ts
@@ -20,7 +20,11 @@ export default defineConfig({ plugins: [amond()] })
 ## Cloudflare
 
 Add `amond()` before the sibling `cloudflare()` plugin from `@cloudflare/vite-plugin`, and pass
-`amondWorkerConfig()` as its config.
+`amondWorkerConfig()` as its config. The Cloudflare plugin and `wrangler` are separate installs:
+
+```sh
+npm install -D @cloudflare/vite-plugin wrangler
+```
 
 ```ts
 // vite.config.ts

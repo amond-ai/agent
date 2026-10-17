@@ -13,7 +13,7 @@ npm install --save-dev amond
 | ------------------------------------ | ----------------------------------------------------------- |
 | `amond init [directory]`             | Initialize a new amond project (interactive).               |
 | `amond run <path> -m <text>`         | Run one agent module locally, print its reply, then exit.   |
-| `amond add [kind] [name\|url]`       | Fetch a blueprint implementation guide. No arguments lists blueprints. |
+| `amond add [kind] [name\|url]`       | Fetch a blueprint implementation guide.                     |
 | `amond update <kind> <name\|url>`    | Fetch an updated blueprint implementation guide.            |
 | `amond docs`                         | List the documentation pages.                               |
 | `amond docs read <page>`             | Print one documentation page.                               |

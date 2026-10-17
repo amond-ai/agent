@@ -70,7 +70,7 @@ reassessed once the agent-loop seam exists. The ADR-0001 CLI is retired, and the
 
 ## What an agent looks like
 
-An agent is a module whose first statement is `'use agent'`. Every exported capitalised
+An agent is a module whose directive prologue includes `'use agent'`. Every exported capitalised
 function is an agent; its body calls hooks from `@amond-ai/agent` and returns its instructions.
 On Cloudflare, `amond()` and `cloudflare({ config: amondWorkerConfig() })` in `vite.config.ts`
 turn each agent into a Durable Object class, and `vite build && wrangler deploy` ships it.

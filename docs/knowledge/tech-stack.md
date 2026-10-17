@@ -23,7 +23,7 @@ choices were made. Update this file before a change that adds or replaces any of
 
 | Item | Choice | Notes |
 | --- | --- | --- |
-| Bundler | tsdown 0.23 | Imported packages carry a `tsdown.config.ts`. The others run `tsdown src/index.ts --dts`. Both emit `dist/*.mjs` and `.d.mts` |
+| Bundler | tsdown 0.23 | Imported packages carry a `tsdown.config.ts` and emit `dist/*.mjs` and `.d.mts`, except the CLI, which emits no declarations and renames its `amond` entry to `dist/amond.js`. The others run `tsdown src/index.ts --dts` |
 | Type check | `tsc --noEmit` | Composite project config in the root `tsconfig.json`. Each imported package keeps Flue's stricter compiler options |
 | Agent build | `vite build` | A user's agent project builds through `amond()` from `@amond-ai/agent-vite` |
 | Tests | Vitest 4.1 | Run under Bun (`bun --bun vitest run`) |

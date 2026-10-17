@@ -1,7 +1,6 @@
 # Product Specs Index
 
-> Auto-maintained by /please:sync-specs and /please:discover-specs.
+> Auto-maintained by /please:sync-specs.
 
-| Spec | Domain | Feature | Created | Requirements | Related Tracks |
-|------|--------|---------|---------|--------------|----------------|
-| SPEC-001 | import-flue-s-packages-and-ren | spec | 2026-10-17 | 0 | ["flue-import-rename-20261017"] |
+| Spec | Feature | Created | Related Tracks |
+|------|---------|---------|----------------|

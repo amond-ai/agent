@@ -67,9 +67,10 @@ type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error'
 
 `sendMessage()` adds an optimistic user message and delivers it. It resolves with the admission
 receipt when the server admits the prompt, and does not wait for generation. The receipt carries the
-`submissionId` to correlate with `settlements`. If admission fails, the optimistic message stays in
-`failedSends` so the UI can offer a retry, and the promise rejects. Calling it on a dormant hook
-rejects.
+`submissionId` to correlate with `settlements`. If admission fails, or its outcome is unknown
+because the response was lost, the optimistic message stays in `messages`, `failedSends` records
+its error so the UI can offer a retry, and the promise rejects. The next `sendMessage()` call
+clears both. Calling it on a dormant hook rejects.
 
 To make a retry safe, pass an `idempotencyKey`. Generate and persist the key before you call
 `sendMessage()`, so it survives unmounts and reloads.
