@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "check": "tsc --noEmit",
+    "check": "bun check",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "bun --bun vitest run --passWithNoTests"

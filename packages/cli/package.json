@@ -24,7 +24,7 @@
   "scripts": {
     "prebuild": "bun scripts/generate-blueprint-index.ts",
     "build": "tsdown && mv dist/amond.mjs dist/amond.js",
-    "check": "bun scripts/generate-blueprint-index.ts && tsc --noEmit",
+    "check": "bun scripts/generate-blueprint-index.ts && bun check",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "bun --bun vitest run --passWithNoTests"
