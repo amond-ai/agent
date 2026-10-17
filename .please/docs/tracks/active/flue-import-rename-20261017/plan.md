@@ -174,6 +174,9 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] (2026-10-17 20:50 KST) T008 Make docs, add and update fail cleanly with no bundled content
   Evidence: `bun run build && cd packages/cli && bun --bun vitest run` → 1 file, 11 tests passed (spawns bin/amond.mjs): `docs`, `docs read guide/tools`, `docs search tools` exit non-zero with "No documentation is bundled with this version of amond."; `add`, `add channel slack`, `add channel <url>`, `update channel slack` exit non-zero with "No blueprints are bundled with this version of amond." and empty stdout, with and without `AMOND_REGISTRY_URL=http://127.0.0.1:9` (no registry/ECONNREFUSED text). Root `bun run build`, `check`, `lint`, `CI=true bun run test` → all exit 0. Mutation check: replacing the empty-index throw with a no-op failed 8 of 11 tests (every add/update case); reverted.
   Commit: e7bf7c8. "No network request" rests on the code path (the empty-index check precedes kind resolution and fetch) plus the unreachable-host run; a cross-process fetch stub is not possible. The registry base now comes only from `AMOND_REGISTRY_URL`; with an index present and the variable unset, `add` reports that no registry is configured. The `apps/docs` docs-root candidate stays (no apps/docs exists here; track 2 decides).
+- [x] (2026-10-17 20:55 KST) T009 Replace links to Flue's website in code, scaffolds and package metadata
+  Evidence: `bun run build && cd packages/cli && bun --bun vitest run src/commands` → 2 files, 14 tests passed; init.test.ts spawns `bin/amond.mjs init <dir> --target node|cloudflare [--deploy]` (3 cases) and asserts no `/flue/i` in any written file, path or output, plus `amond.config.ts` and `@amond-ai/agent` present. Mutation check: README line changed to `[Flue](https://flueframework.com)` failed all 3 cases (`README.md ... not to match /flue/i`); reverted. Root build, check, lint, `CI=true bun run test` → all exit 0. `git grep -n flueframework -- packages/ ':!**/README.md'` → no matches.
+  Commit: 2743445. Beyond Files: packages/cli/package.json (already had the right directory). The `directory` fields use the real folder names (packages/agent, not Flue's packages/runtime); `homepage` is `https://github.com/amond-ai/agent/tree/main/packages/<dir>#readme`, matching core. READMEs still carry flueframework.com until T010 merges.
 
 ## Decision Log
 
@@ -200,6 +203,12 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 - Decision: anchored release-please with the top-level `bootstrap-sha` 7c8f94c (phase 1 checkpoint), not a per-package option.
   Rationale: `bootstrap-sha` and `last-release-sha` are top-level only in the schema and manifest docs; the existing four packages have never released either, and no commit before the checkpoint touches them in a way worth a changelog. Ignored once the first release PR merges, so it can be removed then.
+  Date/Author: 2026-10-17 / implement-executor
+- Decision: scaffold docs links keep the page, drop the `#anchor`, and name the section in parentheses (e.g. `amond docs read guide/cloudflare-target ("Managing migrations")`).
+  Rationale: normalizeDocsPath does not strip `#fragment`, so `docs read page#anchor` would not find the page.
+  Date/Author: 2026-10-17 / implement-executor
+- Decision: link keep/drop calls for init.ts. guide/database kept (the page is mostly about db.ts, the in-memory default and the built-in sqlite(), all in the runtime; the Postgres/libSQL adapter names were removed from the comment since those packages stay in Flue). guide/cloudflare-target (entrypoint, migrations) kept: Cloudflare target is runtime and vite. guide/observability `#cloudflare` kept: the section describes the built-in Workers Traces adapter (createCloudflareTracing in the runtime), not OpenTelemetry/Sentry. guide/models `#cloudflare-workers-ai` kept: built-in `cloudflare` provider. Site links `[amond](flueframework.com)` now link this repo; `[amond docs](.../docs/)` became "Read the amond docs from the terminal: `amond docs`".
+  Rationale: the spec drops only links to pages mostly about packages left in Flue; none of these pages is.
   Date/Author: 2026-10-17 / implement-executor
 
 ## Surprises & Discoveries
