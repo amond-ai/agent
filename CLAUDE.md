@@ -9,6 +9,7 @@ Consult these files for project context before exploring the codebase.
 For full file listing with workspace artifacts, use `Skill("please:project-knowledge")`.
 
 ### Project Documents
+- `ARCHITECTURE.md` — Repository map: entry points, module structure, architecture invariants
 - `SECURITY.md` — Security policies, vulnerability reporting
 - `CONTRIBUTING.md` — Contribution guide, code review process
 
