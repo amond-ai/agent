@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import path from 'node:path'
-import { resolveFlueConfigPath } from '@flue/runtime/config'
-import type { ConversationStreamChunk } from '@flue/sdk'
+import { resolveAmondConfigPath } from '@amond-ai/agent/config'
+import type { ConversationStreamChunk } from '@amond-ai/agent-sdk'
 import type { CAC } from 'cac'
 import pc from 'picocolors'
 import { describeError, errorPayload, UsageError } from '../errors.ts'
@@ -21,7 +21,7 @@ import { createLocalAgentRun } from '../lib/run-local.ts'
 import { brandRows, error as cliError, row, success } from '../lib/terminal.ts'
 
 /**
- * `flue run <path>` — transport-free, one-shot local agent execution. The
+ * `amond run <path>` — transport-free, one-shot local agent execution. The
  * heavy lifting lives in src/lib/run-local.ts; this module owns flag
  * validation and terminal presentation.
  */
@@ -41,8 +41,8 @@ export function registerRunCommand(cli: CAC): void {
     .option('--new', 'Create only: reject when the conversation id already exists')
     .option('--json', 'Print a JSON result envelope to stdout instead of the message text')
     .option('--env <path>', 'Load one alternate .env-format file before the run')
-    .example('  $ flue run src/agents/hello.ts -m "Hi there"')
-    .example('  $ flue run src/agents/hello.ts -m "And then?" --id support-4821 --env .env.staging')
+    .example('  $ amond run src/agents/hello.ts -m "Hi there"')
+    .example('  $ amond run src/agents/hello.ts -m "And then?" --id support-4821 --env .env.staging')
     .action(runAction)
 }
 
@@ -64,7 +64,7 @@ function validateRunOptions(modulePath: string, options: CliOptions): RunArgs {
 
   const message = stringOption(options, 'message', '--message', { aliases: ['-m'] })
   if (message === undefined) {
-    throw new UsageError('`flue run` requires --message <text>.')
+    throw new UsageError('`amond run` requires --message <text>.')
   }
 
   const envFile = stringOption(options, 'env', '--env')
@@ -98,7 +98,7 @@ function validateRunOptions(modulePath: string, options: CliOptions): RunArgs {
 
 function loadRunEnvironment(envFile: string | undefined): EnvLoader {
   const cwd = process.cwd()
-  const configPath = resolveFlueConfigPath({ cwd })
+  const configPath = resolveAmondConfigPath({ cwd })
   const baseDir = configPath ? path.dirname(configPath) : cwd
   const envLoader = createEnvLoader(selectEnvFile(envFile, baseDir))
   envLoader.apply()
@@ -134,7 +134,7 @@ async function runAction(modulePath: string, options: CliOptions): Promise<void>
       if (line.trim()) { stderrLine(pc.dim(line)) }
     },
     onReady: (info) => {
-      brandRows('flue run', [
+      brandRows('amond run', [
         ['agent', info.identity],
         ['id', info.conversationId],
         ['config', info.configPath ? displayPath(info.root, info.configPath) : undefined],

@@ -13,7 +13,7 @@
 import type { Context, Env, Handler } from 'hono'
 import { Hono } from 'hono'
 import { MethodNotAllowedError, RouteNotFoundError, toHttpResponse } from '../errors.ts'
-import { getFlueRuntime } from './flue-app.ts'
+import { getAmondRuntime } from './amond-app.ts'
 import type { RuntimeActivityGate } from './runtime-activity-gate.ts'
 
 /** One declarative channel route, as produced by every `create*Channel()` factory. */
@@ -57,7 +57,7 @@ export function createChannelRouter<E extends Env = Env>(
       handlers,
       // Resolved at request time so a router built before the runtime is
       // configured still participates in graceful-drain accounting.
-      activityGate: getFlueRuntime()?.activityGate,
+      activityGate: getAmondRuntime()?.activityGate,
     }))
   // The mount root itself is not a channel endpoint.
   app.all('/', (c) => {
@@ -81,15 +81,15 @@ function normalizeChannelRoutes<E extends Env>(
   routes: readonly ChannelRouteDefinition<E>[],
 ): ChannelHandlerMap {
   if (!Array.isArray(routes) || routes.length === 0) {
-    throw new Error('[flue] A channel must declare at least one route.')
+    throw new Error('[amond] A channel must declare at least one route.')
   }
   const handlers: ChannelHandlerMap = {}
   for (const route of routes) {
     if (!route || typeof route !== 'object' || Array.isArray(route)) {
-      throw new Error('[flue] Channel contains an invalid route declaration.')
+      throw new Error('[amond] Channel contains an invalid route declaration.')
     }
     if (typeof route.method !== 'string' || !/^[A-Z]+$/.test(route.method)) {
-      throw new Error('[flue] Channel route method must contain only uppercase ASCII letters.')
+      throw new Error('[amond] Channel route method must contain only uppercase ASCII letters.')
     }
     if (
       typeof route.path !== 'string' ||
@@ -100,19 +100,19 @@ function normalizeChannelRoutes<E extends Env>(
       route.path.includes('#')
     ) {
       throw new Error(
-        '[flue] Channel route path must be a non-empty absolute suffix without a query or fragment.',
+        '[amond] Channel route path must be a non-empty absolute suffix without a query or fragment.',
       )
     }
     const segments = route.path.split('/')
     if (segments.some((segment: string) => segment === '.' || segment === '..')) {
-      throw new Error('[flue] Channel route path must remain beneath its channel mount.')
+      throw new Error('[amond] Channel route path must remain beneath its channel mount.')
     }
     if (typeof route.handler !== 'function') {
-      throw new Error('[flue] Channel route handler must be callable.')
+      throw new Error('[amond] Channel route handler must be callable.')
     }
     const key = `${route.method} ${route.path}`
     if (handlers[key] !== undefined) {
-      throw new Error(`[flue] Channel declares duplicate route "${key}".`)
+      throw new Error(`[amond] Channel declares duplicate route "${key}".`)
     }
     handlers[key] = route.handler as ChannelHandlerMap[string]
   }
@@ -158,7 +158,7 @@ async function dispatchChannelRequest(options: {
   }
   if (!response) {
     throw new TypeError(
-      `[flue] Channel handler for ${c.req.method} ${suffix} must return a Response.`,
+      `[amond] Channel handler for ${c.req.method} ${suffix} must return a Response.`,
     )
   }
   return response

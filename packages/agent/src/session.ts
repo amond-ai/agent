@@ -3,7 +3,7 @@ import { modelContextCompactionFields } from './model-request-info.ts'
 /**
  * Internal session implementation. Not exported publicly — user code receives
  * the facade from `createPublicSession()`, which exposes exactly the
- * `FlueSession` contract.
+ * `AmondSession` contract.
  */
 
 import type {
@@ -123,7 +123,7 @@ import {
   redactObservationDetailImages,
 } from './event-redaction.ts'
 import { interceptExecution } from './execution-interceptor.ts'
-import type { FlueExecutionContext } from './execution-interceptor.ts'
+import type { AmondExecutionContext } from './execution-interceptor.ts'
 import {
   EMPTY_HARNESS_TOOL_LINEAGE,
   enterHarnessTool,
@@ -205,16 +205,16 @@ import {
 import { getPreparedToolAdapter } from './tool-adapter.ts'
 import type {
   AgentConfig,
+  AmondEvent,
+  AmondEventInput,
+  AmondEventInputCallback,
+  AmondFs,
+  AmondHarness,
+  AmondLogger,
+  AmondObservationDetail,
+  AmondSession,
   CallHandle,
   DeliveredMessage,
-  FlueEvent,
-  FlueEventInput,
-  FlueEventInputCallback,
-  FlueFs,
-  FlueHarness,
-  FlueLogger,
-  FlueObservationDetail,
-  FlueSession,
   ModelRequestInfo,
   PackagedSkillDirectory,
   PromptImage,
@@ -253,13 +253,13 @@ const MAX_AGENT_FINISH_CYCLES = 32
 const TRANSIENT_MODEL_RETRY_BASE_DELAY_MS = 2_000
 
 type TurnInputMessage = Extract<
-  FlueEvent,
+  AmondEvent,
   { type: 'turn_request' }
 >['request']['input']['messages'][number]
 type TurnInputTool = NonNullable<
-  Extract<FlueEvent, { type: 'turn_request' }>['request']['input']['tools']
+  Extract<AmondEvent, { type: 'turn_request' }>['request']['input']['tools']
 >[number]
-type TurnOutput = NonNullable<Extract<FlueEvent, { type: 'turn' }>['response']['output']>
+type TurnOutput = NonNullable<Extract<AmondEvent, { type: 'turn' }>['response']['output']>
 type ModelToolSource = 'builtin' | 'adapter' | 'framework' | 'custom' | 'result'
 interface ModelToolGroup { source: ModelToolSource, tools: AgentTool<any>[] }
 interface ToolTelemetry {
@@ -335,7 +335,7 @@ function toTurnMessage(message: AgentMessage): TurnInputMessage {
       isError: message.isError,
     }
   }
-  throw new Error(`[flue] Unsupported message role in turn context: ${message.role}`)
+  throw new Error(`[amond] Unsupported message role in turn context: ${message.role}`)
 }
 
 function toTurnContent(block: ProviderContentBlock): TurnContent {
@@ -398,8 +398,8 @@ interface CreateActionHarnessOptions {
   depth: number
   activeHarnessTools: HarnessToolLineage
   signal?: AbortSignal
-  executionContext: FlueExecutionContext
-  eventCallback?: FlueEventInputCallback
+  executionContext: AmondExecutionContext
+  eventCallback?: AmondEventInputCallback
   config: AgentConfig
   env: Sandbox | undefined
   tools: ToolDefinition[]
@@ -410,7 +410,7 @@ interface CreateActionHarnessOptions {
   ): Promise<void>
 }
 
-export interface ActionHarness extends FlueHarness {
+export interface ActionHarness extends AmondHarness {
   close(): Promise<void>
 }
 
@@ -422,7 +422,7 @@ interface SessionInitOptions {
   name: string
   conversation: ReducedConversationState
   config: AgentConfig
-  onAgentEvent?: FlueEventInputCallback
+  onAgentEvent?: AmondEventInputCallback
   agentTools?: ToolDefinition[]
   /** Harness tools already active on this delegation branch. */
   activeHarnessTools?: HarnessToolLineage
@@ -435,7 +435,7 @@ interface SessionInitOptions {
   onClose?: () => void
   conversationWriter: ConversationRecordWriter
   attachmentStore: AttachmentStore
-  executionContext?: FlueExecutionContext
+  executionContext?: AmondExecutionContext
   /**
    * `usePersistentState` write buffer from the harness's render (function agents
    * only). Buffered writes drain into the same append batch as each tool
@@ -612,7 +612,7 @@ function getRegisteredPackagedSkills(
 ): Record<string, PackagedSkillDirectory> {
   const registered: Record<string, PackagedSkillDirectory> = {}
   for (const skill of Object.values(skills)) {
-    if ('__flueSkillReference' in skill) {
+    if ('__amondSkillReference' in skill) {
       const packaged = getSkillReferenceDirectory(skill)
       if (packaged) { registered[skill.id] = packaged }
     }
@@ -627,7 +627,7 @@ function getRegisteredPackagedSkills(
 function wrapProviderStream<T extends AsyncIterable<unknown> & { result(): Promise<unknown> }>(
   stream: T,
   operation: { type: 'model', turnId: string },
-  executionContext: FlueExecutionContext,
+  executionContext: AmondExecutionContext,
 ): T {
   return {
     [Symbol.asyncIterator]() {
@@ -688,10 +688,10 @@ function sleepUntilRetry(delayMs: number, signal: AbortSignal): Promise<void> {
   })
 }
 
-export class Session implements FlueSession, AgentSubmissionSession {
+export class Session implements AmondSession, AgentSubmissionSession {
   readonly name: string
   readonly conversationId: string
-  readonly fs: FlueFs
+  readonly fs: AmondFs
 
   private agentLoop: Agent
   private affinityKey: string
@@ -720,7 +720,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     const env = this.envSlot.env
     if (!env) {
       throw new Error(
-        '[flue] This agent has no sandbox. Declare one with useSandbox() to use shell and filesystem operations.',
+        '[amond] This agent has no sandbox. Declare one with useSandbox() to use shell and filesystem operations.',
       )
     }
     return env
@@ -733,7 +733,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   private envRuntime: SandboxRuntime | undefined
   private compactionAbortController: AbortController | undefined
   private modelRetryAbortController: AbortController | undefined
-  private eventCallback: FlueEventInputCallback | undefined
+  private eventCallback: AmondEventInputCallback | undefined
   private agentTools: ToolDefinition[]
   private activeHarnessTools: HarnessToolLineage
   /**
@@ -745,7 +745,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   private closed = false
   private activeOperation: OperationKind | undefined
   private activeOperationId: string | undefined
-  private activeAgentInput: FlueObservationDetail['agentInput']
+  private activeAgentInput: AmondObservationDetail['agentInput']
   private activeOperationSettlement: Promise<void> = Promise.resolve()
   private resolveActiveOperationSettlement: (() => void) | undefined
   private closePromise: Promise<void> | undefined
@@ -788,7 +788,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   private lastCommittedToolBatch: { assistantMessageId: string, toolCallId: string } | undefined
   private pendingCanonicalWrites = new Set<Promise<void>>()
   private pendingToolPublications = new Map<string, () => void>()
-  private executionIdentity: FlueExecutionContext
+  private executionIdentity: AmondExecutionContext
   private hookState: HookStateBuffer | undefined
   private rerender: SessionRerender | undefined
   private outputChannel: AgentOutputChannel | undefined
@@ -1303,7 +1303,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   private enqueueMessageDataWrite(name: string, data: unknown): void {
     if (!this.activeSubmissionId) {
       throw new Error(
-        `[flue] Message data "${name}" can only be written while the agent is responding — write from tool run functions (and other callbacks that run during a submission).`,
+        `[amond] Message data "${name}" can only be written while the agent is responding — write from tool run functions (and other callbacks that run during a submission).`,
       )
     }
     // Pre-anchor window (a fresh submission's useAgentStart, before turn 1
@@ -1364,7 +1364,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   private enqueueSignalAppend(signal: AgentSignalAppend, options?: { advance?: boolean }): void {
     if (!this.activeSubmissionId) {
       throw new Error(
-        '[flue] append() is only legal while the agent is responding to a submission. An appended signal steers the running response; to send input at any other time, use the dispatcher from useDispatchMessage().',
+        '[amond] append() is only legal while the agent is responding to a submission. An appended signal steers the running response; to send input at any other time, use the dispatcher from useDispatchMessage().',
       )
     }
     const timestamp = new Date().toISOString()
@@ -1486,7 +1486,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     )
     if (failures.length === 1) { throw failures[0] }
     if (failures.length > 1) {
-      throw new AggregateError(failures, '[flue] Multiple useAgentStart callbacks threw.')
+      throw new AggregateError(failures, '[amond] Multiple useAgentStart callbacks threw.')
     }
     // Steer the callbacks' appends now, grouped in declaration order —
     // durable order equals steer order, deterministic regardless of how the
@@ -1566,7 +1566,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
       append: (message) => {
         if (!appendWindowOpen) {
           throw new Error(
-            '[flue] append() was called after its useAgentStart callback settled. The append window is the callback itself — to send input at any other time, use the dispatcher from useDispatchMessage().',
+            '[amond] append() was called after its useAgentStart callback settled. The append window is the callback itself — to send input at any other time, use the dispatcher from useDispatchMessage().',
           )
         }
         appends.push(assertAppendMessage(message))
@@ -1575,7 +1575,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
       signal,
       get harness() {
         harness ??= session.createInvocationHarness(generateInvocationId(), signal)
-        return harness as unknown as FlueHarness
+        return harness as unknown as AmondHarness
       },
     }
     try {
@@ -1583,7 +1583,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     }
     catch (error) {
       throw new Error(
-        `[flue] A useAgentStart callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
+        `[amond] A useAgentStart callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
       )
     }
@@ -1675,7 +1675,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
       }
       if (cycle >= MAX_AGENT_FINISH_CYCLES) {
         throw new Error(
-          `[flue] useAgentFinish appended a continuation signal after ${MAX_AGENT_FINISH_CYCLES} continued cycles in one response — a runaway loop. The response is failing loudly instead of settling as a success; if the model cannot satisfy the check, make the hook give up explicitly (log and return) after a bounded number of attempts.`,
+          `[amond] useAgentFinish appended a continuation signal after ${MAX_AGENT_FINISH_CYCLES} continued cycles in one response — a runaway loop. The response is failing loudly instead of settling as a success; if the model cannot satisfy the check, make the hook give up explicitly (log and return) after a bounded number of attempts.`,
         )
       }
       // Durable point: the cycle's signal records, state writes, and the
@@ -1806,7 +1806,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     const entry = entries.findLast(candidate => candidate.sourceEntry.id === entryId)
     if (!entry) {
       throw new Error(
-        '[flue] A joined delivery input entry is missing from the projected context.',
+        '[amond] A joined delivery input entry is missing from the projected context.',
       )
     }
     this.agentLoop.steer(entry.message)
@@ -1960,7 +1960,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
       append: (message) => {
         if (!appendWindowOpen) {
           throw new Error(
-            '[flue] append() was called after its useAgentFinish callback settled. The continuation window is the callback itself — to send input at any other time, use the dispatcher from useDispatchMessage().',
+            '[amond] append() was called after its useAgentFinish callback settled. The continuation window is the callback itself — to send input at any other time, use the dispatcher from useDispatchMessage().',
           )
         }
         this.enqueueSignalAppend(assertAppendMessage(message))
@@ -1969,7 +1969,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
       signal,
       get harness() {
         harness ??= session.createInvocationHarness(generateInvocationId(), signal)
-        return harness as unknown as FlueHarness
+        return harness as unknown as AmondHarness
       },
     }
     try {
@@ -1977,7 +1977,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     }
     catch (error) {
       throw new Error(
-        `[flue] A useAgentFinish callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
+        `[amond] A useAgentFinish callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
       )
     }
@@ -1994,7 +1994,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   private createHookLogger(
     hook: 'useAgentStart' | 'useAgentFinish' | 'useResponseStart' | 'useResponseFinish',
     hookIndex: number,
-  ): FlueLogger {
+  ): AmondLogger {
     return this.createAttributedLogger({ hook, hookIndex })
   }
 
@@ -2002,7 +2002,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
    * Shared `{ info, warn, error }` factory behind ctx.log: every call emits
    *  a `log` event with `base` merged onto the caller's own attributes.
    */
-  private createAttributedLogger(base: Record<string, unknown>): FlueLogger {
+  private createAttributedLogger(base: Record<string, unknown>): AmondLogger {
     const emit = (
       level: 'info' | 'warn' | 'error',
       message: string,
@@ -2130,7 +2130,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     purpose: 'agent' | 'compaction' | 'compaction_prefix',
     options?: SimpleStreamOptions,
   ): ModelRequestInfo {
-    if (!model) { throw new Error('[flue] Missing configured model for turn telemetry.') }
+    if (!model) { throw new Error('[amond] Missing configured model for turn telemetry.') }
     const parsedEndpoint = parseProviderEndpoint(model.baseUrl)
     return {
       providerId: model.provider,
@@ -2294,10 +2294,10 @@ export class Session implements FlueSession, AgentSubmissionSession {
       streamFn: this.emitTurnRequestAndStream,
       toolExecution: 'parallel',
       // Queued messages always drain together at the next boundary — 'all'
-      // is Flue's only queue behavior. The steering queue carries joined
+      // is amond's only queue behavior. The steering queue carries joined
       // deliveries and finish-continuation appends: everything steered at a
       // boundary reaches the model together at the next turn start (pi's
-      // one-at-a-time default would spread them across turns). Flue never
+      // one-at-a-time default would spread them across turns). amond never
       // calls followUp(), but the mode is pinned so no latent
       // one-at-a-time behavior survives anywhere.
       steeringMode: 'all',
@@ -2384,7 +2384,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
           }
           else if (assistant && aEvent.type === 'text_delta') {
             const block = assistant.blocks.get(aEvent.contentIndex)
-            if (block?.type !== 'text') { throw new Error('[flue] Canonical text delta has no started block.') }
+            if (block?.type !== 'text') { throw new Error('[amond] Canonical text delta has no started block.') }
             this.enqueueCanonical(
               [
                 {
@@ -2401,7 +2401,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
           }
           else if (assistant && aEvent.type === 'text_end') {
             const block = assistant.blocks.get(aEvent.contentIndex)
-            if (block?.type !== 'text') { throw new Error('[flue] Canonical text completion has no started block.') }
+            if (block?.type !== 'text') { throw new Error('[amond] Canonical text completion has no started block.') }
             const content = aEvent.partial.content[aEvent.contentIndex]
             await this.flushCanonical()
             await this.appendCanonical([
@@ -2439,7 +2439,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
           }
           else if (assistant && aEvent.type === 'thinking_delta') {
             const block = assistant.blocks.get(aEvent.contentIndex)
-            if (block?.type !== 'reasoning') { throw new Error('[flue] Canonical reasoning delta has no started block.') }
+            if (block?.type !== 'reasoning') { throw new Error('[amond] Canonical reasoning delta has no started block.') }
             this.enqueueCanonical(
               [
                 {
@@ -2461,7 +2461,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
           }
           else if (assistant && aEvent.type === 'thinking_end') {
             const block = assistant.blocks.get(aEvent.contentIndex)
-            if (block?.type !== 'reasoning') { throw new Error('[flue] Canonical reasoning completion has no started block.') }
+            if (block?.type !== 'reasoning') { throw new Error('[amond] Canonical reasoning completion has no started block.') }
             const content = aEvent.partial.content[aEvent.contentIndex]
             await this.flushCanonical()
             await this.appendCanonical([
@@ -2609,7 +2609,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
           }
           const assistantMessageId = this.canonicalToolRequestMessageId
           if (!assistantMessageId) {
-            throw new Error('[flue] Canonical tool outcome has no assistant request.')
+            throw new Error('[amond] Canonical tool outcome has no assistant request.')
           }
           const outcomeKey = `${encodeCanonicalId(assistantMessageId)}_${encodeCanonicalId(event.toolCallId)}`
           const messageId = `entry_tool_outcome_${outcomeKey}`
@@ -2685,15 +2685,15 @@ export class Session implements FlueSession, AgentSubmissionSession {
           const committedToolResults = event.toolResults.length > 0
           if (committedToolResults) {
             const parentId = await this.conversationWriter.getConversationLeaf(this.conversationId)
-            if (!parentId) { throw new Error('[flue] Canonical tool results have no assistant parent.') }
+            if (!parentId) { throw new Error('[amond] Canonical tool results have no assistant parent.') }
             const assistantMessageId = this.canonicalToolRequestMessageId
-            if (!assistantMessageId) { throw new Error('[flue] Canonical tool results have no assistant request.') }
+            if (!assistantMessageId) { throw new Error('[amond] Canonical tool results have no assistant request.') }
             const conversation = await this.requireConversation()
             const outcomeIds = event.toolResults.map((toolResult) => {
               const outcome = conversation.toolOutcomes.get(
                 toolOutcomeKey(assistantMessageId, toolResult.toolCallId),
               )
-              if (!outcome) { throw new Error('[flue] Canonical tool result has no durable outcome.') }
+              if (!outcome) { throw new Error('[amond] Canonical tool result has no durable outcome.') }
               return outcome
             })
             const finalToolResult = event.toolResults.at(-1)
@@ -2859,7 +2859,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     if (!following) {
       if (options.batchRequired) {
         throw new Error(
-          '[flue] Classification found a trailing partial tool batch but repair cannot locate it — refusing to resume (a plain resume would re-execute recorded tool calls).',
+          '[amond] Classification found a trailing partial tool batch but repair cannot locate it — refusing to resume (a plain resume would re-execute recorded tool calls).',
         )
       }
       return
@@ -2869,7 +2869,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     if (!partial) {
       if (options.batchRequired) {
         throw new Error(
-          '[flue] Classification found a trailing partial tool batch but repair cannot locate it — refusing to resume (a plain resume would re-execute recorded tool calls).',
+          '[amond] Classification found a trailing partial tool batch but repair cannot locate it — refusing to resume (a plain resume would re-execute recorded tool calls).',
         )
       }
       return
@@ -3079,7 +3079,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     signal: AbortSignal,
   ): Promise<ConversationRecord> {
     if (!this.createTaskSession) {
-      throw new Error('[flue] This session cannot resume task sessions.')
+      throw new Error('[amond] This session cannot resume task sessions.')
     }
     const toolCallBlock = assistant.content.find(
       (block): block is Extract<typeof block, { type: 'toolCall' }> =>
@@ -3221,7 +3221,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     // pre-checks this exact condition before calling.
     if (conversation.activeLeafId !== assistantEntryId) {
       throw new Error(
-        '[flue] Cannot repair the trailing tool batch: its tool-call assistant is no longer the conversation leaf — an entry was appended before repair.',
+        '[amond] Cannot repair the trailing tool batch: its tool-call assistant is no longer the conversation leaf — an entry was appended before repair.',
       )
     }
     const finalToolCall = toolCalls.at(-1)
@@ -3849,7 +3849,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   private resolveModelForCall(modelSpecifier: string | undefined): Model<any> {
     if (!modelSpecifier) { return this.config.model }
     const model = this.config.resolveModel(modelSpecifier)
-    if (!model) { throw new Error(`[flue] Model "${modelSpecifier}" could not be resolved.`) }
+    if (!model) { throw new Error(`[amond] Model "${modelSpecifier}" could not be resolved.`) }
     return model
   }
 
@@ -3860,11 +3860,11 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
   /** The packaged directory behind a registered skill: import-attached or lazily built from an inline definition. */
   private resolveRegisteredPackage(skill: Skill): PackagedSkillDirectory {
-    if ('__flueSkillReference' in skill) {
+    if ('__amondSkillReference' in skill) {
       const packaged = getSkillReferenceDirectory(skill)
       if (!packaged) {
         throw new Error(
-          `[flue] Packaged skill "${skill.name}" is unavailable for this application build.`,
+          `[amond] Packaged skill "${skill.name}" is unavailable for this application build.`,
         ) 
       }
       return packaged
@@ -3996,7 +3996,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
    * conversation stream as `log` events attributed to the call. Not part of
    * the tool result; the model never sees them.
    */
-  private createToolLogger(tool: string, toolCallId: string): FlueLogger {
+  private createToolLogger(tool: string, toolCallId: string): AmondLogger {
     return this.createAttributedLogger({ tool, toolCallId })
   }
 
@@ -4011,7 +4011,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
    * JSON clone, so first execution and replay hand the caller identical
    * shapes.
    */
-  private createToolStep(toolName: string, toolCallId: string, log: FlueLogger): ToolStep {
+  private createToolStep(toolName: string, toolCallId: string, log: AmondLogger): ToolStep {
     const used = new Set<string>()
     return {
       do: async <T>(name: string, fn: () => T | Promise<T>): Promise<T> => {
@@ -4055,7 +4055,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     tool?: ToolDefinition,
   ): ActionHarness {
     if (!this.createActionHarness) {
-      throw new Error('[flue] This session cannot run harness-connected tools.')
+      throw new Error('[amond] This session cannot run harness-connected tools.')
     }
     if (this.delegationDepth >= MAX_DELEGATION_DEPTH) {
       throw new DelegationDepthExceededError({ maxDepth: MAX_DELEGATION_DEPTH })
@@ -4262,7 +4262,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
                   const prepared = prepareResultTool(tool, params)
                   // createResultTools registers a preparer for every tool it
                   // returns, and 'result'-source tools come only from it.
-                  if (!prepared) { throw new Error('[flue] Result tool has no registered preparer.') }
+                  if (!prepared) { throw new Error('[amond] Result tool has no registered preparer.') }
                   return prepared
                 })
               : this.wrapModelTool(tool, group.source),
@@ -4319,7 +4319,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
     // Tool factories (standard and adapter alike) get the env with
     // packaged-skill routing layered onto readFile: any tool that reads
-    // through the env resolves /.flue/packaged-skills/ paths, no
+    // through the env resolves /.amond/packaged-skills/ paths, no
     // tool-level special-casing.
     const toolEnv = overlayPackagedSkills(env, packagedSkills)
 
@@ -4476,7 +4476,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
   > {
     this.assertActive()
     if (!this.createTaskSession) {
-      throw new Error('[flue] This session cannot create task sessions.')
+      throw new Error('[amond] This session cannot create task sessions.')
     }
     if (this.delegationDepth >= MAX_DELEGATION_DEPTH) {
       throw new DelegationDepthExceededError({ maxDepth: MAX_DELEGATION_DEPTH })
@@ -4711,7 +4711,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     }
   }
 
-  private executionContext(overrides: Partial<FlueExecutionContext> = {}): FlueExecutionContext {
+  private executionContext(overrides: Partial<AmondExecutionContext> = {}): AmondExecutionContext {
     return {
       ...this.executionIdentity,
       conversationId: this.conversationId,
@@ -4722,7 +4722,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     }
   }
 
-  private emit(event: FlueEventInput, observation?: FlueObservationDetail): void {
+  private emit(event: AmondEventInput, observation?: AmondObservationDetail): void {
     const decorated = {
       ...redactEventImages(event),
       conversationId: event.conversationId ?? this.conversationId,
@@ -4822,7 +4822,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     return result.content.map((content) => {
       if (content.type === 'text') { return { type: 'text' as const, text: content.text } }
       const attachment = refs[imageIndex++]
-      if (!attachment) { throw new Error('[flue] Canonical tool outcome attachment is missing.') }
+      if (!attachment) { throw new Error('[amond] Canonical tool outcome attachment is missing.') }
       return { type: 'attachment' as const, attachment }
     })
   }
@@ -4857,7 +4857,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
         type: 'assistant_message_started',
         messageId: assistantMessageId,
         parentId: userMessageId,
-        modelInfo: { api: 'flue-shell', provider: 'flue', model: '' },
+        modelInfo: { api: 'amond-shell', provider: 'amond', model: '' },
       },
       {
         ...this.canonicalEnvelope('assistant_tool_call'),
@@ -4903,7 +4903,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
   private async requireConversation(): Promise<ReducedConversationState> {
     const conversation = await this.conversationWriter.getConversation(this.conversationId)
-    if (!conversation) { throw new Error('[flue] Canonical conversation is missing.') }
+    if (!conversation) { throw new Error('[amond] Canonical conversation is missing.') }
     return conversation
   }
 
@@ -5058,7 +5058,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
       if (overflow && assistant !== undefined) {
         overflowRecoveryAttempted = true
-        this.internalLog('info', '[flue:compaction] Overflow detected, compacting...')
+        this.internalLog('info', '[amond:compaction] Overflow detected, compacting...')
         await this.rebuildCanonicalContext()
         if (!(await this.runCompaction('overflow'))) {
           if (!turnCompleted && options.resume) {
@@ -5073,7 +5073,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
         // so it cannot be continued. Preserve its response and the compaction
         // for future turns; only provider errors need an immediate retry.
         if (assistant.stopReason !== 'error') { return }
-        this.internalLog('info', '[flue:compaction] Retrying after overflow recovery...')
+        this.internalLog('info', '[amond:compaction] Retrying after overflow recovery...')
         start = continueRebuilt
       }
       else if (retryable && assistant !== undefined) {
@@ -5124,7 +5124,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     attempt: number,
   ): Promise<boolean> {
     if (attempt > MAX_TRANSIENT_MODEL_RETRIES) {
-      this.internalLog('warn', '[flue:model-retry] Transient model error retries exhausted', {
+      this.internalLog('warn', '[amond:model-retry] Transient model error retries exhausted', {
         attempts: attempt - 1,
         error: assistant.errorMessage,
       })
@@ -5134,7 +5134,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     const delayMs = modelRetryDelayMs(attempt)
     await this.rebuildCanonicalContext()
     this.modelRetryAbortController = new AbortController()
-    this.internalLog('warn', '[flue:model-retry] Retrying transient model error', {
+    this.internalLog('warn', '[amond:model-retry] Retrying transient model error', {
       attempt,
       maxRetries: MAX_TRANSIENT_MODEL_RETRIES,
       delayMs,
@@ -5161,7 +5161,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     if (shouldCompact(contextTokens, contextWindow, settings)) {
       this.internalLog(
         'info',
-        `[flue:compaction] Threshold reached — ${contextTokens} tokens used, ` +
+        `[amond:compaction] Threshold reached — ${contextTokens} tokens used, ` +
         `window ${contextWindow}, reserve ${settings.reserveTokens}, ` +
         'triggering compaction',
       )
@@ -5220,21 +5220,21 @@ export class Session implements FlueSession, AgentSubmissionSession {
           : undefined,
       )
       if (!preparation) {
-        this.internalLog('info', '[flue:compaction] Nothing to compact (no valid cut point found)')
+        this.internalLog('info', '[amond:compaction] Nothing to compact (no valid cut point found)')
         return false
       }
       const firstKeptEntry = contextEntries[preparation.firstKeptIndex]?.sourceEntry
       if (firstKeptEntry?.type !== 'message') {
         this.internalLog(
           'info',
-          '[flue:compaction] Nothing to compact (first kept message has no entry)',
+          '[amond:compaction] Nothing to compact (first kept message has no entry)',
         )
         return false
       }
 
       this.internalLog(
         'info',
-        `[flue:compaction] Summarizing ${preparation.messagesToSummarize.length} messages${ 
+        `[amond:compaction] Summarizing ${preparation.messagesToSummarize.length} messages${ 
           preparation.isSplitTurn
             ? ` (split turn: ${preparation.turnPrefixMessages.length} prefix messages)`
             : '' 
@@ -5265,7 +5265,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
             const request = this.modelRequests.get(handle.turnId)
             if (!request) {
               throw new Error(
-                `[flue] Missing model request telemetry for turn "${handle.turnId}".`,
+                `[amond] Missing model request telemetry for turn "${handle.turnId}".`,
               ) 
             }
             this.emitTurn(handle.turnId, purpose, response, request.info, error)
@@ -5295,7 +5295,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
       {
         const conversation = await this.requireConversation()
         const sourceLeafId = conversation.activeLeafId
-        if (!sourceLeafId) { throw new Error('[flue] Canonical compaction has no source leaf.') }
+        if (!sourceLeafId) { throw new Error('[amond] Canonical compaction has no source leaf.') }
         // rebaselineResources owns this record's append so the new baseline
         // resource_snapshot rides the same batch — a crash between separate
         // appends would durably compact the context while stranding the
@@ -5318,7 +5318,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
       const messagesAfter = this.agentLoop.state.messages.length
       this.internalLog(
         'info',
-        `[flue:compaction] Complete — messages: ${messagesBefore} → ${messagesAfter}, ` +
+        `[amond:compaction] Complete — messages: ${messagesBefore} → ${messagesAfter}, ` +
         `tokens before: ${result.tokensBefore}`,
       )
 
@@ -5336,7 +5336,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     }
     catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      this.internalLog('error', `[flue:compaction] Failed: ${errorMessage}`, { error })
+      this.internalLog('error', `[amond:compaction] Failed: ${errorMessage}`, { error })
       if (terminalPending) {
         this.emit(
           {
@@ -5396,7 +5396,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
     )
   }
 
-  private agentInvocationOutput(result: unknown): FlueObservationDetail['agentOutput'] {
+  private agentInvocationOutput(result: unknown): AmondObservationDetail['agentOutput'] {
     if (typeof result !== 'object' || result === null) { return undefined }
     if ('data' in result) { return { type: 'data', data: result.data } }
     if ('text' in result && typeof result.text === 'string') {
@@ -5685,7 +5685,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
         // the submission 'completed' having done nothing — the exact
         // hole the deleted interrupted_partial state fell through.
         const unhandled: never = state
-        throw new Error(`[flue] Unhandled submission classification: ${JSON.stringify(unhandled)}`)
+        throw new Error(`[amond] Unhandled submission classification: ${JSON.stringify(unhandled)}`)
       }
     }
   }
@@ -5736,7 +5736,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
                 entry => entry.type === 'message' && entry.message.role === 'user',
               )
               if (!inputEntry) {
-                throw new Error('[flue] Resumed task conversation has no durable input.')
+                throw new Error('[amond] Resumed task conversation has no durable input.')
               }
               await this.resumeConversationToCompletion({
                 inputEntryId: inputEntry.id,
@@ -5946,7 +5946,7 @@ export class Session implements FlueSession, AgentSubmissionSession {
         await this.rebuildCanonicalContext()
         const projectedPrompt = this.agentLoop.state.messages.pop()
         if (projectedPrompt?.role !== 'user') {
-          throw new Error('[flue] Canonical prompt projection is missing its user message.')
+          throw new Error('[amond] Canonical prompt projection is missing its user message.')
         }
         const projectedContent = Array.isArray(projectedPrompt.content)
           ? projectedPrompt.content
@@ -6046,27 +6046,27 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
 // ─── Public facade ──────────────────────────────────────────────────────────
 
-const publicSessionsBySession = new WeakMap<Session, FlueSession>()
-const internalSessionsByFacade = new WeakMap<FlueSession, Session>()
+const publicSessionsBySession = new WeakMap<Session, AmondSession>()
+const internalSessionsByFacade = new WeakMap<AmondSession, Session>()
 
 /**
- * Wrap an internal Session in a facade exposing exactly the {@link FlueSession}
+ * Wrap an internal Session in a facade exposing exactly the {@link AmondSession}
  * contract. Session instances carry internal runtime surface (the durable
  * submission executor, `abort()`/`close()`, load-bearing `metadata`) that must
  * not leak to user code at runtime. Repeated calls for the same Session return
  * the same facade.
  */
-export function createPublicSession(session: Session): FlueSession {
+export function createPublicSession(session: Session): AmondSession {
   const existing = publicSessionsBySession.get(session)
   if (existing) { return existing }
-  const facade: FlueSession = {
+  const facade: AmondSession = {
     name: session.name,
     conversationId: session.conversationId,
     fs: session.fs,
-    prompt: session.prompt.bind(session) as FlueSession['prompt'],
+    prompt: session.prompt.bind(session) as AmondSession['prompt'],
     shell: session.shell.bind(session),
-    skill: session.skill.bind(session) as FlueSession['skill'],
-    task: session.task.bind(session) as FlueSession['task'],
+    skill: session.skill.bind(session) as AmondSession['skill'],
+    task: session.task.bind(session) as AmondSession['task'],
     compact: session.compact.bind(session),
   }
   publicSessionsBySession.set(session, facade)
@@ -6080,7 +6080,7 @@ export function createPublicSession(session: Session): FlueSession {
  * registered facade (e.g. a test fake injected through a harness seam).
  * Runtime-internal use only (durable submission processing).
  */
-export function getInternalSession(session: FlueSession): Session | undefined {
+export function getInternalSession(session: AmondSession): Session | undefined {
   return internalSessionsByFacade.get(session)
 }
 

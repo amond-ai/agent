@@ -16,7 +16,7 @@ import type {
   ToolOutputSchema,
   ToolStep,
 } from './tool-types.ts'
-import type { FlueHarness, FlueLogger } from './types.ts'
+import type { AmondHarness, AmondLogger } from './types.ts'
 
 export function defineTool<
   const TInput extends ToolInputSchema | undefined = undefined,
@@ -81,7 +81,7 @@ export function assertToolDefinition(
   label: string,
 ): asserts value is ToolDefinition {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`[flue] ${label} requires a tool definition object.`)
+    throw new Error(`[amond] ${label} requires a tool definition object.`)
   }
   // Reject unknown fields like the other authoring surfaces (useModel,
   // useSandbox) do: a `harnes: true` typo must not silently produce a pure
@@ -89,7 +89,7 @@ export function assertToolDefinition(
   for (const key of Object.keys(value)) {
     if (!TOOL_DEFINITION_FIELDS.has(key)) {
       throw new Error(
-        `[flue] ${label} received unknown field "${key}". Tool definitions accept: ${[...TOOL_DEFINITION_FIELDS].join(', ')}.`,
+        `[amond] ${label} received unknown field "${key}". Tool definitions accept: ${[...TOOL_DEFINITION_FIELDS].join(', ')}.`,
       )
     }
   }
@@ -98,36 +98,36 @@ export function assertToolDefinition(
   assertNonEmptyString(tool.description, `${label} description`)
   if (tool.input !== undefined) {
     if (!isValibotSchema(tool.input)) {
-      throw new Error(`[flue] ${label} input must be a Valibot schema.`)
+      throw new Error(`[amond] ${label} input must be a Valibot schema.`)
     }
     if (!isTopLevelObjectSchema(tool.input)) {
-      throw new Error(`[flue] ${label} input must be a top-level object schema.`)
+      throw new Error(`[amond] ${label} input must be a top-level object schema.`)
     }
   }
   if (tool.output !== undefined && !isValibotSchema(tool.output)) {
-    throw new Error(`[flue] ${label} output must be a Valibot schema.`)
+    throw new Error(`[amond] ${label} output must be a Valibot schema.`)
   }
   if (tool.harness !== undefined && typeof tool.harness !== 'boolean') {
-    throw new Error(`[flue] ${label} harness must be a boolean.`)
+    throw new Error(`[amond] ${label} harness must be a boolean.`)
   }
   if (tool.durable !== undefined && typeof tool.durable !== 'boolean') {
-    throw new Error(`[flue] ${label} durable must be a boolean.`)
+    throw new Error(`[amond] ${label} durable must be a boolean.`)
   }
   if (tool.annotations !== undefined) {
     const annotations = tool.annotations
     if (typeof annotations !== 'object' || annotations === null || Array.isArray(annotations)) {
-      throw new Error(`[flue] ${label} annotations must be an object.`)
+      throw new Error(`[amond] ${label} annotations must be an object.`)
     }
     for (const key of Object.keys(annotations)) {
       if (!MCP_ANNOTATION_FIELDS.has(key)) {
         throw new Error(
-          `[flue] ${label} annotations received unknown field "${key}". Accepted fields: ${[...MCP_ANNOTATION_FIELDS].join(', ')}.`,
+          `[amond] ${label} annotations received unknown field "${key}". Accepted fields: ${[...MCP_ANNOTATION_FIELDS].join(', ')}.`,
         )
       }
     }
     const typed = annotations as Partial<McpToolAnnotations>
     if (typed.title !== undefined && typeof typed.title !== 'string') {
-      throw new Error(`[flue] ${label} annotations.title must be a string.`)
+      throw new Error(`[amond] ${label} annotations.title must be a string.`)
     }
     for (const hint of [
       'readOnlyHint',
@@ -136,22 +136,22 @@ export function assertToolDefinition(
       'openWorldHint',
     ] as const) {
       if (typed[hint] !== undefined && typeof typed[hint] !== 'boolean') {
-        throw new Error(`[flue] ${label} annotations.${hint} must be a boolean.`)
+        throw new Error(`[amond] ${label} annotations.${hint} must be a boolean.`)
       }
     }
   }
   if (typeof tool.run !== 'function') {
-    throw new Error(`[flue] ${label} run must be a function.`)
+    throw new Error(`[amond] ${label} run must be a function.`)
   }
 }
 
 /** Runtime facilities the executing session injects into {@link ToolContext}. */
 export interface ToolRunFacilities {
-  log: FlueLogger
+  log: AmondLogger
   /** The model turn's tool-call id; synthesized when absent (standalone runs). */
   toolCallId?: string
   /** Present only for `harness: true` tools, created per invocation. */
-  harness?: FlueHarness
+  harness?: AmondHarness
   /** Present only for `durable: true` tools, created per invocation. */
   step?: ToolStep
 }
@@ -184,7 +184,7 @@ export function parseToolInput<TTool extends ToolDefinition>(
 }
 
 /** Standalone runs have no conversation stream to log into. */
-const NOOP_LOGGER: FlueLogger = {
+const NOOP_LOGGER: AmondLogger = {
   info: () => {},
   warn: () => {},
   error: () => {},
@@ -198,11 +198,11 @@ const NOOP_LOGGER: FlueLogger = {
  */
 export function claimStepName(name: unknown, toolName: string, used: Set<string>): string {
   if (typeof name !== 'string' || name.trim().length === 0) {
-    throw new Error(`[flue] Tool "${toolName}" step.do() requires a non-empty step name.`)
+    throw new Error(`[amond] Tool "${toolName}" step.do() requires a non-empty step name.`)
   }
   if (used.has(name)) {
     throw new Error(
-      `[flue] Tool "${toolName}" ran step.do("${name}") twice in one call. Step names ` +
+      `[amond] Tool "${toolName}" ran step.do("${name}") twice in one call. Step names ` +
       'identify the logical work for replay — derive a distinct name per step ' +
       '(e.g. "item:" + id).',
     )
@@ -271,7 +271,7 @@ function coerceToolRunEnvelope(
     for (const key of Object.keys(result)) {
       if (!TOOL_RUN_ENVELOPE_FIELDS.has(key)) {
         throw new Error(
-          `[flue] Tool "${toolName}" run() returned an object with unexpected key "${key}". ` +
+          `[amond] Tool "${toolName}" run() returned an object with unexpected key "${key}". ` +
           'run() results are `{ output?, terminate? }` envelopes — to return the object ' +
           'itself as the tool output, wrap it: `return { output: <value> }`.',
         )
@@ -279,14 +279,14 @@ function coerceToolRunEnvelope(
     }
     if ('terminate' in result && typeof result.terminate !== 'boolean') {
       throw new Error(
-        `[flue] Tool "${toolName}" run() returned a non-boolean \`terminate\` ` +
+        `[amond] Tool "${toolName}" run() returned a non-boolean \`terminate\` ` +
         `(${describeToolRunValue(result.terminate)}). \`terminate\` must be a boolean.`,
       )
     }
     return result
   }
   throw new Error(
-    `[flue] Tool "${toolName}" run() returned a bare ${describeToolRunValue(result)}. ` +
+    `[amond] Tool "${toolName}" run() returned a bare ${describeToolRunValue(result)}. ` +
     'run() results are `{ output?, terminate? }` envelopes — wrap the value: ' +
     '`return { output: <value> }`. (A bare string remains shorthand for `{ output: <string> }`.)',
   )
@@ -337,7 +337,7 @@ export async function validateAndRunTool<TTool extends ToolDefinition>(
 ): Promise<ToolOutput<TTool>> {
   if (tool.harness) {
     throw new Error(
-      `[flue] Tool "${tool.name}" declares \`harness: true\` and can only run inside an agent session — a standalone run has no harness.`,
+      `[amond] Tool "${tool.name}" declares \`harness: true\` and can only run inside an agent session — a standalone run has no harness.`,
     )
   }
   // The merged signal carries the per-tool deadline (when declared) so the
@@ -360,6 +360,6 @@ export async function validateAndRunTool<TTool extends ToolDefinition>(
 
 function assertNonEmptyString(value: unknown, label: string): asserts value is string {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`[flue] ${label} must be a non-empty string.`)
+    throw new Error(`[amond] ${label} must be a non-empty string.`)
   }
 }

@@ -56,18 +56,18 @@ export function useDataWriter(
   const frame = requireRenderFrame('useDataWriter')
   if (frame.kind === 'subagent') {
     throw new Error(
-      '[flue] useDataWriter() is not available in a subagent render. Data parts stream to the agent\'s public conversation; delegates run detached tasks with no client-facing output. Return what the delegate produced as its task result instead.',
+      '[amond] useDataWriter() is not available in a subagent render. Data parts stream to the agent\'s public conversation; delegates run detached tasks with no client-facing output. Return what the delegate produced as its task result instead.',
     )
   }
   if (typeof name !== 'string' || name.length === 0) {
     throw new Error(
-      '[flue] useDataWriter(name, options?) takes the data part name as its first argument — a non-empty string.',
+      '[amond] useDataWriter(name, options?) takes the data part name as its first argument — a non-empty string.',
     )
   }
   const { schema } = assertUseDataWriterOptions(options)
   if (frame.messageDataNames.has(name)) {
     throw new Error(
-      `[flue] Duplicate useDataWriter name "${name}" in one render. Data part names identify a part within the response and must be unique.`,
+      `[amond] Duplicate useDataWriter name "${name}" in one render. Data part names identify a part within the response and must be unique.`,
     )
   }
   frame.messageDataNames.add(name)
@@ -76,19 +76,19 @@ export function useDataWriter(
   return (data: unknown) => {
     if (isRendering()) {
       throw new Error(
-        `[flue] Message data "${name}" was written during render. Renders are pure reads — write from tool run functions and other callbacks that run while the agent is responding.`,
+        `[amond] Message data "${name}" was written during render. Renders are pure reads — write from tool run functions and other callbacks that run while the agent is responding.`,
       )
     }
     if (!channel) {
       throw new Error(
-        `[flue] Message data "${name}" has no durable runtime behind this render, so writes are unavailable.`,
+        `[amond] Message data "${name}" has no durable runtime behind this render, so writes are unavailable.`,
       )
     }
     if (schema) {
       const parsed = v.safeParse(schema, data)
       if (!parsed.success) {
         throw new Error(
-          `[flue] Message data "${name}" write does not match its schema: ${formatIssues(parsed.issues)}.`,
+          `[amond] Message data "${name}" write does not match its schema: ${formatIssues(parsed.issues)}.`,
         )
       }
       data = parsed.output
@@ -110,7 +110,7 @@ const UseDataWriterOptionsSchema = v.strictObject(
 function assertUseDataWriterOptions(options: unknown): { schema?: v.GenericSchema } {
   const parsed = v.safeParse(UseDataWriterOptionsSchema, options)
   if (!parsed.success) {
-    throw new Error(`[flue] useDataWriter() options are invalid: ${formatIssues(parsed.issues)}.`)
+    throw new Error(`[amond] useDataWriter() options are invalid: ${formatIssues(parsed.issues)}.`)
   }
   const { schema } = parsed.output
   return schema ? { schema } : {}
@@ -129,7 +129,7 @@ function normalizeMessageData(name: string, data: unknown): unknown {
   return normalizeJsonValue(data, {
     label: 'Message data',
     name,
-    undefinedMessage: `[flue] Message data "${name}" cannot be written as undefined. Data parts are JSON values.`,
+    undefinedMessage: `[amond] Message data "${name}" cannot be written as undefined. Data parts are JSON values.`,
   })
 }
 

@@ -1,5 +1,5 @@
 /**
- * Complete error framework for Flue.
+ * Complete error framework for amond.
  *
  * This file contains both the error vocabulary (concrete error classes) and
  * the framework utilities (renderers, type guards, request parsing helpers).
@@ -15,7 +15,7 @@
  *     neighbors above and copy the pattern.
  *
  * Application code throughout the codebase should reach for one of these
- * classes rather than constructing a `FlueError` ad hoc. If no existing class
+ * classes rather than constructing an `AmondError` ad hoc. If no existing class
  * fits, add one here. That's the entire convention.
  *
  * ──── Two audiences: caller vs. developer ─────────────────────────────────
@@ -23,10 +23,10 @@
  * The reader of an error message is one of two distinct audiences:
  *
  *   - The *caller*: an HTTP client. Possibly third-party, possibly hostile,
- *     possibly an end user who shouldn't even know we're built on Flue.
+ *     possibly an end user who shouldn't even know we're built on amond.
  *     Sees `message` and `details` always.
  *
- *   - The *developer*: the human running the service (`flue dev`, `flue run`,
+ *   - The *developer*: the human running the service (`amond dev`, `amond run`,
  *     local debugging). Sees `dev` in addition, but only when the generated
  *     runtime is configured for local development.
  *
@@ -77,13 +77,13 @@
  *     //            discovered at init() time from skills/<name>/SKILL.md
  *     //            inside the session's sandbox. ...`
  *
- * The wire response in production omits `dev`; in `flue dev` / `flue run`
+ * The wire response in production omits `dev`; in `amond dev` / `amond run`
  * it includes `dev`. That separation is what lets the dev field be richly
  * helpful without leaking namespace state to public callers.
  *
  * Counter-example to avoid:
  *
- *     class AgentNotFoundError extends FlueHttpError {
+ *     class AgentNotFoundError extends AmondHttpError {
  *       constructor(message: string) {                       // ✗ free-form
  *         super({                                            // ✗ wrong type
  *           type: 'agent_error',
@@ -118,7 +118,7 @@ function formatList<T>(items: readonly T[], fallback = '(none)'): string {
 
 // ─── Base classes ───────────────────────────────────────────────────────────
 
-interface FlueErrorOptions {
+interface AmondErrorOptions {
   /**
    * Stable, machine-readable identifier (snake_case). Set once per subclass.
    * Callers don't pass this — the subclass constructor does.
@@ -169,25 +169,25 @@ interface FlueErrorOptions {
 }
 
 /**
- * Base class for every error Flue throws. Do not instantiate directly in
+ * Base class for every error amond throws. Do not instantiate directly in
  * application code — extend it via a subclass below. If a use case isn't
- * covered, add a new subclass here rather than throwing a raw `FlueError`.
+ * covered, add a new subclass here rather than throwing a raw `AmondError`.
  *
  * Exported (and re-exported from the package root) as the catchable base:
- * application code distinguishes Flue failures from arbitrary errors with
- * `err instanceof FlueError`, then narrows via the concrete subclasses or
+ * application code distinguishes amond failures from arbitrary errors with
+ * `err instanceof AmondError`, then narrows via the concrete subclasses or
  * the stable `type` field. Message strings are not API.
  */
-export class FlueError extends Error {
+export class AmondError extends Error {
   readonly type: string
   readonly details: string
   readonly dev: string
   readonly meta: Record<string, unknown> | undefined
   override readonly cause: unknown
 
-  constructor(options: FlueErrorOptions) {
+  constructor(options: AmondErrorOptions) {
     super(options.message)
-    this.name = 'FlueError'
+    this.name = 'AmondError'
     this.type = options.type
     this.details = options.details
     this.dev = options.dev
@@ -196,7 +196,7 @@ export class FlueError extends Error {
   }
 }
 
-interface FlueHttpErrorOptions extends FlueErrorOptions {
+interface AmondHttpErrorOptions extends AmondErrorOptions {
   /** HTTP status code (4xx or 5xx). */
   status: number
   /** Additional response headers (e.g. `Allow` for 405). */
@@ -208,13 +208,13 @@ interface FlueHttpErrorOptions extends FlueErrorOptions {
  * Subclasses set these in the `super({...})` call so the call site doesn't
  * have to think about HTTP semantics.
  */
-class FlueHttpError extends FlueError {
+class AmondHttpError extends AmondError {
   readonly status: number
   readonly headers: Record<string, string> | undefined
 
-  constructor(options: FlueHttpErrorOptions) {
+  constructor(options: AmondHttpErrorOptions) {
     super(options)
-    this.name = 'FlueHttpError'
+    this.name = 'AmondHttpError'
     this.status = options.status
     this.headers = options.headers
   }
@@ -222,7 +222,7 @@ class FlueHttpError extends FlueError {
 
 // ─── HTTP-layer error vocabulary ────────────────────────────────────────────
 
-export class RuntimeUnavailableError extends FlueHttpError {
+export class RuntimeUnavailableError extends AmondHttpError {
   constructor({ state, dev = '' }: { state: 'loading' | 'draining' | 'failed', dev?: string }) {
     super({
       type: 'runtime_unavailable',
@@ -238,7 +238,7 @@ export class RuntimeUnavailableError extends FlueHttpError {
   }
 }
 
-export class MethodNotAllowedError extends FlueHttpError {
+export class MethodNotAllowedError extends AmondHttpError {
   constructor({ method, allowed }: { method: string, allowed: readonly string[] }) {
     super({
       type: 'method_not_allowed',
@@ -251,7 +251,7 @@ export class MethodNotAllowedError extends FlueHttpError {
   }
 }
 
-class UnsupportedMediaTypeError extends FlueHttpError {
+class UnsupportedMediaTypeError extends AmondHttpError {
   constructor({ received }: { received: string | null }) {
     const detailLines: string[] = []
     if (received) {
@@ -274,7 +274,7 @@ class UnsupportedMediaTypeError extends FlueHttpError {
   }
 }
 
-class InvalidJsonError extends FlueHttpError {
+class InvalidJsonError extends AmondHttpError {
   constructor({ parseError }: { parseError: string }) {
     super({
       type: 'invalid_json',
@@ -291,7 +291,7 @@ class InvalidJsonError extends FlueHttpError {
   }
 }
 
-export class RouteNotFoundError extends FlueHttpError {
+export class RouteNotFoundError extends AmondHttpError {
   constructor({ method, path }: { method: string, path: string }) {
     super({
       type: 'route_not_found',
@@ -305,7 +305,7 @@ export class RouteNotFoundError extends FlueHttpError {
   }
 }
 
-export class StreamNotFoundError extends FlueHttpError {
+export class StreamNotFoundError extends AmondHttpError {
   constructor({ path }: { path: string }) {
     super({
       type: 'stream_not_found',
@@ -317,7 +317,7 @@ export class StreamNotFoundError extends FlueHttpError {
   }
 }
 
-export class AttachmentNotFoundError extends FlueHttpError {
+export class AttachmentNotFoundError extends AmondHttpError {
   constructor({ attachmentId }: { attachmentId: string }) {
     super({
       type: 'attachment_not_found',
@@ -342,7 +342,7 @@ export class AttachmentNotFoundError extends FlueHttpError {
  * before opening the event stream. The store-level beyond-head throw
  * (`ConversationStreamStoreError`) remains the internal invariant guard.
  */
-export class StreamOffsetGoneError extends FlueHttpError {
+export class StreamOffsetGoneError extends AmondHttpError {
   constructor({ path, offset, nextOffset }: { path: string, offset: string, nextOffset: string }) {
     super({
       type: 'stream_offset_gone',
@@ -365,7 +365,7 @@ export class StreamOffsetGoneError extends FlueHttpError {
  * and regrown since), or its message is gone. 410, not 404: the conversation exists; only the cursor is gone.
  * Clients recover by re-reading the newest window without a cursor.
  */
-export class HistoryCursorNotFoundError extends FlueHttpError {
+export class HistoryCursorNotFoundError extends AmondHttpError {
   constructor({ cursor }: { cursor: string }) {
     super({
       type: 'history_cursor_not_found',
@@ -379,7 +379,7 @@ export class HistoryCursorNotFoundError extends FlueHttpError {
   }
 }
 
-export class InvalidRequestError extends FlueHttpError {
+export class InvalidRequestError extends AmondHttpError {
   constructor({ reason }: { reason: string }) {
     super({
       type: 'invalid_request',
@@ -401,7 +401,7 @@ export class InvalidRequestError extends FlueHttpError {
  * does not exist — a read waits for settlement, and an instance that was
  * never contacted has nothing to settle.
  */
-export class AgentInstanceNotFoundError extends FlueHttpError {
+export class AgentInstanceNotFoundError extends AmondHttpError {
   constructor({ id }: { id: string }) {
     super({
       type: 'agent_instance_not_found',
@@ -424,7 +424,7 @@ export class AgentInstanceNotFoundError extends FlueHttpError {
  * is accident prevention for the caller, not access control — so the caller
  * can continue the existing instance without a separate lookup.
  */
-export class AgentInstanceExistsError extends FlueHttpError {
+export class AgentInstanceExistsError extends AmondHttpError {
   constructor({ id, uid }: { id: string, uid: string }) {
     super({
       type: 'agent_instance_exists',
@@ -451,7 +451,7 @@ export class AgentInstanceExistsError extends FlueHttpError {
  * by the conflicting attempt. `meta.submissionId` names the existing
  * submission the key already belongs to.
  */
-export class SubmissionConflictError extends FlueHttpError {
+export class SubmissionConflictError extends AmondHttpError {
   constructor({ submissionId }: { submissionId: string }) {
     super({
       type: 'submission_conflict',
@@ -474,7 +474,7 @@ export class SubmissionConflictError extends FlueHttpError {
 
 // ─── Persistence error vocabulary ───────────────────────────────────────────
 
-export class ConversationRecordInvariantError extends FlueError {
+export class ConversationRecordInvariantError extends AmondError {
   constructor({
     recordId,
     recordType,
@@ -495,7 +495,7 @@ export class ConversationRecordInvariantError extends FlueError {
   }
 }
 
-export class ConversationStreamStoreError extends FlueError {
+export class ConversationStreamStoreError extends AmondError {
   constructor({ operation, path, reason }: { operation: string, path: string, reason: string }) {
     super({
       type: 'conversation_stream_store_failure',
@@ -508,7 +508,7 @@ export class ConversationStreamStoreError extends FlueError {
   }
 }
 
-export class AttachmentConflictError extends FlueError {
+export class AttachmentConflictError extends AmondError {
   constructor({ path, attachmentId }: { path: string, attachmentId: string }) {
     super({
       type: 'attachment_conflict',
@@ -521,7 +521,7 @@ export class AttachmentConflictError extends FlueError {
   }
 }
 
-export class AttachmentIntegrityError extends FlueError {
+export class AttachmentIntegrityError extends AmondError {
   constructor({
     attachmentId,
     reason,
@@ -540,7 +540,7 @@ export class AttachmentIntegrityError extends FlueError {
   }
 }
 
-export class PersistedFormatVersionError extends FlueError {
+export class PersistedFormatVersionError extends AmondError {
   constructor({
     storedVersion,
     supportedVersion,
@@ -553,12 +553,12 @@ export class PersistedFormatVersionError extends FlueError {
     super({
       type: 'persisted_format_version_unsupported',
       message: newer
-        ? `This database was created by a newer Flue version (format version ${storedVersion}; this runtime supports version ${supportedVersion}).`
+        ? `This database was created by a newer amond version (format version ${storedVersion}; this runtime supports version ${supportedVersion}).`
         : `This database records an unrecognized format version ("${storedVersion}"; this runtime supports version ${supportedVersion}).`,
       details: 'The persisted data cannot be read safely by this runtime.',
       dev: newer
-        ? `Upgrade Flue to a version that supports format version ${storedVersion}, or point the runtime at a different database.`
-        : `The "format_version" row in the flue_meta table is not a version this runtime recognizes. ` +
+        ? `Upgrade amond to a version that supports format version ${storedVersion}, or point the runtime at a different database.`
+        : `The "format_version" row in the amond_meta table is not a version this runtime recognizes. ` +
           `Restore the database, or point the runtime at a different one.`,
       meta: { storedVersion, supportedVersion },
     })
@@ -567,7 +567,7 @@ export class PersistedFormatVersionError extends FlueError {
 
 // ─── Sandbox error vocabulary ───────────────────────────────────────────────
 
-export class InstrumentationAlreadyInstalledError extends FlueError {
+export class InstrumentationAlreadyInstalledError extends AmondError {
   constructor() {
     super({
       type: 'instrumentation_already_installed',
@@ -592,7 +592,7 @@ export class InstrumentationAlreadyInstalledError extends FlueError {
  * failure, not caller cancellation, and abort classification must not
  * misreport it.
  */
-export class SandboxDiedError extends FlueError {
+export class SandboxDiedError extends AmondError {
   constructor({ operation, reason }: { operation: string, reason: 'stopped' | 'probe_silent' }) {
     super({
       type: 'sandbox_died',
@@ -611,7 +611,7 @@ export class SandboxDiedError extends FlueError {
   }
 }
 
-export class SandboxOperationUnsupportedError extends FlueError {
+export class SandboxOperationUnsupportedError extends AmondError {
   constructor({
     operation,
     provider,
@@ -644,7 +644,7 @@ export class SandboxOperationUnsupportedError extends FlueError {
 // Aborted operations are NOT part of this vocabulary — they reject with a
 // standard `AbortError` (`DOMException`); see `abort.ts`.
 
-export class SessionNotFoundError extends FlueError {
+export class SessionNotFoundError extends AmondError {
   constructor({ session, harness }: { session: string, harness: string }) {
     super({
       type: 'session_not_found',
@@ -655,7 +655,7 @@ export class SessionNotFoundError extends FlueError {
   }
 }
 
-export class SessionBusyError extends FlueError {
+export class SessionBusyError extends AmondError {
   constructor({ session, activeOperation }: { session: string, activeOperation: string }) {
     super({
       type: 'session_busy',
@@ -666,7 +666,7 @@ export class SessionBusyError extends FlueError {
   }
 }
 
-export class SkillDefinitionValidationError extends FlueError {
+export class SkillDefinitionValidationError extends AmondError {
   constructor({ issues }: { issues: readonly ValidationIssue[] }) {
     super({
       type: 'skill_definition_validation',
@@ -679,7 +679,7 @@ export class SkillDefinitionValidationError extends FlueError {
   }
 }
 
-export class SkillNotRegisteredError extends FlueError {
+export class SkillNotRegisteredError extends AmondError {
   constructor({
     skill,
     available,
@@ -731,7 +731,7 @@ export const WORKERS_AI_OVERFLOW_MARKER = '(request_too_large)'
  */
 export const RETRYABLE_INTERRUPTION_MARKER = '(retryable_interruption)'
 
-export class CloudflareAIBindingError extends FlueError {
+export class CloudflareAIBindingError extends AmondError {
   constructor({
     message,
     status,
@@ -781,13 +781,13 @@ function truncateProviderBody(body: string): string {
 
 /**
  * Serialize an error for embedding in observable events (`operation`, `log`).
- * FlueErrors keep their structured identity (`type`) and diagnostic payload
+ * AmondErrors keep their structured identity (`type`) and diagnostic payload
  * (`details`, `meta`) — dropping them to bare name/message makes typed
  * failures (e.g. a record-invariant error's recordId/recordType/reason)
  * undiagnosable from telemetry.
  */
 export function serializeEventError(error: unknown): unknown {
-  if (error instanceof FlueError) {
+  if (error instanceof AmondError) {
     return {
       name: error.name,
       message: error.message,
@@ -805,7 +805,7 @@ export function serializeEventError(error: unknown): unknown {
 /**
  * Shape `log`-event attributes: a live `Error` under the `error` key becomes
  * its `serializeEventError` projection, so every emit path (session and
- * client context) publishes the same error shape — structured FlueError
+ * client context) publishes the same error shape — structured AmondError
  * identity kept, throw-site stack omitted (log events ride durable-shaped
  * event fields).
  */
@@ -822,7 +822,7 @@ export function normalizeLogAttributes(
  * `serializeEventError` (whose output rides durable-shaped event fields),
  * this projection is in-process only, so it may carry the throw-site `stack`
  * — taken solely from real `Error` instances, never from arbitrary thrown
- * objects. `FlueError`s additionally keep their framework-owned `meta` so
+ * objects. `AmondError`s additionally keep their framework-owned `meta` so
  * observers get structured failure detail (e.g. validation issues) without
  * parsing the rendered message.
  */
@@ -841,7 +841,7 @@ export function classifyError(error: unknown): {
   if (error instanceof DOMException && error.name === 'AbortError') {
     return { type: 'AbortError', name: error.name, message: error.message, ...stackOf(error) }
   }
-  if (error instanceof FlueError) {
+  if (error instanceof AmondError) {
     return {
       type: error.type,
       name: error.name,
@@ -867,7 +867,7 @@ export function classifyError(error: unknown): {
   return { type: '_OTHER' }
 }
 
-export class DelegationDepthExceededError extends FlueError {
+export class DelegationDepthExceededError extends AmondError {
   constructor({ maxDepth }: { maxDepth: number }) {
     super({
       type: 'delegation_depth_exceeded',
@@ -878,7 +878,7 @@ export class DelegationDepthExceededError extends FlueError {
   }
 }
 
-export class SubagentNotDeclaredError extends FlueError {
+export class SubagentNotDeclaredError extends AmondError {
   constructor({ subagent, available }: { subagent: string, available: readonly string[] }) {
     super({
       type: 'subagent_not_declared',
@@ -891,7 +891,7 @@ export class SubagentNotDeclaredError extends FlueError {
   }
 }
 
-export class AttachmentNotAvailableError extends FlueError {
+export class AttachmentNotAvailableError extends AmondError {
   constructor({ attachmentId }: { attachmentId: string }) {
     super({
       type: 'attachment_not_available',
@@ -903,7 +903,7 @@ export class AttachmentNotAvailableError extends FlueError {
   }
 }
 
-export class ToolNameConflictError extends FlueError {
+export class ToolNameConflictError extends AmondError {
   constructor({
     name,
     conflict,
@@ -949,7 +949,7 @@ export interface ValidationIssue {
 
 export type ToolValidationIssue = ValidationIssue
 
-export class ToolInputValidationError extends FlueError {
+export class ToolInputValidationError extends AmondError {
   constructor({ tool, issues }: { tool: string, issues: readonly ToolValidationIssue[] }) {
     const summary = issues
       .map(issue =>
@@ -971,7 +971,7 @@ export class ToolInputValidationError extends FlueError {
   }
 }
 
-export class ToolOutputValidationError extends FlueError {
+export class ToolOutputValidationError extends AmondError {
   constructor({ tool, issues }: { tool: string, issues: readonly ToolValidationIssue[] }) {
     super({
       type: 'tool_output_validation',
@@ -984,7 +984,7 @@ export class ToolOutputValidationError extends FlueError {
   }
 }
 
-export class ToolOutputSerializationError extends FlueError {
+export class ToolOutputSerializationError extends AmondError {
   constructor({ tool, cause }: { tool: string, cause?: unknown }) {
     super({
       type: 'tool_output_serialization',
@@ -1006,7 +1006,7 @@ export class ToolOutputSerializationError extends FlueError {
  * `meta` carries the unwrapped `operation` and `reason` so telemetry can
  * classify and title from the underlying failure without parsing the prose.
  */
-export class OperationFailedError extends FlueError {
+export class OperationFailedError extends AmondError {
   constructor({ operation, reason }: { operation: string, reason: string }) {
     super({
       type: 'operation_failed',
@@ -1030,7 +1030,7 @@ export class OperationFailedError extends FlueError {
  * absent input requeues — so there is no marker/stream disagreement to
  * settle as an error.)
  */
-export class SubmissionInterruptedError extends FlueError {
+export class SubmissionInterruptedError extends AmondError {
   constructor(input: {
     phase: 'retry_exhausted_before_input'
     attemptCount: number
@@ -1064,7 +1064,7 @@ export class SubmissionInterruptedError extends FlueError {
  * `meta.interruptedTools` lists them; each has an explicit interrupted-error
  * outcome in the conversation and was never assumed complete or retried.
  */
-export class SubmissionRetryExhaustedError extends FlueError {
+export class SubmissionRetryExhaustedError extends AmondError {
   constructor({
     attemptCount,
     maxAttempts,
@@ -1091,7 +1091,7 @@ export class SubmissionRetryExhaustedError extends FlueError {
 }
 
 /** A durable submission exceeded its configured processing timeout. */
-export class SubmissionTimeoutError extends FlueError {
+export class SubmissionTimeoutError extends AmondError {
   constructor() {
     super({
       type: 'submission_timeout',
@@ -1113,7 +1113,7 @@ export class SubmissionTimeoutError extends FlueError {
  * outcome: a `submission_aborted` conversation advisory (both kinds) plus, for
  * direct submissions, a `submission_settled` record with `outcome: 'aborted'`.
  */
-export class SubmissionAbortedError extends FlueError {
+export class SubmissionAbortedError extends AmondError {
   constructor() {
     super({
       type: 'submission_aborted',
@@ -1158,8 +1158,8 @@ export class SubmissionAbortedError extends FlueError {
  *   - `cause` is never included on the wire (it's logged server-side only).
  */
 
-function isFlueError(value: unknown): value is FlueError {
-  return value instanceof FlueError
+function isAmondError(value: unknown): value is AmondError {
+  return value instanceof AmondError
 }
 
 /**
@@ -1191,7 +1191,7 @@ function describeChainLevel(err: unknown, depth: number, seen: Set<unknown>): st
 
 function formatForLog(prefix: string, err: unknown): string {
   const lines: string[] = []
-  if (isFlueError(err)) {
+  if (isAmondError(err)) {
     // Server-side logs always show every audience's prose. Mode gating
     // only applies to the wire envelope.
     lines.push(`${prefix} [${err.type}] ${err.message}`)
@@ -1252,29 +1252,29 @@ function appendCauseChain(
 }
 
 /**
- * Render one error the way the renderer's log path does — `[flue]` prefix,
+ * Render one error the way the renderer's log path does — `[amond]` prefix,
  * full prose, complete cause chain with stacks. Exported for sites that must
  * log a full-fidelity error themselves because no renderer will ever hold it
  * (a Durable Object constructor failure crosses the workerd tunnel
  * message-only, and alarm-driven wakes have no HTTP render at all).
  */
 export function formatErrorForLog(err: unknown): string {
-  return formatForLog('[flue]', err)
+  return formatForLog('[amond]', err)
 }
 
-const flueLog = {
+const amondLog = {
   error(err: unknown, render?: { ref?: string, traceparent?: string }): void {
     // The renderer is the last line of defense and must never throw:
     // chain walking reads `cause` getters on foreign errors, so the
     // formatted path is guarded with a raw-console fallback.
     try {
-      const prefix = render?.ref ? `[flue] [${render.ref}]` : '[flue]'
+      const prefix = render?.ref ? `[amond] [${render.ref}]` : '[amond]'
       const lines = [formatForLog(prefix, err)]
       if (render?.traceparent) { lines.push(`  traceparent: ${render.traceparent}`) }
       console.error(lines.join('\n'))
     }
     catch {
-      console.error('[flue]', err)
+      console.error('[amond]', err)
     }
   },
 }
@@ -1289,7 +1289,7 @@ interface WireEnvelope {
     /**
      * Correlation ref (`err_…`), present exactly when the renderer wrote a
      * server-side log line carrying the same value ("ref iff logged").
-     * Also mirrored on the `flue-error-ref` response header so body-less
+     * Also mirrored on the `amond-error-ref` response header so body-less
      * responses (HEAD) and body-swallowing intermediaries keep it.
      */
     ref?: string
@@ -1312,7 +1312,7 @@ export function isDevMode(): boolean {
   return devMode
 }
 
-function envelope(err: FlueError, ref?: string): WireEnvelope {
+function envelope(err: AmondError, ref?: string): WireEnvelope {
   const out: WireEnvelope = {
     error: {
       type: err.type,
@@ -1348,7 +1348,7 @@ function genericInternalEnvelope(ref: string | undefined): WireEnvelope {
 /**
  * Log a renderer-owned error under a freshly minted correlation ref, and
  * return the ref so the render stamps the same value on the envelope and the
- * `flue-error-ref` header. When the request carries a W3C `traceparent`, it
+ * `amond-error-ref` header. When the request carries a W3C `traceparent`, it
  * is logged beside the ref (never echoed on the response), joining the log
  * line into the caller's own tracing. Ref minting and traceparent extraction
  * are individually guarded: the renderer must never throw, so a failure in
@@ -1369,15 +1369,15 @@ function logRenderedError(err: unknown, request: Request | undefined): string | 
   catch {
     // Keep rendering; foreign Request/Headers shapes must not break the render.
   }
-  flueLog.error(err, { ref, traceparent })
+  amondLog.error(err, { ref, traceparent })
   return ref
 }
 
 /**
- * Render any thrown value into a `Response` with the canonical Flue error
- * envelope. Unknown / non-Flue errors are logged in full and rendered as a
+ * Render any thrown value into a `Response` with the canonical amond error
+ * envelope. Unknown / non-amond errors are logged in full and rendered as a
  * generic 500 with no message leaked. Every logged render carries a fresh
- * `error.ref` (envelope, `flue-error-ref` header, and log-line prefix — the
+ * `error.ref` (envelope, `amond-error-ref` header, and log-line prefix — the
  * same value in all three places) so callers can point operators at the
  * exact server-side log line; unlogged caller-mistake renders stay ref-free.
  */
@@ -1390,24 +1390,24 @@ export function toHttpResponse(err: unknown, options?: { request?: Request }): R
     'x-content-type-options': 'nosniff',
     'cross-origin-resource-policy': 'cross-origin',
   }
-  if (isFlueError(err)) {
-    const isHttp = err instanceof FlueHttpError
+  if (isAmondError(err)) {
+    const isHttp = err instanceof AmondHttpError
     const status = isHttp ? err.status : 500
     const headers = { ...baseHeaders }
     if (isHttp && err.headers) {
       Object.assign(headers, err.headers)
     }
-    // Log non-HTTP FlueErrors that bubbled up to the HTTP layer — they
+    // Log non-HTTP AmondErrors that bubbled up to the HTTP layer — they
     // weren't constructed with HTTP semantics in mind, so it's worth
     // surfacing them in logs even though we render their message.
     const ref = isHttp ? undefined : logRenderedError(err, options?.request)
-    if (ref) { headers['flue-error-ref'] = ref }
+    if (ref) { headers['amond-error-ref'] = ref }
     return new Response(JSON.stringify(envelope(err, ref)), { status, headers })
   }
-  // Non-FlueError: log everything, leak nothing beyond the correlation ref.
+  // Non-AmondError: log everything, leak nothing beyond the correlation ref.
   const ref = logRenderedError(err, options?.request)
   const headers = { ...baseHeaders }
-  if (ref) { headers['flue-error-ref'] = ref }
+  if (ref) { headers['amond-error-ref'] = ref }
   return new Response(JSON.stringify(genericInternalEnvelope(ref)), {
     status: 500,
     headers,

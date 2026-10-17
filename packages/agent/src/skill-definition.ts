@@ -30,7 +30,7 @@ export function defineSkill(definition: SkillDefinition): SkillDefinition {
 
 /** True for the inline-definition member of {@link RegisteredSkill}. */
 export function isSkillDefinition(skill: RegisteredSkill): skill is SkillDefinition {
-  return !('__flueSkillReference' in skill) && !('__flueWorkspaceSkill' in skill)
+  return !('__amondSkillReference' in skill) && !('__amondWorkspaceSkill' in skill)
 }
 
 const packagedDefinitions = new WeakMap<SkillDefinition, PackagedSkillDirectory>()

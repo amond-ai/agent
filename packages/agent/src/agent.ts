@@ -11,7 +11,7 @@ const MAX_GREP_MATCHES = 100
 const MAX_GREP_LINE_LENGTH = 500
 const MAX_GLOB_RESULTS = 1000
 const BASE64_READ_LINE_LENGTH = 76
-const PACKAGED_SKILLS_ROOT = '/.flue/packaged-skills/'
+const PACKAGED_SKILLS_ROOT = '/.amond/packaged-skills/'
 export const READ_SKILL_RESOURCE_TOOL_NAME = 'read_skill_resource'
 
 export interface TaskToolParams {
@@ -47,7 +47,7 @@ export interface TaskToolUndeclaredAgentDetails {
 
 /**
  * Layer packaged-skill routing onto an env before handing it to model-facing
- * tool factories: `readFile` serves `/.flue/packaged-skills/` paths from the
+ * tool factories: `readFile` serves `/.amond/packaged-skills/` paths from the
  * in-memory catalog (and reports unknown paths under that root as missing)
  * and delegates everything else. Session-internal — `harness.sandbox` and
  * `useTool` handlers see the real env, never this overlay.
@@ -62,7 +62,7 @@ export function overlayPackagedSkills(
       const packagedFile = readPackagedSkillFile(packagedSkills, path)
       if (packagedFile !== undefined) { return packagedFile }
       if (path.startsWith(PACKAGED_SKILLS_ROOT)) {
-        throw new Error(`[flue] Packaged skill file not found: ${path}`)
+        throw new Error(`[amond] Packaged skill file not found: ${path}`)
       }
       return env.readFile(path)
     },
@@ -90,7 +90,7 @@ export function createPackagedSkillReadTool(
         ? `/${params.path}`
         : params.path
       const content = readPackagedSkillFile(packagedSkills, path)
-      if (content === undefined) { throw new Error(`[flue] Packaged skill file not found: ${params.path}`) }
+      if (content === undefined) { throw new Error(`[amond] Packaged skill file not found: ${params.path}`) }
       return formatReadContent(path, content, params.offset, params.limit)
     },
   }
@@ -191,7 +191,7 @@ export function createWriteTool(env: Sandbox): AgentTool<typeof WriteParams> {
         // Re-check after the lock wait; never between write start and end.
         throwIfAborted(signal)
         // Sandbox.writeFile creates missing parent directories itself
-        // (the FlueFs.writeFile guarantee), so no eager mkdir here.
+        // (the AmondFs.writeFile guarantee), so no eager mkdir here.
         await env.writeFile(params.path, params.content)
         return {
           content: [
@@ -323,7 +323,7 @@ export function createBashTool(env: Sandbox): AgentTool<typeof BashParams> {
         formatBashResult(
           {
             stdout: '',
-            stderr: `[flue] Command timed out after ${params.timeout} seconds.`,
+            stderr: `[amond] Command timed out after ${params.timeout} seconds.`,
             exitCode: 124,
           },
           params.command,
@@ -387,7 +387,7 @@ const TaskParams = Type.Object({
 })
 
 /**
- * Build Flue's framework-owned `task` tool. Always in the tool set, and the
+ * Build amond's framework-owned `task` tool. Always in the tool set, and the
  * spec is fully STATIC — no roster, no per-agent text — so the serialized
  * tools block never changes and keeps hitting the provider's prompt-cache
  * prefix regardless of roster state. The roster lives in the system prompt's

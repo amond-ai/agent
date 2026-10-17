@@ -42,11 +42,11 @@ export function useResponseFinish(run: ResponseMetadataCallback<ResponseFinishCo
   const frame = requireRenderFrame('useResponseFinish')
   if (frame.kind === 'subagent') {
     throw new Error(
-      '[flue] useResponseFinish() is not available in a subagent render. Response metadata decorates the agent\'s public conversation; delegates run detached tasks with no client-facing output.',
+      '[amond] useResponseFinish() is not available in a subagent render. Response metadata decorates the agent\'s public conversation; delegates run detached tasks with no client-facing output.',
     )
   }
   if (typeof run !== 'function') {
-    throw new Error('[flue] useResponseFinish(run) takes a callback as its only argument.')
+    throw new Error('[amond] useResponseFinish(run) takes a callback as its only argument.')
   }
   frame.responseFinishes.push({ run })
 }

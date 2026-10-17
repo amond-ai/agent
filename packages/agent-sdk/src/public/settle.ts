@@ -12,7 +12,7 @@ import {
   STALE_STREAM_TIMEOUT_MS,
   statusOf,
 } from './follow-policy.ts'
-import { createFlueEventStream } from './stream.ts'
+import { createAmondEventStream } from './stream.ts'
 
 export interface AgentWaitOptions {
   signal?: AbortSignal
@@ -39,23 +39,23 @@ export interface AgentSettlementTarget {
   submissionId: string
 }
 
-export type FlueExecutionTarget = 'agent_submission'
-export type FlueExecutionFailure = 'failed' | 'aborted' | 'terminal_event_missing'
+export type AmondExecutionTarget = 'agent_submission'
+export type AmondExecutionFailure = 'failed' | 'aborted' | 'terminal_event_missing'
 
-export class FlueExecutionError extends Error {
-  readonly target: FlueExecutionTarget
+export class AmondExecutionError extends Error {
+  readonly target: AmondExecutionTarget
   readonly targetId: string
-  readonly failure: FlueExecutionFailure
+  readonly failure: AmondExecutionFailure
   readonly error: unknown
 
   constructor(options: {
-    target: FlueExecutionTarget
+    target: AmondExecutionTarget
     targetId: string
-    failure: FlueExecutionFailure
+    failure: AmondExecutionFailure
     error?: unknown
   }) {
     super(executionErrorMessage(options))
-    this.name = 'FlueExecutionError'
+    this.name = 'AmondExecutionError'
     this.target = options.target
     this.targetId = options.targetId
     this.failure = options.failure
@@ -85,7 +85,7 @@ export class FlueExecutionError extends Error {
  *   recreates from the origin `'-1'` — the documented re-attach offset.
  *
  * Settlement semantics are unchanged: a completed settlement resolves;
- * failed/aborted reject with {@link FlueExecutionError}.
+ * failed/aborted reject with {@link AmondExecutionError}.
  */
 export async function waitForAgentSubmission(
   http: HttpClient,
@@ -121,7 +121,7 @@ export async function waitForAgentSubmission(
     // the loop below exits means the stream genuinely ended.
     let recovery: 'stale' | 'reset' | undefined
     let watchdogTimer: ReturnType<typeof setTimeout> | undefined
-    const stream = createFlueEventStream<ConversationStreamChunk>(
+    const stream = createAmondEventStream<ConversationStreamChunk>(
       { offset: baseOffset, signal: options.signal, backoffOptions: options.backoffOptions },
       {
         url: url.toString(),
@@ -175,7 +175,7 @@ export async function waitForAgentSubmission(
         const settlement = settlementFromChunk(chunk, admission.submissionId)
         if (!settlement) { continue }
         if (settlement.outcome === 'completed') { return }
-        throw new FlueExecutionError({
+        throw new AmondExecutionError({
           target: 'agent_submission',
           targetId: admission.submissionId,
           failure: settlement.outcome === 'aborted' ? 'aborted' : 'failed',
@@ -188,7 +188,7 @@ export async function waitForAgentSubmission(
       // error; that is part of the recovery, not a failure.
       if (recovery === undefined) {
         throwIfAborted(options.signal)
-        if (error instanceof FlueExecutionError) { throw error }
+        if (error instanceof AmondExecutionError) { throw error }
         const status = statusOf(error)
         if (status === 401 || status === 403) {
           // Bounded transient-auth retry: headers re-resolve per
@@ -219,7 +219,7 @@ export async function waitForAgentSubmission(
     throwIfAborted(options.signal)
     if (recovery !== undefined) { continue }
     // The server closed the stream without settling the submission.
-    throw new FlueExecutionError({
+    throw new AmondExecutionError({
       target: 'agent_submission',
       targetId: admission.submissionId,
       failure: 'terminal_event_missing',
@@ -270,7 +270,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 
 function executionErrorMessage(options: {
   targetId: string
-  failure: FlueExecutionFailure
+  failure: AmondExecutionFailure
   error?: unknown
 }): string {
   if (options.failure === 'terminal_event_missing') {

@@ -3,12 +3,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
- * Locate the @flue/cli package root by walking up from this module.
+ * Locate the amond package root by walking up from this module.
  *
  * A fixed relative hop (`../package.json`) cannot work here: in development
  * this file sits at `src/lib/` (two levels below the package root), but the
- * built CLI bundles it into `dist/flue.js` (one level below). Walking up to
- * the package.json that names `@flue/cli` is correct in both contexts.
+ * built CLI bundles it into `dist/amond.js` (one level below). Walking up to
+ * the package.json that names `amond` is correct in both contexts.
  */
 
 let cachedRoot: string | undefined
@@ -21,7 +21,7 @@ export function cliPackageRoot(): string {
     if (fs.existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: string }
-        if (pkg.name === '@flue/cli') {
+        if (pkg.name === 'amond') {
           cachedRoot = dir
           return dir
         }
@@ -32,7 +32,7 @@ export function cliPackageRoot(): string {
     }
     const parent = path.dirname(dir)
     if (parent === dir) {
-      throw new Error('[flue] Internal error: could not locate the @flue/cli package root.')
+      throw new Error('[amond] Internal error: could not locate the amond package root.')
     }
     dir = parent
   }

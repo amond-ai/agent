@@ -7,7 +7,7 @@ import { registerRunCommand } from './commands/run.ts'
 import { helpCallback } from './help.ts'
 
 export function buildCli(version: string): CAC {
-  const cli = cac('flue')
+  const cli = cac('amond')
   registerRunCommand(cli)
   registerInitCommand(cli)
   registerBlueprintCommands(cli)

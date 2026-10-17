@@ -31,8 +31,8 @@ export interface FormattedCliError {
 export function formatCliError(error: unknown, cli: CAC): FormattedCliError {
   const command = cli.matchedCommandName
   const helpHint = command
-    ? `Run \`flue ${command} --help\` for usage.`
-    : 'Run `flue --help` for usage.'
+    ? `Run \`amond ${command} --help\` for usage.`
+    : 'Run `amond --help` for usage.'
 
   if (error instanceof UsageError) {
     if (error.hint === null) { return { message: error.message } }
@@ -42,7 +42,7 @@ export function formatCliError(error: unknown, cli: CAC): FormattedCliError {
   if (error instanceof Error && error.name === 'CACError') {
     const unknownFlag = /^Unknown option `(.+)`$/.exec(error.message)
     if (unknownFlag) {
-      return { message: `Unknown flag for \`flue ${command}\`: ${unknownFlag[1]}`, hint: helpHint }
+      return { message: `Unknown flag for \`amond ${command}\`: ${unknownFlag[1]}`, hint: helpHint }
     }
     const missingValue = /^option `(.+)` value is missing$/.exec(error.message)
     if (missingValue) {
@@ -53,7 +53,7 @@ export function formatCliError(error: unknown, cli: CAC): FormattedCliError {
     if (unusedArgs) {
       const extras = (unusedArgs[1] ?? '').replaceAll('`', '').split(', ').join(' ')
       return {
-        message: `Unexpected extra arguments for \`flue ${command}\`: ${extras}`,
+        message: `Unexpected extra arguments for \`amond ${command}\`: ${extras}`,
         hint: helpHint,
       }
     }
@@ -71,17 +71,17 @@ export function formatCliError(error: unknown, cli: CAC): FormattedCliError {
  * commands declaring required positionals (`<...>`) can land here.
  */
 function describeMissingArgs(cli: CAC, command: string | undefined): string {
-  if (command === 'run') { return 'Missing agent module path for `flue run`.' }
+  if (command === 'run') { return 'Missing agent module path for `amond run`.' }
   if (command === 'update') {
     return cli.args.length === 0
-      ? 'Missing blueprint kind and name or URL for `flue update`.'
-      : 'Missing blueprint name or URL for `flue update`.'
+      ? 'Missing blueprint kind and name or URL for `amond update`.'
+      : 'Missing blueprint name or URL for `amond update`.'
   }
-  return `Missing required arguments for \`flue ${command}\`.`
+  return `Missing required arguments for \`amond ${command}\`.`
 }
 
 /**
- * Best-effort message extraction for non-CLI errors. Flue errors carry the
+ * Best-effort message extraction for non-CLI errors. amond errors carry the
  * caller-safe specifics in `details` (the message itself is deliberately
  * generic) — surface them.
  */
@@ -102,9 +102,9 @@ export function describeError(error: unknown): string {
 
 /**
  * The `--json` envelope's error payload. Uniform across settlement failures
- * (`result.error`, possibly a serialized FlueError) and setup failures (a
+ * (`result.error`, possibly a serialized AmondError) and setup failures (a
  * thrown error): `message` always; `type`/`details`/`dev` when the underlying
- * error is a FlueError. `dev` carries developer-only guidance (may include
+ * error is an AmondError. `dev` carries developer-only guidance (may include
  * local paths) — surfaced because the CLI's audience is the local developer.
  */
 export function errorPayload(error: unknown): {

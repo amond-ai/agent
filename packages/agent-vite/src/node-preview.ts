@@ -16,8 +16,8 @@ import { pathToFileURL } from 'node:url'
 import { getRequestListener } from '@hono/node-server'
 import type { PreviewServer } from 'vite'
 import type {
-  LoadedFlueNodeApplication,
-  LoadFlueNodeApplicationOptions,
+  LoadAmondNodeApplicationOptions,
+  LoadedAmondNodeApplication,
 } from './bootstrap/node-server.ts'
 import { stackless } from './diagnostics.ts'
 
@@ -34,23 +34,23 @@ export async function configureNodePreview(server: PreviewServer): Promise<() =>
   if (!fs.existsSync(appPath)) {
     const relative = path.relative(server.config.root, appPath)
     throw stackless(
-      new Error(`[flue] No built application found at ${relative}. Run \`vite build\` first.`),
+      new Error(`[amond] No built application found at ${relative}. Run \`vite build\` first.`),
     )
   }
   const bootstrap = (await import(pathToFileURL(appPath).href)) as {
-    loadFlueNodeApplication(
-      options?: LoadFlueNodeApplicationOptions,
-    ): Promise<LoadedFlueNodeApplication>
+    loadAmondNodeApplication(
+      options?: LoadAmondNodeApplicationOptions,
+    ): Promise<LoadedAmondNodeApplication>
   }
-  if (typeof bootstrap.loadFlueNodeApplication !== 'function') {
+  if (typeof bootstrap.loadAmondNodeApplication !== 'function') {
     throw stackless(
       new Error(
-        `[flue] ${BUILT_APP_BASENAME} is not a Flue build artifact (missing loadFlueNodeApplication). ` +
-        'Re-run `vite build` with the current @flue/vite version.',
+        `[amond] ${BUILT_APP_BASENAME} is not an amond build artifact (missing loadAmondNodeApplication). ` +
+        'Re-run `vite build` with the current @amond-ai/agent-vite version.',
       ),
     )
   }
-  const application = await bootstrap.loadFlueNodeApplication({ env: process.env })
+  const application = await bootstrap.loadAmondNodeApplication({ env: process.env })
   server.httpServer.once('close', () => {
     void application.stop().catch(() => undefined)
   })

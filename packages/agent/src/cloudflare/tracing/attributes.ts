@@ -4,13 +4,13 @@
  * `gen_ai.*` keys follow the OpenTelemetry GenAI semantic conventions where
  * they exist (Development status — centralizing them here keeps spec churn a
  * one-file edit; none of these constants are exported from the package). The
- * key set deliberately mirrors `@flue/opentelemetry`'s projection so a Flue
+ * key set deliberately mirrors an OpenTelemetry adapter's projection so an amond
  * agent reads the same across OTel backends and the Cloudflare dashboard —
  * restricted to the scalar subset Workers `Span.setAttribute` accepts
  * (array-typed keys like `gen_ai.response.finish_reasons` are omitted rather
  * than JSON-encoded under an array-typed name).
  *
- * Flue-specific keys live under `flue.*`. The `cloudflare.agents.*` namespace
+ * amond-specific keys live under `amond.*`. The `cloudflare.agents.*` namespace
  * belongs to Cloudflare's agents SDK and is not emitted here.
  */
 export const ATTR = {
@@ -39,33 +39,33 @@ export const ATTR = {
   openaiApiType: 'openai.api.type',
 } as const
 
-export const FLUE_ATTR = {
+export const AMOND_ATTR = {
   /**
-   * The agent instance id, same key `@flue/opentelemetry` uses. Deliberately
+   * The agent instance id, same key an OpenTelemetry adapter uses. Deliberately
    * not `gen_ai.agent.id`: the semconv reserves that for hosted-agent
    * identifiers on the *client* invoke_agent variant (and recommends against
-   * in-memory instance ids); Flue's agent spans are the in-process variant.
+   * in-memory instance ids); amond's agent spans are the in-process variant.
    */
-  instanceId: 'flue.instance.id',
-  submissionId: 'flue.submission.id',
-  operationId: 'flue.operation.id',
-  operationKind: 'flue.operation.kind',
-  turnId: 'flue.turn.id',
-  taskId: 'flue.task.id',
-  toolOrigin: 'flue.tool.origin',
-  turnPurpose: 'flue.turn.purpose',
-  finishReason: 'flue.response.finish_reason',
-  usageTotalTokens: 'flue.usage.total_tokens',
+  instanceId: 'amond.instance.id',
+  submissionId: 'amond.submission.id',
+  operationId: 'amond.operation.id',
+  operationKind: 'amond.operation.kind',
+  turnId: 'amond.turn.id',
+  taskId: 'amond.task.id',
+  toolOrigin: 'amond.tool.origin',
+  turnPurpose: 'amond.turn.purpose',
+  finishReason: 'amond.response.finish_reason',
+  usageTotalTokens: 'amond.usage.total_tokens',
   /** Recognized cancellation — a control path, never counted as an error. */
-  canceled: 'flue.canceled',
+  canceled: 'amond.canceled',
   /**
    * Stamped on spans the adapter force-closes because their terminal event
    * never arrived (value names the close path, e.g. `settlement`). Absent on
    * every normally-closed span, so backends can measure lost primary closes.
    */
-  forcedClose: 'flue.span.forced_close',
-  recoveryOperation: 'flue.recovery.operation',
-  recoveryOutcome: 'flue.recovery.outcome',
-  /** Phase of a `flue.coordinator` span; new phases extend this, not the span name. */
-  coordinatorPhase: 'flue.coordinator.phase',
+  forcedClose: 'amond.span.forced_close',
+  recoveryOperation: 'amond.recovery.operation',
+  recoveryOutcome: 'amond.recovery.outcome',
+  /** Phase of an `amond.coordinator` span; new phases extend this, not the span name. */
+  coordinatorPhase: 'amond.coordinator.phase',
 } as const

@@ -1,6 +1,6 @@
 import type * as v from 'valibot'
 import type { McpToolAnnotations } from './mcp-types.ts'
-import type { FlueHarness, FlueLogger } from './types.ts'
+import type { AmondHarness, AmondLogger } from './types.ts'
 
 export type ToolInputSchema = v.GenericSchema<Record<string, unknown>, unknown>
 export type ToolOutputSchema = v.GenericSchema<any, NonNullable<unknown> | null>
@@ -56,12 +56,12 @@ export type ToolContext<
    * conversation stream as `log` events attributed to this tool call — they
    * are not part of the tool result and the model never sees them.
    */
-  readonly log: FlueLogger
+  readonly log: AmondLogger
 } & (S extends ToolInputSchema ? { readonly data: v.InferOutput<S> } : Record<never, never>) &
 	// Non-distributive on purpose: for the default `boolean | undefined` the
 	// harness property is absent, so generic ToolDefinition consumers see the
 	// base context.
-([H] extends [true] ? { readonly harness: FlueHarness } : Record<never, never>) &
+([H] extends [true] ? { readonly harness: AmondHarness } : Record<never, never>) &
 ([D] extends [true] ? { readonly step: ToolStep } : Record<never, never>)
 
 /**

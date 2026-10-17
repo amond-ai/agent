@@ -10,7 +10,7 @@
  * plans/2026-07-11-agent-is-the-function-design.md.
  *
  * The scan is a directory glob over the project source root (overridable via
- * the `agents` glob in flue.config.ts) filtered to files whose ECMAScript
+ * the `agents` glob in amond.config.ts) filtered to files whose ECMAScript
  * directive prologue contains the `use agent` directive. Prologue detection
  * uses the oxc parser that ships with Vite (`parseAstAsync`), so shebangs,
  * comments, `'use strict'` ordering, and ASI all follow real ECMAScript
@@ -24,11 +24,11 @@
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { AGENT_IDENTITY_PATTERN } from '@flue/runtime/internal'
+import { AGENT_IDENTITY_PATTERN } from '@amond-ai/agent/internal'
 import { glob } from 'tinyglobby'
 import { parseAstAsync } from 'vite'
 
-/** The module directive that marks a file as a Flue agent module. */
+/** The module directive that marks a file as an amond agent module. */
 export const AGENT_DIRECTIVE = 'use agent'
 
 /**
@@ -37,7 +37,7 @@ export const AGENT_DIRECTIVE = 'use agent'
  * names on Cloudflare, conversation storage slugs on Node), so they are
  * restricted to predictable identifier-ish shapes: PascalCase function names
  * (`IssueTriage`) and kebab-case overrides (`issue-triage`) both match. The
- * canonical pattern is imported from `@flue/runtime` so the scan and
+ * canonical pattern is imported from `@amond-ai/agent` so the scan and
  * registration never drift.
  */
 
@@ -49,8 +49,8 @@ const DEFAULT_SCAN_PATTERNS = ['**/*.{ts,mts,js,mjs}']
 /**
  * Directories that never contain authored agent modules: installed
  * dependencies and build output. Generated directories (`.wrangler`,
- * `.flue`, …) and other dotfiles/dot-directories are excluded by
- * tinyglobby's default `dot: false`, but the Flue-adjacent ones are listed
+ * `.amond`, …) and other dotfiles/dot-directories are excluded by
+ * tinyglobby's default `dot: false`, but the amond-adjacent ones are listed
  * explicitly so an `agents` override with `dot: true` semantics can never
  * resurrect them.
  */
@@ -61,7 +61,7 @@ export interface ScanAgentsOptions {
   readonly sourceRoot: string
   /**
    * Optional glob(s), relative to {@link ScanAgentsOptions.sourceRoot},
-   * narrowing the scan (the `agents` field of flue.config.ts). Defaults to a
+   * narrowing the scan (the `agents` field of amond.config.ts). Defaults to a
    * recursive scan of the source root. Matches are still restricted to
    * `.ts`/`.mts`/`.js`/`.mjs` modules and the standard exclusions.
    */
@@ -80,9 +80,9 @@ export interface AgentScanResult {
    * both targets.
    */
   readonly identity: string
-  /** Generated Durable Object class name, e.g. `FlueIssueTriageAgent`. */
+  /** Generated Durable Object class name, e.g. `AmondIssueTriageAgent`. */
   readonly className: string
-  /** Generated Durable Object binding name, e.g. `FLUE_ISSUE_TRIAGE_AGENT`. */
+  /** Generated Durable Object binding name, e.g. `AMOND_ISSUE_TRIAGE_AGENT`. */
   readonly bindingName: string
 }
 
@@ -111,7 +111,7 @@ export class DuplicateAgentIdentityError extends AgentScanError {
       .map(({ identity, filePaths }) => `"${identity}" (${filePaths.join(', ')})`)
       .join('; ')
     super(
-      `[flue] Duplicate agent identit${duplicates.length === 1 ? 'y' : 'ies'} among 'use agent' modules: ${list}. ` +
+      `[amond] Duplicate agent identit${duplicates.length === 1 ? 'y' : 'ies'} among 'use agent' modules: ${list}. ` +
       `The identity (the exported function name, or its \`agentName\` static override) is the agent's durable ` +
       `identity, so it must be unique across the app. Rename the conflicting function(s) or assign distinct ` +
       `agentName overrides.`,
@@ -143,9 +143,9 @@ export class AgentIdentifierCollisionError extends AgentScanError {
       )
       .join('; ')
     super(
-      `[flue] Distinct agent identities collide on generated durable identifiers: ${list}. ` +
+      `[amond] Distinct agent identities collide on generated durable identifiers: ${list}. ` +
       `Durable Object class and binding names fold case and dashes (\`issue-triage\` and \`IssueTriage\` ` +
-      `both become FlueIssueTriageAgent), so these identities cannot coexist. Rename one of the ` +
+      `both become AmondIssueTriageAgent), so these identities cannot coexist. Rename one of the ` +
       `conflicting agents or give it a distinct \`agentName\` override.`,
     )
     this.collisions = collisions
@@ -160,7 +160,7 @@ export class DuplicateAgentExportError extends AgentScanError {
 
   constructor(filePath: string, functionName: string, exportNames: readonly string[]) {
     super(
-      `[flue] ${filePath} exports the function \`${functionName}\` under two agent names ` +
+      `[amond] ${filePath} exports the function \`${functionName}\` under two agent names ` +
       `(${exportNames.map(name => `"${name}"`).join(', ')}). An agent registers once, keyed by its ` +
       `export name, so the same function cannot be two agents — export it under a single name, or alias it ` +
       `to a non-agent (lowercase) name if the extra export is not meant to be an agent.`,
@@ -185,7 +185,7 @@ export class InvalidAgentIdentityError extends AgentScanError {
       .map(({ identity, filePath }) => `${filePath} (agent: ${identity})`)
       .join(', ')
     super(
-      `[flue] Agent identities (the exported function name, or its \`agentName\` static override) must match ` +
+      `[amond] Agent identities (the exported function name, or its \`agentName\` static override) must match ` +
       `${AGENT_IDENTITY_PATTERN} so generated durable identifiers remain predictable. Invalid agent(s): ${list}.`,
     )
     this.invalidAgents = invalidAgents
@@ -198,7 +198,7 @@ export class InvalidAgentNameStaticError extends AgentScanError {
 
   constructor(filePath: string, agentName: string, position: { line: number, column: number }) {
     super(
-      `[flue] ${filePath}:${position.line}:${position.column} — \`${agentName}.agentName\` is the agent's ` +
+      `[amond] ${filePath}:${position.line}:${position.column} — \`${agentName}.agentName\` is the agent's ` +
       `durable identity and must be statically readable: \`${agentName}.agentName = '<literal>'\` at the ` +
       `top level of the module. Build targets derive Durable Object class and binding names from it ` +
       `before any code runs, so a computed or conditional \`agentName\` cannot be supported.`,
@@ -213,7 +213,7 @@ export class AnonymousAgentExportError extends AgentScanError {
 
   constructor(filePath: string, position: { line: number, column: number }) {
     super(
-      `[flue] ${filePath}:${position.line}:${position.column} — a 'use agent' module default-exports an ` +
+      `[amond] ${filePath}:${position.line}:${position.column} — a 'use agent' module default-exports an ` +
       `anonymous function. An agent's identity derives from its function name, so agents must be named: ` +
       `\`export default function MyAgent() { … }\` (or a named export).`,
     )
@@ -227,7 +227,7 @@ export class NoAgentExportsError extends AgentScanError {
 
   constructor(filePath: string) {
     super(
-      `[flue] ${filePath} declares 'use agent' but exports no agents. In a marked module, every exported ` +
+      `[amond] ${filePath} declares 'use agent' but exports no agents. In a marked module, every exported ` +
       `function with a capitalized name is an agent — export one (e.g. \`export function MyAgent() { … }\`), ` +
       `or remove the directive.`,
     )
@@ -241,7 +241,7 @@ export class AgentModuleParseError extends AgentScanError {
 
   constructor(filePath: string, cause: unknown) {
     super(
-      `[flue] Unable to parse "${filePath}" while scanning for 'use agent' modules: ${cause instanceof Error ? cause.message : String(cause)}`,
+      `[amond] Unable to parse "${filePath}" while scanning for 'use agent' modules: ${cause instanceof Error ? cause.message : String(cause)}`,
       { cause },
     )
     this.filePath = filePath
@@ -307,14 +307,14 @@ export function isAgentModulePath(filePath: string): boolean {
   return AGENT_MODULE_EXTENSIONS.has(path.extname(filePath))
 }
 
-/** `Flue<PascalCase>Agent` — matches the Cloudflare codegen exactly. */
+/** `amond<PascalCase>Agent` — matches the Cloudflare codegen exactly. */
 export function agentClassName(identity: string): string {
-  return `Flue${pascalCaseName(identity)}Agent`
+  return `Amond${pascalCaseName(identity)}Agent`
 }
 
-/** `FLUE_<SNAKE_UPPER>_AGENT` — camel boundaries split, so `IssueTriage` → `FLUE_ISSUE_TRIAGE_AGENT`. */
+/** `AMOND_<SNAKE_UPPER>_AGENT` — camel boundaries split, so `IssueTriage` → `AMOND_ISSUE_TRIAGE_AGENT`. */
 export function agentBindingName(identity: string): string {
-  return `FLUE_${snakeUpperName(identity)}_AGENT`
+  return `AMOND_${snakeUpperName(identity)}_AGENT`
 }
 
 function pascalCaseName(name: string): string {
@@ -350,7 +350,7 @@ interface ParsedStatement {
 
 /**
  * Whether a parsed program body opens with the `'use agent'` directive in its
- * directive prologue. Shared by the scanner and the `@flue/vite` build
+ * directive prologue. Shared by the scanner and the `@amond-ai/agent-vite` build
  * transform so the two can never disagree about what counts as an agent
  * module.
  */
@@ -406,7 +406,7 @@ export interface ScanAgentModuleCodeOptions {
   /**
    * Collect agents only when the module carries the `'use agent'` directive
    * (the default — directive membership is how the build scan discovers
-   * agent modules). `flue run` names its module by explicit path, so it
+   * agent modules). `amond run` names its module by explicit path, so it
    * passes `false`: the export-shape rule alone decides its agents, keeping
    * run and build agreement on every module both can see.
    */

@@ -139,7 +139,7 @@ function raceExecAbort(
 }
 
 /**
- * Shared implementation of the `FlueFs.writeFile` parent-creation guarantee.
+ * Shared implementation of the `AmondFs.writeFile` parent-creation guarantee.
  * Every `Sandbox` adapter (local, bash factory, SandboxDriver wrapper) routes
  * writes through here so the cross-mode contract has exactly one
  * implementation.
@@ -308,7 +308,7 @@ function isBashLike(value: unknown): value is BashLike {
 
 function assertBashLike(value: unknown): asserts value is BashLike {
   if (!isBashLike(value)) {
-    throw new Error('[flue] BashFactory must return a Bash-like object.')
+    throw new Error('[amond] BashFactory must return a Bash-like object.')
   }
 }
 
@@ -348,7 +348,7 @@ function assertBashLike(value: unknown): asserts value is BashLike {
  * agent commands are legitimately unbounded, and `timeoutMs` is the command's
  * own deadline, not an infrastructure liveness bound. An adapter that detects
  * sandbox death should reject with `SandboxDiedError` (exported from
- * `@flue/runtime`), so shell classification reports an infrastructure failure
+ * `@amond-ai/agent`), so shell classification reports an infrastructure failure
  * rather than caller cancellation.
  */
 export interface SandboxDriver {

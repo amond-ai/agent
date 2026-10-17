@@ -2,10 +2,10 @@
  * GenAI semantic-convention vocabulary shared by the trace backends.
  *
  * This is the single home for the content attribute names and the revision
- * stamps of the projection contract; `@flue/opentelemetry` re-exports the
+ * stamps of the projection contract; an OpenTelemetry adapter re-exports the
  * revision constants unchanged. Keeping the vocabulary next to the projection
  * (and to the runtime types it projects) is the point of the
- * `@flue/runtime/telemetry` subpath: both change together, in one release.
+ * `@amond-ai/agent/telemetry` subpath: both change together, in one release.
  */
 
 /**
@@ -20,14 +20,14 @@ export const GEN_AI_SEMCONV_REVISION = '4c8addb53718b544134be47e256237026fe88875
 /** Bumped when the role/parts message projection changes shape. */
 export const GEN_AI_PROJECTION_REVISION = 5
 /**
- * Bumped when the `flue.*` extension vocabulary changes. Revision 5: the
- * `flue.tool.call.arguments`/`flue.tool.call.result` fallback keys are no
+ * Bumped when the `amond.*` extension vocabulary changes. Revision 5: the
+ * `amond.tool.call.arguments`/`amond.tool.call.result` fallback keys are no
  * longer emitted — tool payloads of every shape record under the semconv
  * `gen_ai.tool.call.*` keys, which type them `any` and sanction JSON-string
  * form on spans. The constants remain for source compatibility. (Revision 4
  * moved truncation/omission markers in-band; see `./truncate.ts`.)
  */
-export const FLUE_TELEMETRY_EXTENSION_REVISION = 5
+export const AMOND_TELEMETRY_EXTENSION_REVISION = 5
 
 /**
  * Content-bearing attribute names. `gen_ai.*` keys follow the OpenTelemetry
@@ -35,7 +35,7 @@ export const FLUE_TELEMETRY_EXTENSION_REVISION = 5
  * keys are typed `any` there: structured form is preferred, and JSON-string
  * form is sanctioned on spans when the attribute store cannot hold objects —
  * which is every span attribute store this runtime writes to — so tool
- * payloads of every shape ride the semconv keys. The two `flue.*` keys are
+ * payloads of every shape ride the semconv keys. The two `amond.*` keys are
  * the pre-5 fallback names for non-object tool payloads; they are retained
  * for source compatibility and no longer emitted.
  */
@@ -47,8 +47,8 @@ export const CONTENT_ATTR = {
   toolDescription: 'gen_ai.tool.description',
   toolArguments: 'gen_ai.tool.call.arguments',
   toolResult: 'gen_ai.tool.call.result',
-  /** @deprecated No longer emitted; see `FLUE_TELEMETRY_EXTENSION_REVISION` 5. */
-  toolArgumentsRaw: 'flue.tool.call.arguments',
-  /** @deprecated No longer emitted; see `FLUE_TELEMETRY_EXTENSION_REVISION` 5. */
-  toolResultRaw: 'flue.tool.call.result',
+  /** @deprecated No longer emitted; see `AMOND_TELEMETRY_EXTENSION_REVISION` 5. */
+  toolArgumentsRaw: 'amond.tool.call.arguments',
+  /** @deprecated No longer emitted; see `AMOND_TELEMETRY_EXTENSION_REVISION` 5. */
+  toolResultRaw: 'amond.tool.call.result',
 } as const

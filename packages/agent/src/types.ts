@@ -86,7 +86,7 @@ export type DeliveredMessageInput = string | DeliveredMessage
 export interface AgentDispatchRequest {
   /** Target agent instance id. Must be a non-empty string. */
   id: string
-  /** The message delivered to the session. Flue snapshots the value at admission time. */
+  /** The message delivered to the session. amond snapshots the value at admission time. */
   message: DeliveredMessageInput
   /**
    * Instance-creation data — the seed, consulted only when this send
@@ -171,7 +171,7 @@ export type PromptImage = ImageContent
  *
  * Documents are forwarded to the model as native document content — the
  * provider receives the file itself (for PDFs: extracted text plus rendered
- * page images) rather than text Flue extracted or pages rasterized in user
+ * page images) rather than text amond extracted or pages rasterized in user
  * land. Supported MIME types: `application/pdf`. Native document input is
  * supported on Anthropic Messages, Google Generative AI / Vertex, and OpenAI
  * (Azure) Responses models; on any other model API the document is replaced
@@ -189,7 +189,7 @@ export interface PromptDocument {
 
 /** Imported packaged skill reference accepted by `useSkill()` and `session.skill()`. */
 export interface SkillReference {
-  readonly __flueSkillReference: true
+  readonly __amondSkillReference: true
   readonly id: string
   readonly name: string
   readonly description: string
@@ -213,7 +213,7 @@ export interface SkillDefinition {
   readonly metadata?: Readonly<Record<string, string>>
   /**
    * Space-separated tool names the skill author prefers (experimental in
-   * the Agent Skills spec). Accepted for compatibility; Flue does not
+   * the Agent Skills spec). Accepted for compatibility; amond does not
    * enforce it.
    */
   readonly allowedTools?: string
@@ -246,7 +246,7 @@ export type Skill = SkillReference | SkillDefinition
  * `skillMdPath` on activation. Never authored directly.
  */
 export interface WorkspaceSkill {
-  readonly __flueWorkspaceSkill: true
+  readonly __amondWorkspaceSkill: true
   readonly name: string
   readonly description: string
   readonly directory: string
@@ -259,7 +259,7 @@ export type RegisteredSkill = Skill | WorkspaceSkill
 // ─── File Stat ──────────────────────────────────────────────────────────────
 
 /**
- * File metadata returned by {@link FlueFs.stat}.
+ * File metadata returned by {@link AmondFs.stat}.
  *
  * `isSymbolicLink`, `size`, and `mtime` are omitted when the sandbox
  * sandbox adapter's provider does not expose them — sandbox adapters must never
@@ -318,7 +318,7 @@ export interface Sandbox {
 
   readFile(path: string): Promise<string>
   readFileBuffer(path: string): Promise<Uint8Array>
-  /** Creates missing parent directories (the `FlueFs.writeFile` guarantee). */
+  /** Creates missing parent directories (the `AmondFs.writeFile` guarantee). */
   writeFile(path: string, content: string | Uint8Array): Promise<void>
   stat(path: string): Promise<FileStat>
   readdir(path: string): Promise<string[]>
@@ -340,8 +340,8 @@ export interface Sandbox {
 export type SessionEnv = Sandbox
 
 /**
- * Filesystem surface for the harness sandbox, exposed on `FlueHarness.fs` and
- * `FlueSession.fs`. Reads and writes happen inside whatever the sandbox
+ * Filesystem surface for the harness sandbox, exposed on `AmondHarness.fs` and
+ * `AmondSession.fs`. Reads and writes happen inside whatever the sandbox
  * sandbox adapter points at (a remote container, microVM, in-process FS, etc.).
  *
  * Operations are out-of-band — they don't appear in the conversation
@@ -356,7 +356,7 @@ export type SessionEnv = Sandbox
  * the sandbox adapter's default (varies by provider). Use absolute paths
  * for portability across sandbox adapters.
  */
-export interface FlueFs {
+export interface AmondFs {
   /** Read a UTF-8 file. Throws if the path doesn't exist or isn't a file. */
   readFile(path: string): Promise<string>
 
@@ -547,11 +547,11 @@ export interface AgentRuntimeConfig {
   mcpConnections?: McpConnectionDefinition[]
 }
 
-// ─── Agent functions (Flue Hooks) ────────────────────────────────────────────
+// ─── Agent functions (amond Hooks) ────────────────────────────────────────────
 
 /**
  * An agent function: a plain synchronous function that composes an agent's
- * behavior. Flue Hooks in the body attach what it provides (tools,
+ * behavior. amond Hooks in the body attach what it provides (tools,
  * instructions, state); the returned string is its instruction — the prose
  * that teaches the model who it is and how to work. Return nothing for a
  * tools-only body. The author owns the formatting (headings included).
@@ -616,7 +616,7 @@ export type AgentFunction<TProps = void> = TProps extends void
 export interface AgentProps {
   /**
    * This agent instance's id — the `:id` segment of the agent's route
-   * (`/agents/<name>/:id`), or the `--id` passed to `flue run`. Constant
+   * (`/agents/<name>/:id`), or the `--id` passed to `amond run`. Constant
    * for the instance's whole life.
    */
   id: string
@@ -681,10 +681,10 @@ export interface AgentStatics {
  */
 export type Agent = AgentFunction<AgentProps> & AgentStatics
 
-// ─── Flue Event Context ────────────────────────────────────────────────────
+// ─── amond Event Context ────────────────────────────────────────────────────
 
 /** Event context for the agent interaction that emitted an event. */
-export interface FlueEventContext<TEnv = Record<string, any>> {
+export interface AmondEventContext<TEnv = Record<string, any>> {
   /** Workflow run/instance id, or stable agent instance id during agent processing. */
   readonly id: string
   readonly agentName: string | undefined
@@ -714,16 +714,16 @@ export interface FlueEventContext<TEnv = Record<string, any>> {
    */
   readonly req: Request | undefined
   /** Emit observable structured log events into the conversation activity stream. */
-  readonly log: FlueLogger
+  readonly log: AmondLogger
 }
 
-export interface FlueLogger {
+export interface AmondLogger {
   info(message: string, attributes?: Record<string, unknown>): void
   warn(message: string, attributes?: Record<string, unknown>): void
   error(message: string, attributes?: Record<string, unknown>): void
 }
 
-// ─── Flue Harness ───────────────────────────────────────────────────────────
+// ─── amond Harness ───────────────────────────────────────────────────────────
 
 /**
  * Initialized agent environment owned by a runtime runner — the surface a
@@ -735,7 +735,7 @@ export interface FlueLogger {
  * {@link Sandbox} the configured {@link SandboxFactory} produced — touched
  * directly, with no conversation record.
  */
-export interface FlueHarness {
+export interface AmondHarness {
   readonly name: string
 
   /**
@@ -776,7 +776,7 @@ export interface FlueHarness {
   readonly sandbox: Sandbox
 }
 
-// ─── Flue Session ───────────────────────────────────────────────────────────
+// ─── amond Session ───────────────────────────────────────────────────────────
 
 /**
  * Awaitable handle returned by `prompt()`, `skill()`, `task()`, and `shell()`.
@@ -791,8 +791,8 @@ export interface CallHandle<T> extends Promise<T> {
   abort(reason?: unknown): void
 }
 
-/** Named conversation state inside a {@link FlueHarness}. */
-export interface FlueSession {
+/** Named conversation state inside a {@link AmondHarness}. */
+export interface AmondSession {
   /** Session name. */
   readonly name: string
   /** Persisted opaque identity for this conversation. */
@@ -812,11 +812,11 @@ export interface FlueSession {
   shell(command: string, options?: ShellOptions): CallHandle<ShellResult>
 
   /**
-   * Read and write files in the session's sandbox. See {@link FlueFs}.
-   * Unlike {@link FlueSession.shell}, fs operations are not recorded in
+   * Read and write files in the session's sandbox. See {@link AmondFs}.
+   * Unlike {@link AmondSession.shell}, fs operations are not recorded in
    * the conversation transcript.
    */
-  readonly fs: FlueFs
+  readonly fs: AmondFs
 
   /**
    * Run a registered skill. Pass `options.result` to require validated
@@ -850,7 +850,7 @@ export interface FlueSession {
    * operation (`prompt` / `skill` / `task` / `shell`) is in flight on
    * this session — start a separate session for parallel branches.
    *
-   * Emits a {@link FlueEvent} `compaction_start` (with `reason: "manual"`)
+   * Emits a {@link AmondEvent} `compaction_start` (with `reason: "manual"`)
    * followed by `compaction`. The summarization LLM cost is recorded the
    * same as automatic compaction.
    */
@@ -890,7 +890,7 @@ export interface PromptUsage {
 }
 
 /**
- * Identifies the model that Flue selected for the call (after applying the
+ * Identifies the model that amond selected for the call (after applying the
  * call > agent precedence). When more than one model runs during the
  * call (rare; e.g. cross-model flows), this reflects the model in effect for
  * the call's primary turn.
@@ -1002,7 +1002,7 @@ export interface SandboxToolFactoryOptions {
 /** @deprecated Renamed to {@link SandboxToolFactoryOptions}. */
 export type SessionToolFactoryOptions = SandboxToolFactoryOptions
 
-/** Sandbox adapter-supplied model-facing tools. Flue appends `task` separately. */
+/** Sandbox adapter-supplied model-facing tools. amond appends `task` separately. */
 export type SandboxToolFactory = (
   sandbox: Sandbox,
   options: SandboxToolFactoryOptions,
@@ -1011,7 +1011,7 @@ export type SandboxToolFactory = (
 /** @deprecated Renamed to {@link SandboxToolFactory}. */
 export type SessionToolFactory = SandboxToolFactory
 
-/** Wraps external sandboxes (Daytona, CF Containers, etc.) into Flue's {@link Sandbox}. */
+/** Wraps external sandboxes (Daytona, CF Containers, etc.) into amond's {@link Sandbox}. */
 export interface SandboxFactory {
   /**
    * Called once per initialized harness — one call per `init()` — and every
@@ -1130,12 +1130,12 @@ export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix'
  * `stack` (stacks expose filesystem paths and deployment layout, so they stay
  * out of anything persisted or replayed).
  */
-interface FlueErrorInfo {
+interface AmondErrorInfo {
   type: string
   name?: string
   code?: string
   message?: string
-  /** Framework-owned structured metadata from a `FlueError` (e.g. validation issues). */
+  /** Framework-owned structured metadata from an `AmondError` (e.g. validation issues). */
   meta?: Record<string, unknown>
   /** Throw-site stack, present only when the failure was observed live from a thrown `Error`. */
   stack?: string
@@ -1149,7 +1149,7 @@ interface AgentInvocationInput {
 type AgentInvocationOutput =
 	{ type: 'text', text: string, finishReason: string } | { type: 'data', data: unknown }
 
-export interface FlueObservationDetail {
+export interface AmondObservationDetail {
   agentInput?: AgentInvocationInput
   agentOutput?: AgentInvocationOutput
   origin?: ToolOrigin
@@ -1157,7 +1157,7 @@ export interface FlueObservationDetail {
   args?: unknown
   effectiveResult?: unknown
   toolCallId?: string
-  errorInfo?: FlueErrorInfo
+  errorInfo?: AmondErrorInfo
 }
 
 export interface ModelRequestInput {
@@ -1201,12 +1201,12 @@ export interface ModelResponse {
    * cross-attribute it. Telemetry only.
    */
   gatewayLogId?: string
-  error?: FlueErrorInfo
+  error?: AmondErrorInfo
 }
 
 type ToolOrigin = 'model' | 'caller' | 'framework' | 'adapter'
 
-type FlueEventVariant =
+type AmondEventVariant =
   | { type: 'agent_start' }
   | { type: 'agent_end', messages: AgentMessage[] }
   | { type: 'turn_start', turnId: string, purpose: LlmTurnPurpose }
@@ -1384,9 +1384,9 @@ type FlueEventVariant =
  * applicable, and the per-context emit path stamps the delivered envelope
  * fields (`v`, `eventIndex`, `timestamp`) before any subscriber, stream, or
  * store sees the event. Consumers always receive the decorated
- * {@link FlueEvent}.
+ * {@link AmondEvent}.
  */
-export type FlueEventInput = FlueEventVariant & {
+export type AmondEventInput = AmondEventVariant & {
   instanceId?: string
   submissionId?: string
   agentName?: string
@@ -1409,7 +1409,7 @@ export type FlueEventInput = FlueEventVariant & {
  * generated ids — those correlation fields are optional because they apply
  * only to the activity they describe.
  *
- * Attached-agent streams and `observe()` from `@flue/runtime` deliver live
+ * Attached-agent streams and `observe()` from `@amond-ai/agent` deliver live
  * activity; their indexes are per-context ordering, not durable identity.
  *
  * Recognized image content blocks in framework event payloads never carry raw
@@ -1417,27 +1417,27 @@ export type FlueEventInput = FlueEventVariant & {
  * `IMAGE_DATA_OMITTED` sentinel. Session history retains real image bytes for
  * model context.
  */
-export type FlueEvent = FlueEventInput & {
+export type AmondEvent = AmondEventInput & {
   /** Durable event-format version. Readers branch on this when the format changes. */
   v: 3
   eventIndex: number
   timestamp: string
 }
 
-export type FlueObservation = FlueEvent & FlueObservationDetail
+export type AmondObservation = AmondEvent & AmondObservationDetail
 
 /**
  * Live activity from a direct attached-agent interaction. Attached-agent
  * events always carry `instanceId`. They are not durable history.
  */
-export type AttachedAgentEvent = FlueEvent & {
+export type AttachedAgentEvent = AmondEvent & {
   instanceId: string
 }
 
 /** Internal pre-decoration event callback (Session → Harness → context emit chain). */
-export type FlueEventInputCallback = (
-  event: FlueEventInput,
-  observation?: FlueObservationDetail,
+export type AmondEventInputCallback = (
+  event: AmondEventInput,
+  observation?: AmondObservationDetail,
 ) => void | Promise<void>
 
-export type FlueEventCallback = (event: FlueEvent) => void | Promise<void>
+export type AmondEventCallback = (event: AmondEvent) => void | Promise<void>

@@ -25,7 +25,7 @@ export default pleaseai({
     'packages/agent-react/**',
   ],
   rules: {
-    // Reordering moves side-effect imports (`import 'virtual:flue/providers'`) and the imports
+    // Reordering moves side-effect imports (`import 'virtual:amond/providers'`) and the imports
     // around them, changing module evaluation order; leave Flue's import order as written.
     'perfectionist/sort-imports': 'off',
     // These autofixes change runtime behaviour, not just layout: a different thrown error class,

@@ -1,20 +1,20 @@
 import type {
-  FlueEvent,
-  FlueEventContext,
-  FlueObservation,
-  FlueObservationDetail,
+  AmondEvent,
+  AmondEventContext,
+  AmondObservation,
+  AmondObservationDetail,
 } from './types.ts'
 
-export type FlueObservationSubscriber = (
-  observation: FlueObservation,
-  ctx: FlueEventContext,
+export type AmondObservationSubscriber = (
+  observation: AmondObservation,
+  ctx: AmondEventContext,
 ) => void | Promise<void>
 
 export function createObservation(
-  event: FlueEvent,
-  detail?: FlueObservationDetail,
-): FlueObservation {
-  return freezeValue(cloneValue({ ...event, ...detail } as FlueObservation))
+  event: AmondEvent,
+  detail?: AmondObservationDetail,
+): AmondObservation {
+  return freezeValue(cloneValue({ ...event, ...detail } as AmondObservation))
 }
 
 function cloneValue<T>(value: T, seen = new Map<object, unknown>()): T {

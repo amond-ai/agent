@@ -12,7 +12,7 @@
  */
 
 import { InvalidRequestError, RouteNotFoundError } from '../errors.ts'
-import type { CloudflareRuntime, FlueRuntime } from './flue-app.ts'
+import type { AmondRuntime, CloudflareRuntime } from './amond-app.ts'
 import { handleAgentRequest } from './handle-agent.ts'
 import {
   handleAgentAttachmentRead,
@@ -34,7 +34,7 @@ export interface AgentRequestTarget {
 
 /** Serve a DS conversation stream read (`GET`/`HEAD`) for one agent instance. */
 export async function executeAgentConversationRead(
-  rt: FlueRuntime,
+  rt: AmondRuntime,
   target: AgentRequestTarget,
 ): Promise<Response> {
   const { agentName, instanceId, request } = target
@@ -56,14 +56,14 @@ export async function executeAgentConversationRead(
 
 /** Admit one attached prompt (`POST`) for an agent instance (202 admission). */
 export async function executeAgentPrompt(
-  rt: FlueRuntime,
+  rt: AmondRuntime,
   target: AgentRequestTarget,
 ): Promise<Response> {
   const { agentName, instanceId, request } = target
   if (rt.target === 'node') {
     const admitAttachedSubmission = rt.createAgentAdmission(agentName, instanceId)
     if (!admitAttachedSubmission) {
-      throw new Error('[flue] Node runtime is missing agent admission configuration.')
+      throw new Error('[amond] Node runtime is missing agent admission configuration.')
     }
     return handleAgentRequest({
       request,
@@ -78,7 +78,7 @@ export async function executeAgentPrompt(
 
 /** Abort all in-flight/queued durable work for one agent instance. */
 export async function executeAgentAbort(
-  rt: FlueRuntime,
+  rt: AmondRuntime,
   target: AgentRequestTarget,
 ): Promise<Response> {
   const { agentName, instanceId } = target
@@ -93,7 +93,7 @@ export async function executeAgentAbort(
 
 /** Serve one attachment's bytes. */
 export async function executeAgentAttachmentRead(
-  rt: FlueRuntime,
+  rt: AmondRuntime,
   target: AgentRequestTarget & { attachmentId: string },
 ): Promise<Response> {
   const { agentName, instanceId } = target
@@ -136,7 +136,7 @@ async function routeToAgent(
   }
   catch (cause) {
     throw new Error(
-      `[flue] agent "${agentName}" instance "${instanceId}" ${verb} failed across the Durable Object boundary.`,
+      `[amond] agent "${agentName}" instance "${instanceId}" ${verb} failed across the Durable Object boundary.`,
       { cause },
     )
   }

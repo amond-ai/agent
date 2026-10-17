@@ -1,5 +1,5 @@
 /**
- * Flue's markdown/skill import transform.
+ * amond's markdown/skill import transform.
  *
  * Detection is by SPECIFIER, not by import attribute — TypeScript already
  * types these imports purely by suffix (the ambient `*.md` and `SKILL.md`
@@ -11,7 +11,7 @@
  *   - every other bare `.md` import loads as a markdown text module;
  *   - Vite-native queries (`?raw`, `?url`, ...) are left to Vite.
  *
- * Those are the only two Flue forms. An odd-named markdown file becomes a
+ * Those are the only two amond forms. An odd-named markdown file becomes a
  * skill in userland, not here: import it as markdown text and pass it to
  * `defineSkill({ name, description, instructions })`. The legacy
  * `with { type: 'skill' | 'markdown' }` attributes are rejected with a
@@ -19,8 +19,8 @@
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import type { PackagedSkillDirectory } from '@flue/runtime'
-import { buildPackagedSkill, parseSkillMarkdown } from '@flue/runtime/internal'
+import type { PackagedSkillDirectory } from '@amond-ai/agent'
+import { buildPackagedSkill, parseSkillMarkdown } from '@amond-ai/agent/internal'
 import MagicString from 'magic-string'
 import { ulid } from 'ulidx'
 import { normalizePath, parseAstAsync } from 'vite'
@@ -28,11 +28,11 @@ import type { Plugin } from 'vite'
 import { parserLangForFile } from './agent-scan.ts'
 import { canonicalizePath, isWithinDirectory } from './paths.ts'
 
-const MARKDOWN_MODULE_PREFIX = '\0flue-markdown:'
+const MARKDOWN_MODULE_PREFIX = '\0amond-markdown:'
 /** Virtual registry owned by the Agents SDK's `agents()` Vite plugin. */
 const AGENTS_SKILLS_VIRTUAL_PREFIX = '\0agents:skills:'
-const SKILL_MODULE_PREFIX = '\0flue-skill:'
-const ENCODED_SKILL_MODULE_PREFIX = '__x00__flue-skill:'
+const SKILL_MODULE_PREFIX = '\0amond-skill:'
+const ENCODED_SKILL_MODULE_PREFIX = '__x00__amond-skill:'
 const PACKAGED_FILE_WARNING_BYTES = 1024 * 1024
 const EXCLUDED_DIRECTORIES = new Set([
   '.git',
@@ -47,7 +47,7 @@ const EXCLUDED_FILES = new Set(['.netrc', '.npmrc', '.pypirc', '_netrc', 'creden
 const SENSITIVE_FILE_PATTERNS = [/\.key$/i, /\.pem$/i, /\.p12$/i, /\.pfx$/i, /^secrets?(?:\.|$)/i]
 
 /**
- * Handles Flue's markdown and skill imports in one plugin so each module in
+ * Handles amond's markdown and skill imports in one plugin so each module in
  * the graph is type-stripped and parsed once per (re)build, and so the two
  * module kinds cannot drift apart.
  */
@@ -55,11 +55,11 @@ export function markdownImportPlugin(): Plugin {
   let viteRoot = ''
   const internalModuleToken = ulid()
   const internalSkillModulePrefix = `${SKILL_MODULE_PREFIX}${internalModuleToken}:`
-  const encodedInternalSkillModulePrefix = `__x00__flue-skill:${internalModuleToken}:`
+  const encodedInternalSkillModulePrefix = `__x00__amond-skill:${internalModuleToken}:`
   const trackedSkillDirectories = new Set<string>()
 
   return {
-    name: 'flue-markdown-imports',
+    name: 'amond-markdown-imports',
     enforce: 'pre',
     configResolved(config) {
       viteRoot = config.root
@@ -101,12 +101,12 @@ export function markdownImportPlugin(): Plugin {
             ? { id: rootRelativePath, external: false }
             : await this.resolve(bareSpecifier, importerPath, { skipSelf: true })
           if (!resolved || resolved.external) {
-            throw new Error(`[flue] Unable to resolve markdown import: ${declaration.specifier}`)
+            throw new Error(`[amond] Unable to resolve markdown import: ${declaration.specifier}`)
           }
           const filesystemPath = resolvedFilesystemPath(resolved.id)
           if (!path.isAbsolute(filesystemPath)) {
             throw new Error(
-              `[flue] Markdown imports must resolve to a filesystem path: ${declaration.specifier}`,
+              `[amond] Markdown imports must resolve to a filesystem path: ${declaration.specifier}`,
             )
           }
           const resolvedPath = canonicalPath(filesystemPath)
@@ -145,12 +145,12 @@ export function markdownImportPlugin(): Plugin {
       if (internalModuleId) { return internalModuleId }
       if (source.startsWith(SKILL_MODULE_PREFIX) || source.includes(ENCODED_SKILL_MODULE_PREFIX)) {
         throw new Error(
-          '[flue] Internal packaged-skill module IDs cannot be imported directly. Use a static SKILL.md import.',
+          '[amond] Internal packaged-skill module IDs cannot be imported directly. Use a static SKILL.md import.',
         )
       }
       if (!importer) { return null }
       // The Agents SDK builds its own virtual skill registry by reading
-      // SKILL.md files. Those edges belong to that plugin, not Flue's static
+      // SKILL.md files. Those edges belong to that plugin, not amond's static
       // JS/TS import transform.
       if (importer.startsWith(AGENTS_SKILLS_VIRTUAL_PREFIX)) { return null }
       // Queried specifiers are delegated to Vite by the transform, so the
@@ -160,7 +160,7 @@ export function markdownImportPlugin(): Plugin {
         // resolution means the importer was outside the transform's
         // module filter (a non-JS/TS importer, say).
         throw new Error(
-          `[flue] Skill import "${source}" reached resolution untransformed. Skill imports are packaged automatically from .ts/.js importers; import it from a module the Flue transform processes.`,
+          `[amond] Skill import "${source}" reached resolution untransformed. Skill imports are packaged automatically from .ts/.js importers; import it from a module the amond transform processes.`,
         )
       }
       return null
@@ -193,7 +193,7 @@ export function markdownImportPlugin(): Plugin {
       trackedSkillDirectories.add(canonicalPath(path.dirname(skillPath)))
       const packagedSkill = await packageSkill(skillPath)
       return [
-        `import { createSkillReference } from '@flue/runtime/internal';`,
+        `import { createSkillReference } from '@amond-ai/agent/internal';`,
         `const directory = ${JSON.stringify(packagedSkill)};`,
         'export default createSkillReference(directory);',
       ].join('\n')
@@ -212,7 +212,7 @@ async function packageSkill(skillPath: string): Promise<PackagedSkillDirectory> 
     const content = await fs.promises.readFile(filePath)
     if (content.byteLength > PACKAGED_FILE_WARNING_BYTES) {
       console.warn(
-        `[flue] Skill file "${filePath}" exceeds 1MB and will be packaged into the deployed application for lazy access.`,
+        `[amond] Skill file "${filePath}" exceeds 1MB and will be packaged into the deployed application for lazy access.`,
       )
     }
     files.push({
@@ -234,19 +234,19 @@ async function collectFiles(directory: string, skillRoot = directory): Promise<s
     const relativePath = normalizePath(path.relative(skillRoot, absolutePath))
     if (entry.isSymbolicLink()) {
       throw new Error(
-        `[flue] Skill directory "${skillRoot}" contains symbolic link "${relativePath}", which cannot be packaged. Replace it with a regular file or directory.`,
+        `[amond] Skill directory "${skillRoot}" contains symbolic link "${relativePath}", which cannot be packaged. Replace it with a regular file or directory.`,
       )
     }
     if (entry.isDirectory()) {
       if (EXCLUDED_DIRECTORIES.has(entry.name)) {
         console.warn(
-          `[flue] Excluding skill directory "${relativePath}" from the deployed application package because it is generated or repository metadata.`,
+          `[amond] Excluding skill directory "${relativePath}" from the deployed application package because it is generated or repository metadata.`,
         )
         continue
       }
       if (SENSITIVE_DIRECTORIES.has(entry.name.toLowerCase())) {
         throw new Error(
-          `[flue] Imported skill directory "${skillRoot}" contains sensitive directory "${relativePath}", which cannot be packaged. Remove credentials and private keys from the skill directory.`,
+          `[amond] Imported skill directory "${skillRoot}" contains sensitive directory "${relativePath}", which cannot be packaged. Remove credentials and private keys from the skill directory.`,
         )
       }
       files.push(...(await collectFiles(absolutePath, skillRoot)))
@@ -254,12 +254,12 @@ async function collectFiles(directory: string, skillRoot = directory): Promise<s
     else if (entry.isFile()) {
       if (isSensitiveFile(entry.name)) {
         throw new Error(
-          `[flue] Imported skill directory "${skillRoot}" contains sensitive file "${relativePath}", which cannot be packaged. Remove credentials and private keys from the skill directory.`,
+          `[amond] Imported skill directory "${skillRoot}" contains sensitive file "${relativePath}", which cannot be packaged. Remove credentials and private keys from the skill directory.`,
         )
       }
       if (isExcludedFile(entry.name)) {
         console.warn(
-          `[flue] Excluding skill file "${relativePath}" from the deployed application package because it is generated content.`,
+          `[amond] Excluding skill file "${relativePath}" from the deployed application package because it is generated content.`,
         )
         continue
       }
@@ -375,7 +375,7 @@ function collectMarkdownImports(ast: ModuleAst): MarkdownImport[] {
     })
     if (legacyAttribute) {
       throw new Error(
-        `[flue] Import attributes are no longer used for "${specifier}". ` +
+        `[amond] Import attributes are no longer used for "${specifier}". ` +
         'SKILL.md imports are packaged automatically, and any other .md import loads as markdown text — ' +
         'pass it to `defineSkill({ name, description, instructions })` to build a skill from it. ' +
         'Remove the `with { type: ... }` clause.',
@@ -385,7 +385,7 @@ function collectMarkdownImports(ast: ModuleAst): MarkdownImport[] {
     const start = declaration.source?.start
     const end = declaration.source?.end
     if (typeof start !== 'number' || typeof end !== 'number') {
-      throw new Error(`[flue] Unable to transform markdown import: ${specifier}`)
+      throw new Error(`[amond] Unable to transform markdown import: ${specifier}`)
     }
     imports.push({ specifier, start, end })
   }
@@ -398,7 +398,7 @@ function assertNoDynamicSkillImports(ast: ModuleAst): void {
     const specifier = node.source?.value
     if (typeof specifier === 'string' && isSkillMarkdownPath(specifier)) {
       throw new Error(
-        `[flue] Dynamic skill import "${specifier}" is unsupported. Use a static SKILL.md import.`,
+        `[amond] Dynamic skill import "${specifier}" is unsupported. Use a static SKILL.md import.`,
       )
     }
   })

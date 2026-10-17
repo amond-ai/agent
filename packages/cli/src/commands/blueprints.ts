@@ -6,7 +6,7 @@ import type { CliOptions } from '../flags.ts'
 import { BLUEPRINTS, KIND_ROOTS } from '../generated/blueprints.ts'
 
 /**
- * `flue add` / `flue update` — fetch a blueprint implementation guide from
+ * `amond add` / `amond update` — fetch a blueprint implementation guide from
  * the registry for an AI coding agent to follow. Both commands share the
  * same machinery; `update` fetches the upgrade variant of a guide and
  * requires an explicit kind + name.
@@ -20,9 +20,9 @@ export function registerBlueprintCommands(cli: CAC): void {
     )
     .usage('add [<kind> <name|url>] [options]')
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
-    .example('  $ flue add')
-    .example('  $ flue add sandbox daytona | claude')
-    .example('  $ flue add channel https://developers.notion.com/reference/webhooks | codex')
+    .example('  $ amond add')
+    .example('  $ amond add sandbox daytona | claude')
+    .example('  $ amond add channel https://developers.notion.com/reference/webhooks | codex')
     .action((kind: string | undefined, name: string | undefined, options: CliOptions) =>
       blueprintAction('add', kind, name, options),
     )
@@ -31,7 +31,7 @@ export function registerBlueprintCommands(cli: CAC): void {
     .command('update <kind> <name|url>', 'Fetch an updated blueprint implementation guide')
     .usage('update <kind> <name|url> [options]')
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
-    .example('  $ flue update channel slack | claude')
+    .example('  $ amond update channel slack | claude')
     .action((kind: string, name: string, options: CliOptions) =>
       blueprintAction('update', kind, name, options),
     )
@@ -58,7 +58,7 @@ async function blueprintAction(
     return
   }
   if (kind === undefined || name === undefined) {
-    throw new UsageError(`Missing blueprint name or URL for \`flue ${command}\`.`)
+    throw new UsageError(`Missing blueprint name or URL for \`amond ${command}\`.`)
   }
 
   const args: BlueprintArgs = { command, kind, target: name, print }
@@ -100,17 +100,17 @@ async function blueprintAction(
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
-// Default blueprint registry base. FLUE_REGISTRY_URL is an internal-only
-// override used for local development against `pnpm --filter @flue/www dev`.
+// Default blueprint registry base. AMOND_REGISTRY_URL is an internal-only
+// override used for local development against a locally served registry.
 const DEFAULT_REGISTRY_URL = 'https://flueframework.com/cli/blueprints'
 
 // Bound on one registry fetch — a blackholed connection must fail with a
 // diagnosis, not hold the command until the OS gives up on the socket.
-// FLUE_REGISTRY_TIMEOUT_MS is an internal-only override used by tests.
+// AMOND_REGISTRY_TIMEOUT_MS is an internal-only override used by tests.
 const REGISTRY_FETCH_TIMEOUT_MS = 30_000
 
 function registryUrlFor(slug: string): string {
-  const base = (process.env.FLUE_REGISTRY_URL ?? DEFAULT_REGISTRY_URL).replace(/\/+$/, '')
+  const base = (process.env.AMOND_REGISTRY_URL ?? DEFAULT_REGISTRY_URL).replace(/\/+$/, '')
   return `${base}/${slug}.md`
 }
 
@@ -128,7 +128,7 @@ async function fetchBlueprintMarkdown(
   slug: string,
 ): Promise<{ body: string } | { notFound: true }> {
   const url = registryUrlFor(slug)
-  const timeoutMs = Number(process.env.FLUE_REGISTRY_TIMEOUT_MS) || REGISTRY_FETCH_TIMEOUT_MS
+  const timeoutMs = Number(process.env.AMOND_REGISTRY_TIMEOUT_MS) || REGISTRY_FETCH_TIMEOUT_MS
   let res: Response
   try {
     res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
@@ -162,7 +162,7 @@ async function emitBlueprintMarkdown(
   const result = await fetchBlueprintMarkdown(opts.slug)
   if ('notFound' in result) {
     throw new Error(
-      `The blueprint registry did not have Markdown for ${opts.notFoundLabel}. Your installed CLI may be out of sync with the registry — try updating @flue/cli.`,
+      `The blueprint registry did not have Markdown for ${opts.notFoundLabel}. Your installed CLI may be out of sync with the registry — try updating amond.`,
     )
   }
 
@@ -214,7 +214,7 @@ function kindRootHint(): string {
   lines.push(`Don't see what you need?`)
   for (const root of KIND_ROOTS) {
     lines.push('')
-    lines.push(`  flue add ${root.kind} <url>`)
+    lines.push(`  amond add ${root.kind} <url>`)
     lines.push(
       `    Build a ${blueprintResultByKind[root.kind] ?? root.kind} from scratch. Pass a URL pointing at the`,
     )
@@ -226,14 +226,14 @@ function kindRootHint(): string {
 
 function availableBlueprintRows(kind?: string) {
   return BLUEPRINTS.filter(blueprint => !kind || blueprint.kind === kind).map(blueprint => ({
-    command: `flue add ${blueprint.kind} ${blueprint.slug}`,
+    command: `amond add ${blueprint.kind} ${blueprint.slug}`,
     kind: blueprint.kind,
     website: blueprint.website,
   }))
 }
 
 function printListing(stream: NodeJS.WriteStream): void {
-  stream.write('flue add <kind> <name|url>\n\n')
+  stream.write('amond add <kind> <name|url>\n\n')
   stream.write('Available blueprints:\n')
   stream.write(renderBlueprintTable(availableBlueprintRows()))
   stream.write('\n')
@@ -246,7 +246,7 @@ function printUnknownBlueprint(kind: string, name: string, stream: NodeJS.WriteS
   stream.write(`Available ${kind} blueprints:\n`)
   stream.write(renderBlueprintTable(availableBlueprintRows(kind)))
   stream.write('\n\nTo build one from scratch with your coding agent:\n')
-  stream.write(`  flue add ${kind} <url>\n`)
+  stream.write(`  amond add ${kind} <url>\n`)
 }
 
 function shellQuote(value: string): string {
@@ -254,7 +254,7 @@ function shellQuote(value: string): string {
 }
 
 function printHumanInstructions(args: BlueprintArgs): void {
-  const cmd = `flue ${args.command} ${args.kind} ${shellQuote(args.target)}`
+  const cmd = `amond ${args.command} ${args.kind} ${shellQuote(args.target)}`
   const stream = process.stderr
   stream.write(`${cmd}\n\n`)
   stream.write('To apply this blueprint, pipe it to your coding agent:\n\n')

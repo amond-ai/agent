@@ -2,7 +2,7 @@
  * Pure-Node `Sandbox` backed by the host filesystem and `child_process`.
  *
  * Internal implementation behind the `local()` sandbox factory (see
- * `./local.ts`). Not exported from `@flue/runtime/node` — user code reaches
+ * `./local.ts`). Not exported from `@amond-ai/agent/node` — user code reaches
  * this through `local(...)`. `exec` shells out via `child_process.spawn`;
  * file methods call `node:fs/promises` directly.
  */
@@ -139,7 +139,7 @@ function execShell(
       if (truncated) {
         settle({
           stdout,
-          stderr: `${stderr}\n[flue] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`,
+          stderr: `${stderr}\n[amond] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`,
           exitCode: 1,
         })
         return
@@ -217,7 +217,7 @@ function resolveBaseEnv(userEnv: LocalSandboxOptions['env']): NodeJS.ProcessEnv 
   // `any`s.
   if (userEnv !== undefined && (typeof userEnv !== 'object' || Array.isArray(userEnv))) {
     throw new TypeError(
-      '[flue] local() `env` must be a Record<string, string | undefined>. ' +
+      '[amond] local() `env` must be a Record<string, string | undefined>. ' +
       'To inherit the full host env, pass `env: { ...process.env }`.',
     )
   }
@@ -280,7 +280,7 @@ export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
 
     async writeFile(p, content) {
       const resolved = resolvePath(p)
-      // FlueFs.writeFile guarantees parents are created as needed in
+      // AmondFs.writeFile guarantees parents are created as needed in
       // every sandbox mode; the shared lazy implementation keeps the
       // happy path at a single fs call.
       await writeFileCreatingParents(

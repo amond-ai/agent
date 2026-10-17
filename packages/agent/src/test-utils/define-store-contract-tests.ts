@@ -8,7 +8,7 @@
  *
  * @example
  * ```ts
- * import { defineStoreContractTests } from '@flue/runtime/test-utils';
+ * import { defineStoreContractTests } from '@amond-ai/agent/test-utils';
  *
  * defineStoreContractTests('My Backend', {
  *   async create() { return myStore; },
@@ -94,7 +94,7 @@ export interface FormatVersionTestBackend {
 /**
  * One store opened for format-version testing: `migrate()` runs the backend's
  * migration against the store's current contents, and the stamp accessors
- * read and write raw version-stamp values (`flue_meta` rows, meta-hash
+ * read and write raw version-stamp values (`amond_meta` rows, meta-hash
  * fields, meta documents, …) directly in the underlying storage.
  */
 export interface FormatVersionTestHandle {

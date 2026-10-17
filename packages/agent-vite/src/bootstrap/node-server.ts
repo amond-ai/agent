@@ -1,30 +1,30 @@
 /**
  * The Node application bootstrap, loaded through the Vite graph as
- * `virtual:flue/server`.
+ * `virtual:amond/server`.
  *
  * This is the CLI's generated-entry template
  * (packages/cli/src/lib/build-plugin-node.ts `generateRuntimeEntryPoint`)
  * ported to a real, testable module. Instead of codegen splices it consumes
- * Flue's virtual modules: the user's app (`virtual:flue/app`), the optional
- * persistence adapter (`virtual:flue/db`), and the scanned `'use agent'` set
- * (`virtual:flue/agents`).
+ * amond's virtual modules: the user's app (`virtual:amond/app`), the optional
+ * persistence adapter (`virtual:amond/db`), and the scanned `'use agent'` set
+ * (`virtual:amond/agents`).
  *
  * The registered agent set comes from the scan — `createAgentRouter()`
  * mounts in app.ts are pure routers over it. There are no workflows and no
  * channel-handler registry on this surface: mounting is the dispatch.
  */
-import { scannedAgents } from 'virtual:flue/agents'
-import userApp from 'virtual:flue/app'
-import userPersistenceAdapter from 'virtual:flue/db'
+import { scannedAgents } from 'virtual:amond/agents'
+import userApp from 'virtual:amond/app'
+import userPersistenceAdapter from 'virtual:amond/db'
 // Registers the configured (or default) provider set; user `setProvider()`
 // calls in app.ts win over it regardless of evaluation order.
-import 'virtual:flue/providers'
-import type { Agent } from '@flue/runtime'
+import 'virtual:amond/providers'
+import type { Agent } from '@amond-ai/agent'
 import type {
+  AmondAgentRegistration,
   AssembledNodeAgentRuntime,
-  FlueAgentRegistration,
   PersistenceAdapter,
-} from '@flue/runtime/internal'
+} from '@amond-ai/agent/internal'
 import {
   adapterInUseByLiveRuntime,
   assembleNodeAgentRuntime,
@@ -32,35 +32,35 @@ import {
   createInstrumentationOwner,
   installDevLifecycleLogger,
   runWithInstrumentationOwner,
-} from '@flue/runtime/internal'
-import { sqlite } from '@flue/runtime/node'
+} from '@amond-ai/agent/internal'
+import { sqlite } from '@amond-ai/agent/node'
 import { serve } from '@hono/node-server'
 import type {
-  FlueNodeServer,
-  LoadedFlueNodeApplication,
-  LoadFlueNodeApplicationOptions,
-  StartFlueNodeServerOptions,
+  AmondNodeServer,
+  LoadAmondNodeApplicationOptions,
+  LoadedAmondNodeApplication,
+  StartAmondNodeServerOptions,
 } from '../types.ts'
 
 export type {
-  FlueNodeActivityLease,
-  FlueNodeServer,
-  LoadedFlueNodeApplication,
-  LoadFlueNodeApplicationOptions,
-  StartFlueNodeServerOptions,
+  AmondNodeActivityLease,
+  AmondNodeServer,
+  LoadAmondNodeApplicationOptions,
+  LoadedAmondNodeApplication,
+  StartAmondNodeServerOptions,
 } from '../types.ts'
 
 /** Build the identity-keyed registration records from the scanned agent set. */
-function createAgentRegistrations(): FlueAgentRegistration[] {
+function createAgentRegistrations(): AmondAgentRegistration[] {
   return scannedAgents.map(({ identity, agent }) => ({
     identity,
     agent: agent as Agent,
   }))
 }
 
-export async function loadFlueNodeApplication(
-  options: LoadFlueNodeApplicationOptions = {},
-): Promise<LoadedFlueNodeApplication> {
+export async function loadAmondNodeApplication(
+  options: LoadAmondNodeApplicationOptions = {},
+): Promise<LoadedAmondNodeApplication> {
   const runtimeEnv = options.env ?? process.env
   const isLocalMode = options.local === true
   const instrumentationOwner = createInstrumentationOwner()
@@ -73,7 +73,7 @@ export async function loadFlueNodeApplication(
 
       // ─── Persistence ──────────────────────────────────────────────
       // Custom persistence from db.ts, or the Node default — in-memory
-      // SQLite, process lifetime. Under local dev, FLUE_DEV_SQLITE_PATH
+      // SQLite, process lifetime. Under local dev, AMOND_DEV_SQLITE_PATH
       // points the default at a disk file so conversation history
       // survives reloads (the dev server resets that file on each cold
       // start); ignored outside local mode, so deployed Node stays
@@ -84,8 +84,8 @@ export async function loadFlueNodeApplication(
         userPersistenceAdapter !== undefined
           ? (userPersistenceAdapter as PersistenceAdapter)
           : sqlite(
-              isLocalMode && runtimeEnv.FLUE_DEV_SQLITE_PATH
-                ? runtimeEnv.FLUE_DEV_SQLITE_PATH
+              isLocalMode && runtimeEnv.AMOND_DEV_SQLITE_PATH
+                ? runtimeEnv.AMOND_DEV_SQLITE_PATH
                 : undefined,
             )
       const stores = await connectPersistenceAdapter(
@@ -115,16 +115,16 @@ export async function loadFlueNodeApplication(
       // ─── App composition ──────────────────────────────────────────
       // The user's app.ts default export owns the entire request
       // pipeline; we just verify it exposes a fetch method.
-      const flueApp = userApp
-      if (!flueApp || typeof flueApp.fetch !== 'function') {
+      const amondApp = userApp
+      if (!amondApp || typeof amondApp.fetch !== 'function') {
         throw new Error(
-          '[flue] app.ts default export must be a Hono app or an object with a fetch(request) method.',
+          '[amond] app.ts default export must be a Hono app or an object with a fetch(request) method.',
         )
       }
 
       let disposing: Promise<void> | undefined
       return {
-        fetch: (request: Request, env?: unknown) => flueApp.fetch(request, env),
+        fetch: (request: Request, env?: unknown) => amondApp.fetch(request, env),
         enterActivity() {
           return activityGate.enter()
         },
@@ -150,14 +150,14 @@ export async function loadFlueNodeApplication(
             }
             devLifecycle?.dispose()
             if (errors.length === 1) { throw errors[0] }
-            if (errors.length > 1) { throw new AggregateError(errors, '[flue] Node application shutdown failed.') }
+            if (errors.length > 1) { throw new AggregateError(errors, '[amond] Node application shutdown failed.') }
           })()
           return disposing
         },
         closeSync() {
           devLifecycle?.dispose()
         },
-      } satisfies LoadedFlueNodeApplication
+      } satisfies LoadedAmondNodeApplication
     })
   }
   catch (error) {
@@ -183,17 +183,17 @@ export async function loadFlueNodeApplication(
     if (cleanupErrors.length) {
       throw new AggregateError(
         [error, ...cleanupErrors],
-        '[flue] Node application startup failed.',
+        '[amond] Node application startup failed.',
       ) 
     }
     throw error
   }
 }
 
-export async function startFlueNodeServer(
-  options: StartFlueNodeServerOptions = {},
-): Promise<FlueNodeServer> {
-  const application = await loadFlueNodeApplication(options)
+export async function startAmondNodeServer(
+  options: StartAmondNodeServerOptions = {},
+): Promise<AmondNodeServer> {
+  const application = await loadAmondNodeApplication(options)
   const port = options.port ?? 3000
   let resolveReady!: () => void
   let rejectReady!: (error: unknown) => void
@@ -209,7 +209,7 @@ export async function startFlueNodeServer(
       serverOptions: { requestTimeout: 0 },
     },
     () => {
-      if (!options.quiet) { console.log(`[flue] Server listening on http://localhost:${port}`) }
+      if (!options.quiet) { console.log(`[amond] Server listening on http://localhost:${port}`) }
       options.onReady?.()
       resolveReady()
     },
@@ -257,7 +257,7 @@ export async function startFlueNodeServer(
         server.closeAllConnections()
         await httpClosed
         if (errors.length === 1) { throw errors[0] }
-        if (errors.length > 1) { throw new AggregateError(errors, '[flue] Node server shutdown failed.') }
+        if (errors.length > 1) { throw new AggregateError(errors, '[amond] Node server shutdown failed.') }
       })()
       return stopping
     },

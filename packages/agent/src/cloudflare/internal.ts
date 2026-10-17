@@ -1,10 +1,10 @@
 /**
  * Internal Cloudflare runtime plumbing consumed by the generated Worker
- * entry point (the `@flue/vite` Cloudflare target).
+ * entry point (the `@amond-ai/agent-vite` Cloudflare target).
  *
  * This subpath is NOT part of the public API. The authoring surface for
- * Cloudflare users lives at `@flue/runtime/cloudflare`; the Node/shared
- * generated-entry helpers live at `@flue/runtime/internal`.
+ * Cloudflare users lives at `@amond-ai/agent/cloudflare`; the Node/shared
+ * generated-entry helpers live at `@amond-ai/agent/internal`.
  *
  * This entry only ever evaluates inside workerd, so real `cloudflare:workers`
  * imports live here — that is the point of the subpath, not a hazard to
@@ -12,12 +12,12 @@
  * virtual module unless the test mocks it, and that friction is deliberate:
  * tests do not run in the deploy environment, and the mock is the reminder.
  * The constraint runs one direction only — nothing on this entry may be
- * imported from `@flue/runtime/internal` or any other Node-loadable entry,
+ * imported from `@amond-ai/agent/internal` or any other Node-loadable entry,
  * which must stay evaluable without workerd.
  */
 export { runWithCloudflareContext } from './context.ts'
-export type { CreateFlueAgentClassOptions } from './flue-agent-class.ts'
-export { createFlueAgentClass } from './flue-agent-class.ts'
+export type { CreateAmondAgentClassOptions } from './amond-agent-class.ts'
+export { createAmondAgentClass } from './amond-agent-class.ts'
 export { installDefaultCloudflareTracing } from './tracing/index.ts'
 export type {
   CloudflareAgentIdentity,

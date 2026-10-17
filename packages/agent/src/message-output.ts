@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { RESERVED_SIGNAL_TYPES } from './conversation-records.ts'
-import type { FlueHarness, FlueLogger, PromptUsage } from './types.ts'
+import type { AmondHarness, AmondLogger, PromptUsage } from './types.ts'
 
 /**
  * The output channels behind the client-facing hooks. Data parts
@@ -20,7 +20,7 @@ import type { FlueHarness, FlueLogger, PromptUsage } from './types.ts'
  */
 export interface ResponseStartContext {
   readonly metadata: Record<string, unknown>
-  readonly log: FlueLogger
+  readonly log: AmondLogger
 }
 
 /**
@@ -37,7 +37,7 @@ export interface ResponseFinishContext {
     /** Every tool call the response made, from the durable record log. */
     readonly toolCalls: readonly AgentResponseToolCall[]
   }
-  readonly log: FlueLogger
+  readonly log: AmondLogger
 }
 
 /**
@@ -116,13 +116,13 @@ export function assertAppendMessage(message: unknown): AgentSignalAppend {
     (message as { kind?: unknown }).kind === 'user'
   ) {
     throw new Error(
-      '[flue] append() only appends kind: "signal" messages into the running response. A kind: "user" message is real new input — send it with the dispatcher from useDispatchMessage() instead.',
+      '[amond] append() only appends kind: "signal" messages into the running response. A kind: "user" message is real new input — send it with the dispatcher from useDispatchMessage() instead.',
     )
   }
   const parsed = v.safeParse(AppendMessageSchema, message)
   if (!parsed.success) {
     throw new Error(
-      `[flue] append() message is invalid: ${parsed.issues.map(issue => issue.message).join('; ')}.`,
+      `[amond] append() message is invalid: ${parsed.issues.map(issue => issue.message).join('; ')}.`,
     )
   }
   // Reserved types are what lets the runtime treat a reserved-type record as
@@ -130,7 +130,7 @@ export function assertAppendMessage(message: unknown): AgentSignalAppend {
   // filter) — an agent-authored one would corrupt those readers.
   if (RESERVED_SIGNAL_TYPES.has(parsed.output.type)) {
     throw new Error(
-      `[flue] append() signal type "${parsed.output.type}" is framework-reserved vocabulary (the runtime's own narration and recovery signals) — use an application-specific type.`,
+      `[amond] append() signal type "${parsed.output.type}" is framework-reserved vocabulary (the runtime's own narration and recovery signals) — use an application-specific type.`,
     )
   }
   const { type, body, attributes, tagName } = parsed.output
@@ -158,8 +158,8 @@ export function assertAppendMessage(message: unknown): AgentSignalAppend {
  */
 export interface AgentStartContext {
   readonly append: (message: AgentAppendMessage) => void
-  readonly harness: FlueHarness
-  readonly log: FlueLogger
+  readonly harness: AmondHarness
+  readonly log: AmondLogger
   readonly signal: AbortSignal
 }
 
@@ -193,8 +193,8 @@ export interface AgentFinishContext {
     readonly usage: PromptUsage
   }
   readonly append: (message: AgentAppendMessage) => void
-  readonly harness: FlueHarness
-  readonly log: FlueLogger
+  readonly harness: AmondHarness
+  readonly log: AmondLogger
   readonly signal: AbortSignal
 }
 
@@ -244,7 +244,7 @@ export function createAgentOutputChannel(): AgentOutputChannel {
     writeMessageData(name, data) {
       if (!sink) {
         throw new Error(
-          `[flue] Message data "${name}" has no durable runtime behind this render, so writes are unavailable.`,
+          `[amond] Message data "${name}" has no durable runtime behind this render, so writes are unavailable.`,
         )
       }
       sink(name, data)
@@ -280,24 +280,24 @@ export function runResponseMetadataHooks<TCtx>(
     }
     catch (error) {
       throw new Error(
-        `[flue] A ${hookName} callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
+        `[amond] A ${hookName} callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
       )
     }
     if (result === undefined || result === null) { continue }
     if (typeof result !== 'object') {
       throw new Error(
-        `[flue] A ${hookName} callback must return a plain object of metadata (or nothing) — got ${typeof result}.`,
+        `[amond] A ${hookName} callback must return a plain object of metadata (or nothing) — got ${typeof result}.`,
       )
     }
     if (isThenable(result)) {
       throw new Error(
-        `[flue] A ${hookName} callback (hook #${index} in declaration order) returned a promise. Response boundary hooks are synchronous observers of the response envelope — return the metadata object directly. Move async work into useAgentStart/useAgentFinish (awaited lifecycle hooks) or tools.`,
+        `[amond] A ${hookName} callback (hook #${index} in declaration order) returned a promise. Response boundary hooks are synchronous observers of the response envelope — return the metadata object directly. Move async work into useAgentStart/useAgentFinish (awaited lifecycle hooks) or tools.`,
       )
     }
     if (Array.isArray(result)) {
       throw new Error(
-        `[flue] A ${hookName} callback must return a plain object of metadata (or nothing) — got an array.`,
+        `[amond] A ${hookName} callback must return a plain object of metadata (or nothing) — got an array.`,
       )
     }
     current = deepMergeMetadata(current, result)

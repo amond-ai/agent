@@ -12,19 +12,19 @@ import type {
   AgentConversationObservation,
   AgentConversationObservationPhase,
   AgentSendResult,
-  FlueClient,
-  FlueConversationMessage,
-  FlueConversationPart,
-  FlueConversationSettlement,
-  FlueConversationState,
-} from '@flue/sdk'
+  AmondClient,
+  AmondConversationMessage,
+  AmondConversationPart,
+  AmondConversationSettlement,
+  AmondConversationState,
+} from '@amond-ai/agent-sdk'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { useFlueAgent } from './use-agent.ts'
+import { useAmondAgent } from './use-agent.ts'
 
 function stubClient(overrides: { send?: () => Promise<AgentSendResult> } = {}) {
   let phase: AgentConversationObservationPhase = 'loading'
-  let conversation: FlueConversationState | undefined
+  let conversation: AmondConversationState | undefined
   const listeners = new Set<() => void>()
   const observation: AgentConversationObservation = {
     getSnapshot: () => ({ conversation, offset: undefined, phase, error: undefined }),
@@ -43,10 +43,10 @@ function stubClient(overrides: { send?: () => Promise<AgentSendResult> } = {}) {
         ? overrides.send()
         : { submissionId: 'submission-1', streamUrl: '/stream', offset: '0', uid: 'instance-1' }
     },
-  } as unknown as FlueClient
+  } as unknown as AmondClient
   return {
     client,
-    publish(next: FlueConversationState) {
+    publish(next: AmondConversationState) {
       phase = 'live'
       conversation = next
       for (const listener of listeners) { listener() }
@@ -61,8 +61,8 @@ function stubClient(overrides: { send?: () => Promise<AgentSendResult> } = {}) {
 
 function userMessage(
   submissionId: string,
-  overrides: Partial<FlueConversationMessage> = {},
-): FlueConversationMessage {
+  overrides: Partial<AmondConversationMessage> = {},
+): AmondConversationMessage {
   return {
     id: `prompt-${submissionId}`,
     role: 'user',
@@ -76,9 +76,9 @@ function userMessage(
 
 function assistantMessage(
   submissionId: string,
-  parts: FlueConversationPart[],
-  overrides: Partial<FlueConversationMessage> = {},
-): FlueConversationMessage {
+  parts: AmondConversationPart[],
+  overrides: Partial<AmondConversationMessage> = {},
+): AmondConversationMessage {
   return {
     id: `reply-${submissionId}`,
     role: 'assistant',
@@ -93,8 +93,8 @@ function assistantMessage(
 /** A webhook/dispatch/signal message admitted out-of-band (no local send). */
 function dispatchMessage(
   submissionId: string,
-  overrides: Partial<FlueConversationMessage> = {},
-): FlueConversationMessage {
+  overrides: Partial<AmondConversationMessage> = {},
+): AmondConversationMessage {
   return {
     id: `dispatch-${submissionId}`,
     role: 'system',
@@ -107,9 +107,9 @@ function dispatchMessage(
 }
 
 function conversation(
-  messages: FlueConversationMessage[],
-  settlements: FlueConversationSettlement[] = [],
-): FlueConversationState {
+  messages: AmondConversationMessage[],
+  settlements: AmondConversationSettlement[] = [],
+): AmondConversationState {
   return { conversationId: 'demo', messages, settlements }
 }
 
@@ -117,7 +117,7 @@ const tool = { type: 'dynamic-tool', toolName: 'build', toolCallId: 'tool-1', in
 
 const reloadRows: {
   name: string
-  conversation: FlueConversationState
+  conversation: AmondConversationState
   expected: string
 }[] = [
   {
@@ -160,29 +160,29 @@ const reloadRows: {
   },
 ]
 
-describe('useFlueAgent status before a reload', () => {
+describe('useAmondAgent status before a reload', () => {
   it.each(reloadRows)('$name → $expected', async ({ conversation: next, expected }) => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     await act(() => result.current.sendMessage('Build a house'))
     act(() => source.publish(next))
     expect(result.current.status).toBe(expected)
   })
 })
 
-describe('useFlueAgent status after a reload', () => {
+describe('useAmondAgent status after a reload', () => {
   it.each(reloadRows)('$name → $expected', ({ conversation: next, expected }) => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() => source.publish(next))
     expect(result.current.status).toBe(expected)
   })
 })
 
-describe('useFlueAgent status after a reload edge cases', () => {
+describe('useAmondAgent status after a reload edge cases', () => {
   it('reports idle for a failed settlement', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() =>
       source.publish(
         conversation(
@@ -197,7 +197,7 @@ describe('useFlueAgent status after a reload edge cases', () => {
 
   it('reports idle for an aborted settlement', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() =>
       source.publish(
         conversation(
@@ -211,7 +211,7 @@ describe('useFlueAgent status after a reload edge cases', () => {
 
   it('stays streaming when one of several submissions is unsettled', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() =>
       source.publish(
         conversation(
@@ -229,7 +229,7 @@ describe('useFlueAgent status after a reload edge cases', () => {
 
   it('reports idle when a joined submission is settled via answeredBySubmissionId', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() =>
       source.publish(
         conversation(
@@ -254,7 +254,7 @@ describe('useFlueAgent status after a reload edge cases', () => {
 
   it('stays streaming when a joined submission settled but its host is still unsettled', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() =>
       source.publish(
         conversation(
@@ -273,17 +273,17 @@ describe('useFlueAgent status after a reload edge cases', () => {
   })
 })
 
-describe('useFlueAgent status for out-of-band submissions', () => {
+describe('useAmondAgent status for out-of-band submissions', () => {
   it('reports streaming for an unsettled out-of-band submission with no local send', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() => source.publish(conversation([dispatchMessage('dispatch-1')])))
     expect(result.current.status).toBe('streaming')
   })
 
   it('reports idle once an out-of-band submission settles', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() => source.publish(conversation([dispatchMessage('dispatch-1')])))
     expect(result.current.status).toBe('streaming')
     act(() =>
@@ -303,19 +303,19 @@ describe('useFlueAgent status for out-of-band submissions', () => {
   // admitted submission and reports `idle` until its first message appears.
   it('reports idle for an empty conversation snapshot (admitted submission not yet materialized)', () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     act(() => source.publish(conversation([])))
     expect(result.current.status).toBe('idle')
   })
 })
 
-describe('useFlueAgent status aggregate precedence', () => {
+describe('useAmondAgent status aggregate precedence', () => {
   it('pending local send outranks an unsettled out-of-band submission; streaming text outranks both', async () => {
     let admit!: (receipt: AgentSendResult) => void
     const source = stubClient({
       send: () => new Promise(resolve => (admit = resolve)),
     })
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
 
     act(() => void result.current.sendMessage('Build a house'))
     act(() => source.publish(conversation([dispatchMessage('dispatch-1')])))
@@ -341,7 +341,7 @@ describe('useFlueAgent status aggregate precedence', () => {
 
   it('local recollection keeps streaming across an empty or absent observation until settled', async () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     await act(() => result.current.sendMessage('Build a house'))
     // Materialize the local submission (removes the pending echo).
     act(() => source.publish(conversation([userMessage('submission-1')])))
@@ -369,10 +369,10 @@ describe('useFlueAgent status aggregate precedence', () => {
   })
 })
 
-describe('useFlueAgent pre-reload semantics', () => {
+describe('useAmondAgent pre-reload semantics', () => {
   it('pins error on the last settled local submission', async () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     await act(() => result.current.sendMessage('Build a house'))
     act(() =>
       source.publish(
@@ -388,7 +388,7 @@ describe('useFlueAgent pre-reload semantics', () => {
 
   it('reports idle for an aborted local submission', async () => {
     const source = stubClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     await act(() => result.current.sendMessage('Build a house'))
     act(() =>
       source.publish(
@@ -406,7 +406,7 @@ describe('useFlueAgent pre-reload semantics', () => {
     const source = stubClient({
       send: () => new Promise(resolve => (admit = resolve)),
     })
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
 
     act(() => void result.current.sendMessage('Build a house'))
 
@@ -430,7 +430,7 @@ describe('useFlueAgent pre-reload semantics', () => {
 
   it('retains a failed send and pins error until superseded', async () => {
     const source = stubClient({ send: () => Promise.reject(new Error('network down')) })
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
 
     await act(() =>
       expect(result.current.sendMessage('Build a house')).rejects.toThrow('network down'),

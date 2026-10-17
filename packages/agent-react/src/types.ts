@@ -1,8 +1,8 @@
-// Flue's conversation message types are owned by @flue/sdk and consumed
+// amond's conversation message types are owned by @amond-ai/agent-sdk and consumed
 // directly here — React adds optimistic/local state but does not reinterpret
 // canonical part semantics.
 export type {
-  FlueConversationMessage,
-  FlueConversationPart,
-  FlueConversationSettlement,
-} from '@flue/sdk'
+  AmondConversationMessage,
+  AmondConversationPart,
+  AmondConversationSettlement,
+} from '@amond-ai/agent-sdk'

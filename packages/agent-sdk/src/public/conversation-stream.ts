@@ -1,16 +1,16 @@
 import type {
-  FlueConversationMessage,
-  FlueConversationPart,
-  FlueConversationSettlement,
-  FlueConversationSnapshot,
-  FlueConversationState,
+  AmondConversationMessage,
+  AmondConversationPart,
+  AmondConversationSettlement,
+  AmondConversationSnapshot,
+  AmondConversationState,
 } from './conversation.ts'
 
 /**
  * Internal UI projection protocol carried by the agent conversation `updates`
  * view. These chunks are NOT public API: the runtime projects its private
  * canonical conversation log into this strict, UI-only union, and `observe()`
- * reduces it into {@link FlueConversationState}. Application code never sees a
+ * reduces it into {@link AmondConversationState}. Application code never sees a
  * chunk — it consumes materialized messages.
  *
  * The shape intentionally excludes canonical persistence vocabulary (record
@@ -39,13 +39,13 @@ export type ConversationStreamChunk =
   | {
     type: 'conversation-reset'
     conversationId: string
-    snapshot: FlueConversationSnapshot
+    snapshot: AmondConversationSnapshot
     position: ConversationChunkPosition
   }
   | {
     type: 'message-appended'
     conversationId: string
-    message: FlueConversationMessage
+    message: AmondConversationMessage
     position: ConversationChunkPosition
   }
   | {
@@ -128,7 +128,7 @@ export type ConversationStreamChunk =
     submissionId: string
     outcome: 'completed' | 'failed' | 'aborted'
     error?: unknown
-    /** See {@link FlueConversationSettlement.answeredBySubmissionId}. */
+    /** See {@link AmondConversationSettlement.answeredBySubmissionId}. */
     answeredBySubmissionId?: string
     timestamp?: string
     position: ConversationChunkPosition
@@ -223,8 +223,8 @@ export function assertConversationStreamChunk(
 }
 
 export function createConversationStreamState(
-  snapshot: FlueConversationSnapshot,
-): FlueConversationState {
+  snapshot: AmondConversationSnapshot,
+): AmondConversationState {
   return {
     conversationId: snapshot.conversationId,
     messages: snapshot.messages,
@@ -234,9 +234,9 @@ export function createConversationStreamState(
 }
 
 export function applyConversationChunk(
-  state: FlueConversationState,
+  state: AmondConversationState,
   chunk: ConversationStreamChunk,
-): FlueConversationState {
+): AmondConversationState {
   switch (chunk.type) {
     case 'conversation-reset':
       return createConversationStreamState(chunk.snapshot)
@@ -267,7 +267,7 @@ export function applyConversationChunk(
       return mutateMessages(state, (messages) => {
         const index = messages.findIndex(message => message.id === chunk.messageId)
         if (index < 0) { return messages }
-        const message = messages[index] as FlueConversationMessage
+        const message = messages[index] as AmondConversationMessage
         const next = [...messages]
         next[index] = {
           ...message,
@@ -279,7 +279,7 @@ export function applyConversationChunk(
       return mutateMessages(state, (messages) => {
         const index = messages.findIndex(message => message.id === chunk.messageId)
         if (index < 0) { return messages }
-        const message = messages[index] as FlueConversationMessage
+        const message = messages[index] as AmondConversationMessage
         const partType = `data-${chunk.name}` as const
         const partIndex = message.parts.findIndex(part => part.type === partType)
         // The name is the part's identity within the response: the first
@@ -334,18 +334,18 @@ export function applyConversationChunk(
 }
 
 function mutateMessages(
-  state: FlueConversationState,
-  update: (messages: FlueConversationMessage[]) => FlueConversationMessage[],
-): FlueConversationState {
+  state: AmondConversationState,
+  update: (messages: AmondConversationMessage[]) => AmondConversationMessage[],
+): AmondConversationState {
   const messages = update(state.messages)
   if (messages === state.messages) { return state }
   return { ...state, messages }
 }
 
 function upsertMessage(
-  messages: FlueConversationMessage[],
-  message: FlueConversationMessage,
-): FlueConversationMessage[] {
+  messages: AmondConversationMessage[],
+  message: AmondConversationMessage,
+): AmondConversationMessage[] {
   const index = messages.findIndex(value => value.id === message.id)
   if (index < 0) { return [...messages, message] }
   const next = [...messages]
@@ -362,13 +362,13 @@ function upsertMessage(
  * one part — block identity within a single kind is not represented on the wire.
  */
 function appendDelta(
-  state: FlueConversationState,
+  state: AmondConversationState,
   chunk: Extract<ConversationStreamChunk, { type: 'message-delta' }>,
-): FlueConversationState {
+): AmondConversationState {
   return mutateMessages(state, (messages) => {
     const index = messages.findIndex(message => message.id === chunk.messageId)
     if (index < 0) { return messages }
-    const message = messages[index] as FlueConversationMessage
+    const message = messages[index] as AmondConversationMessage
     const last = message.parts[message.parts.length - 1]
     const parts = [...message.parts]
     if (last && last.type === chunk.kind && last.state === 'streaming') {
@@ -391,13 +391,13 @@ function appendDelta(
 }
 
 function appendToolInput(
-  state: FlueConversationState,
+  state: AmondConversationState,
   chunk: Extract<ConversationStreamChunk, { type: 'tool-input' }>,
-): FlueConversationState {
+): AmondConversationState {
   return mutateMessages(state, (messages) => {
     const index = messages.findIndex(message => message.id === chunk.messageId)
     if (index < 0) { return messages }
-    const message = messages[index] as FlueConversationMessage
+    const message = messages[index] as AmondConversationMessage
     if (
       message.parts.some(
         part => part.type === 'dynamic-tool' && part.toolCallId === chunk.toolCallId,
@@ -434,16 +434,16 @@ function appendToolInput(
 }
 
 function applyToolResult(
-  state: FlueConversationState,
+  state: AmondConversationState,
   toolCallId: string,
-  update: (part: Extract<FlueConversationPart, { type: 'dynamic-tool' }>) => FlueConversationPart,
-): FlueConversationState {
+  update: (part: Extract<AmondConversationPart, { type: 'dynamic-tool' }>) => AmondConversationPart,
+): AmondConversationState {
   return mutateMessages(state, (messages) => {
     const index = messages.findLastIndex(message =>
       message.parts.some(part => part.type === 'dynamic-tool' && part.toolCallId === toolCallId),
     )
     if (index < 0) { return messages }
-    const message = messages[index] as FlueConversationMessage
+    const message = messages[index] as AmondConversationMessage
     const next = [...messages]
     next[index] = {
       ...message,
@@ -455,11 +455,11 @@ function applyToolResult(
   })
 }
 
-function completeMessage(state: FlueConversationState, messageId: string): FlueConversationState {
+function completeMessage(state: AmondConversationState, messageId: string): AmondConversationState {
   return mutateMessages(state, (messages) => {
     const index = messages.findIndex(message => message.id === messageId)
     if (index < 0) { return messages }
-    const message = messages[index] as FlueConversationMessage
+    const message = messages[index] as AmondConversationMessage
     const next = [...messages]
     next[index] = {
       ...message,
@@ -494,10 +494,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function applySettlement(
-  state: FlueConversationState,
+  state: AmondConversationState,
   chunk: Extract<ConversationStreamChunk, { type: 'submission-settled' }>,
-): FlueConversationState {
-  const settlement: FlueConversationSettlement = {
+): AmondConversationState {
+  const settlement: AmondConversationSettlement = {
     submissionId: chunk.submissionId,
     outcome: chunk.outcome,
     ...(chunk.error === undefined ? {} : { error: chunk.error }),

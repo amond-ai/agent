@@ -11,7 +11,7 @@
  * - Submission-scoped helpers ({@link observeSubmissionSettlement},
  *   {@link readSubmissionReply}) for callers that admit a direct submission
  *   in-process and want its outcome and reply without any transport: the
- *   CLI's `flue run` and the programmatic agent client.
+ *   CLI's `amond run` and the programmatic agent client.
  */
 
 import { getConversationFoldHost } from '../conversation-fold-host.ts'

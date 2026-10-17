@@ -64,16 +64,16 @@ export function registerBuiltinProviderModule(id: string, moduleNamespace: objec
   if (!factory) {
     const found = factories.map(([name]) => name).join(', ')
     throw new Error(
-      `[flue] "@earendil-works/pi-ai/providers/${id}" is not a single-provider module: ` +
+      `[amond] "@earendil-works/pi-ai/providers/${id}" is not a single-provider module: ` +
       `expected exactly one exported \`*Provider\` factory, found ${factories.length === 0 ? 'none' : found}. ` +
-      `Check the \`providers\` entry "${id}" in your flue() config.`,
+      `Check the \`providers\` entry "${id}" in your amond() config.`,
     )
   }
   const provider = (factory[1] as () => Provider)()
   if (provider?.id !== id) {
     throw new Error(
-      `[flue] "@earendil-works/pi-ai/providers/${id}" registered provider ID ` +
-      `"${provider?.id}" instead of "${id}". Check the \`providers\` entry in your flue() config.`,
+      `[amond] "@earendil-works/pi-ai/providers/${id}" registered provider ID ` +
+      `"${provider?.id}" instead of "${id}". Check the \`providers\` entry in your amond() config.`,
     )
   }
   setProvider(provider)
@@ -112,7 +112,7 @@ export function providerTelemetryName(providerId: string): string {
  * from it when the ID isn't declared — Workers AI regularly ships model IDs
  * pi-ai's catalog doesn't know yet, and the binding accepts arbitrary IDs.
  */
-export const DYNAMIC_MODEL_TEMPLATE = Symbol.for('flue.dynamicModelTemplate')
+export const DYNAMIC_MODEL_TEMPLATE = Symbol.for('amond.dynamicModelTemplate')
 
 interface DynamicModelTemplate {
   api: Api
@@ -132,7 +132,7 @@ type ProviderWithDynamicModels = Provider & {
  * which `shouldCompact` already treats as "unknown". Use {@link isDynamicModel}
  * to tell "free" apart from "not yet known" when reading cost or budgeting.
  */
-export const DYNAMIC_MODEL_MARKER = Symbol.for('flue.dynamicModelMarker')
+export const DYNAMIC_MODEL_MARKER = Symbol.for('amond.dynamicModelMarker')
 
 /** True when `model` was synthesized from a dynamic model template. */
 export function isDynamicModel(model: Model<Api>): boolean {
@@ -145,9 +145,9 @@ function warnDynamicModelSynthesis(providerId: string, modelId: string): void {
   if (warnedAboutDynamicModelSynthesis) { return }
   warnedAboutDynamicModelSynthesis = true
   console.warn(
-    `[flue] Model "${providerId}/${modelId}" is not in the provider's catalog and was ` +
+    `[amond] Model "${providerId}/${modelId}" is not in the provider's catalog and was ` +
     `synthesized from a dynamic model template. Its cost reads as $0 and it has no known ` +
-    `context window — detect such models with isDynamicModel() from "@flue/runtime".`,
+    `context window — detect such models with isDynamicModel() from "@amond-ai/agent".`,
   )
 }
 
@@ -195,7 +195,7 @@ export function resolveModel(model: string): Model<Api> {
   const slash = modelSpecifier.indexOf('/')
   if (slash === -1) {
     throw new Error(
-      `[flue] Invalid model specifier "${modelSpecifier}". ` +
+      `[amond] Invalid model specifier "${modelSpecifier}". ` +
       `Use the "provider-id/model-id" format (e.g. "anthropic/claude-haiku-4-5").`,
     )
   }
@@ -209,17 +209,17 @@ export function resolveModel(model: string): Model<Api> {
       .map(registered => registered.id)
       .sort()
     throw new Error(
-      `[flue] Unknown provider "${providerId}" in model specifier "${modelSpecifier}". ${ 
+      `[amond] Unknown provider "${providerId}" in model specifier "${modelSpecifier}". ${ 
         registered.length > 0
           ? `Registered providers: ${registered.join(', ')}. `
           : 'No providers are registered. ' 
-      }Include built-in providers via the \`providers\` option of the flue() Vite plugin, ` +
+      }Include built-in providers via the \`providers\` option of the amond() Vite plugin, ` +
       `or register one with setProvider() in app.ts.`,
     )
   }
   if (modelId === '') {
     throw new Error(
-      `[flue] Invalid model specifier "${modelSpecifier}". ` +
+      `[amond] Invalid model specifier "${modelSpecifier}". ` +
       `Provider "${providerId}" is registered, but no model ID was given. ` +
       `Use "${providerId}/<model-id>".`,
     )
@@ -238,7 +238,7 @@ export function resolveModel(model: string): Model<Api> {
   }
 
   throw new Error(
-    `[flue] Unknown model ID "${modelId}" for provider "${providerId}". ` +
+    `[amond] Unknown model ID "${modelId}" for provider "${providerId}". ` +
     `Declared model IDs: ${listModelIds(providerId)}.`,
   )
 }
@@ -287,7 +287,7 @@ function resolveVersionSeparatorAlias(providerId: string, modelId: string): Mode
   if (!warnedVersionSeparatorAliases.has(requested)) {
     warnedVersionSeparatorAliases.add(requested)
     console.warn(
-      `[flue] Model "${requested}" is not in the provider's catalog; using ` +
+      `[amond] Model "${requested}" is not in the provider's catalog; using ` +
       `"${providerId}/${model.id}", which differs only in version separators. ` +
       `Update the specifier to "${providerId}/${model.id}".`,
     )

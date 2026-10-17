@@ -34,25 +34,25 @@ export function useModel(model: string, options: UseModelOptions = {}): void {
   const frame = requireRenderFrame('useModel')
   if (frame.kind === 'subagent') {
     throw new Error(
-      '[flue] useModel() is not available in a subagent render. A delegate declares its model on its useSubagent() definition.',
+      '[amond] useModel() is not available in a subagent render. A delegate declares its model on its useSubagent() definition.',
     )
   }
   if (frame.model !== undefined) {
     throw new Error(
-      '[flue] useModel() was called twice in one render. An agent has one model; call useModel() exactly once (compute the specifier before the call if it depends on state).',
+      '[amond] useModel() was called twice in one render. An agent has one model; call useModel() exactly once (compute the specifier before the call if it depends on state).',
     )
   }
   if (typeof model !== 'string' || model.trim().length === 0) {
     throw new Error(
-      '[flue] useModel() requires a model specifier string, like \'anthropic/claude-sonnet-4-6\'.',
+      '[amond] useModel() requires a model specifier string, like \'anthropic/claude-sonnet-4-6\'.',
     )
   }
   if (options === null || typeof options !== 'object' || Array.isArray(options)) {
-    throw new Error('[flue] useModel() options must be an object.')
+    throw new Error('[amond] useModel() options must be an object.')
   }
   for (const key of Object.keys(options)) {
     if (key !== 'thinkingLevel' && key !== 'compaction') {
-      throw new Error(`[flue] useModel() options received unknown field "${key}".`)
+      throw new Error(`[amond] useModel() options received unknown field "${key}".`)
     }
   }
   assertThinkingLevel(options.thinkingLevel, 'useModel() options')

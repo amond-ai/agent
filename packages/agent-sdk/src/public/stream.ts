@@ -1,5 +1,5 @@
 /**
- * Typed Durable Streams wrapper for Flue conversation-stream consumption.
+ * Typed Durable Streams wrapper for amond conversation-stream consumption.
  *
  * Wraps `@durable-streams/client` to provide an {@link AsyncIterable} of
  * {@link ConversationStreamChunk} values with automatic reconnection,
@@ -24,7 +24,7 @@
  *   the reconnect resumes from there → redelivery, deduped by position.
  * - `subscribeJson` awaits its subscriber, and this wrapper's subscriber
  *   resolves only after the batch's last event has been yielded — so
- *   {@link FlueEventStream.offset} (the consumer-facing checkpoint) advances
+ *   {@link AmondEventStream.offset} (the consumer-facing checkpoint) advances
  *   per *fully delivered* batch, never past one still being applied.
  * - Nothing fails silently inside a connection: a truncated JSON payload or
  *   a mid-body failure errors the stream loudly, and `observe()` recovers by
@@ -41,7 +41,7 @@ import { stream } from '@durable-streams/client'
 import type { ConversationStreamChunk } from './conversation-stream.ts'
 
 /** Options for streaming conversation chunks from an agent instance. */
-export interface FlueStreamOptions {
+export interface AmondStreamOptions {
   /** Starting offset. Defaults to `'-1'` (full history). */
   offset?: string
   /** Live tailing mode. Defaults to `true` (long-poll). */
@@ -58,7 +58,7 @@ export interface FlueStreamOptions {
  * Supports `for await...of` and explicit {@link cancel}. Breaking out of a
  * `for await` loop automatically cleans up the underlying connection.
  */
-export interface FlueEventStream<T = ConversationStreamChunk> extends AsyncIterable<T> {
+export interface AmondEventStream<T = ConversationStreamChunk> extends AsyncIterable<T> {
   /** Cancel the stream and abort the underlying connection. */
   cancel(reason?: unknown): void
   /**
@@ -72,7 +72,7 @@ export interface FlueEventStream<T = ConversationStreamChunk> extends AsyncItera
   readonly offset: string
 }
 
-/** Internal options passed by the FlueClient to configure the DS connection. */
+/** Internal options passed by the AmondClient to configure the DS connection. */
 export interface StreamConnectionOptions {
   /** Full URL of the stream endpoint. */
   url: string
@@ -89,7 +89,7 @@ export interface StreamConnectionOptions {
 }
 
 /**
- * Creates a {@link FlueEventStream} that yields individual values from a
+ * Creates a {@link AmondEventStream} that yields individual values from a
  * Durable Streams endpoint.
  *
  * Consumes the DS client's `subscribeJson()` batches and yields events one at
@@ -104,11 +104,11 @@ export interface StreamConnectionOptions {
  * caller supplies the validator for its element type (e.g. the SDK client
  * validates `ConversationStreamChunk`).
  */
-export function createFlueEventStream<T = ConversationStreamChunk>(
-  streamOpts: FlueStreamOptions,
+export function createAmondEventStream<T = ConversationStreamChunk>(
+  streamOpts: AmondStreamOptions,
   connectionOpts: StreamConnectionOptions,
   validate: (value: T) => T,
-): FlueEventStream<T> {
+): AmondEventStream<T> {
   const abortController = new AbortController()
 
   // Link external signal to our controller. Store the handler so we can

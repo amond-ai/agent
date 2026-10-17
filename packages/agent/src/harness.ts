@@ -4,7 +4,7 @@ import { SUBMISSION_HARNESS_NAME, SUBMISSION_SESSION_NAME } from './adapter-help
 import { discoverSessionContext } from './context.ts'
 import type { ConversationRecordWriter } from './conversation-writer.ts'
 import { SessionNotFoundError } from './errors.ts'
-import type { FlueExecutionContext } from './execution-interceptor.ts'
+import type { AmondExecutionContext } from './execution-interceptor.ts'
 import { EMPTY_HARNESS_TOOL_LINEAGE } from './harness-tool-lineage.ts'
 import type { HarnessToolLineage } from './harness-tool-lineage.ts'
 import type { HookStateBuffer } from './hooks/use-persistent-state.ts'
@@ -27,11 +27,11 @@ import {
 } from './session-identity.ts'
 import type {
   AgentConfig,
+  AmondEventInputCallback,
+  AmondHarness,
+  AmondSession,
   CallHandle,
   DeliveredMessage,
-  FlueEventInputCallback,
-  FlueHarness,
-  FlueSession,
   PromptOptions,
   PromptResponse,
   PromptResultResponse,
@@ -49,7 +49,7 @@ export interface HarnessOptions {
   config: AgentConfig
   /** Initial environment (or none); wrapped in a fresh env slot unless `envSlot` is provided. */
   env: Sandbox | undefined
-  eventCallback?: FlueEventInputCallback
+  eventCallback?: AmondEventInputCallback
   agentTools: ToolDefinition[]
   /** Harness tools already active on this delegation branch. */
   activeHarnessTools?: HarnessToolLineage
@@ -58,7 +58,7 @@ export interface HarnessOptions {
   toolFactory?: SandboxToolFactory
   conversationWriter: ConversationRecordWriter
   attachmentStore: AttachmentStore
-  executionContext?: FlueExecutionContext
+  executionContext?: AmondExecutionContext
   scopeName?: string
   scopeDepth?: number
   retainSession?: (
@@ -98,7 +98,7 @@ export interface HarnessOptions {
   envRuntime?: SandboxRuntime
 }
 
-export class Harness implements FlueHarness {
+export class Harness implements AmondHarness {
   /**
    * The agent's CURRENT environment — the live {@link Sandbox} behind the
    * shared env slot. A live getter, not a snapshot: a conditional
@@ -112,7 +112,7 @@ export class Harness implements FlueHarness {
     const env = this.envSlot.env
     if (!env) {
       throw new Error(
-        '[flue] This agent has no sandbox. Declare one with useSandbox() to use shell and filesystem operations.',
+        '[amond] This agent has no sandbox. Declare one with useSandbox() to use shell and filesystem operations.',
       )
     }
     return env
@@ -133,13 +133,13 @@ export class Harness implements FlueHarness {
 
   readonly name: string
   private config: AgentConfig
-  private eventCallback: FlueEventInputCallback | undefined
+  private eventCallback: AmondEventInputCallback | undefined
   private agentTools: ToolDefinition[]
   private activeHarnessTools: HarnessToolLineage
   private mcpUnavailable: McpUnavailableConnection[]
   private conversationWriter: ConversationRecordWriter
   private attachmentStore: AttachmentStore
-  private executionContext: FlueExecutionContext
+  private executionContext: AmondExecutionContext
   private scopeName: string | undefined
   private scopeDepth: number
   private retainSession: HarnessOptions['retainSession']
@@ -189,10 +189,10 @@ export class Harness implements FlueHarness {
 
   /**
    * Get or create a session by name (defaults to `'default'`). Not part of
-   * the public {@link FlueHarness} surface — the flattened `prompt`/`compact`
+   * the public {@link AmondHarness} surface — the flattened `prompt`/`compact`
    * methods below drive the default session.
    */
-  async session(name?: string): Promise<FlueSession> {
+  async session(name?: string): Promise<AmondSession> {
     return this.openSession(name)
   }
 
@@ -218,7 +218,7 @@ export class Harness implements FlueHarness {
    */
   private defaultSessionCall<T>(
     external: AbortSignal | undefined,
-    run: (session: FlueSession, signal: AbortSignal) => CallHandle<T>,
+    run: (session: AmondSession, signal: AbortSignal) => CallHandle<T>,
   ): CallHandle<T> {
     const merged = external
       ? AbortSignal.any([external, this.scopeAbortController.signal])
@@ -229,12 +229,12 @@ export class Harness implements FlueHarness {
     })
   }
 
-  private async openSession(name?: string): Promise<FlueSession> {
+  private async openSession(name?: string): Promise<AmondSession> {
     const sessionName = normalizeSessionName(name)
     assertPublicSessionName(sessionName)
     const session = await this.runSessionOperation(sessionName, () =>
       this.loadSession(sessionName))
-    // User code only ever receives the FlueSession facade; the internal
+    // User code only ever receives the AmondSession facade; the internal
     // Session (durable submission executor, abort/close, metadata) stays
     // runtime-owned.
     return createPublicSession(session)
@@ -273,7 +273,7 @@ export class Harness implements FlueHarness {
         sessionName === SUBMISSION_SESSION_NAME
       ) {
         throw new Error(
-          '[flue] Instance identity must exist before execution — admission creates it.',
+          '[amond] Instance identity must exist before execution — admission creates it.',
         )
       }
       const identity = createConversationIdentity()
@@ -353,7 +353,7 @@ export class Harness implements FlueHarness {
         ? this.config.resolveModel(taskAgent.model)
         : this.config.model
     if (!taskModel) {
-      throw new Error(`[flue] Subagent model "${taskAgent?.model}" could not be resolved.`)
+      throw new Error(`[amond] Subagent model "${taskAgent?.model}" could not be resolved.`)
     }
     const taskConfig: AgentConfig = {
       ...this.config,
@@ -378,7 +378,7 @@ export class Harness implements FlueHarness {
     const conversationId =
       options.existing?.conversationId ??
       (await this.createChildConversation(options, harnessScope, sessionName, taskAgent))
-    const eventCallback: FlueEventInputCallback | undefined = this.eventCallback
+    const eventCallback: AmondEventInputCallback | undefined = this.eventCallback
       ? (event, observation) => {
           this.eventCallback?.(
             {
@@ -500,8 +500,8 @@ export class Harness implements FlueHarness {
   }
 
   private decorateEventCallback(
-    callback: FlueEventInputCallback | undefined,
-  ): FlueEventInputCallback | undefined {
+    callback: AmondEventInputCallback | undefined,
+  ): AmondEventInputCallback | undefined {
     return callback
       ? (event, observation) => {
           callback({ ...event, harness: event.harness ?? this.name }, observation)

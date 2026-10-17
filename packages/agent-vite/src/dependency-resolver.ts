@@ -3,17 +3,17 @@
  * ported from the CLI's build pipeline (packages/cli/src/lib/build.ts, which
  * keeps its own copy until Phase 6).
  *
- * The invariant this file protects: exactly ONE `@flue/runtime` instance in
+ * The invariant this file protects: exactly ONE `@amond-ai/agent` instance in
  * the loaded application graph. The runtime keeps module-scoped registries
  * (agent registration, runtime config, providers), so a second copy — e.g.
- * `@flue/vite`'s own nested install resolved from the bootstrap modules —
+ * `@amond-ai/agent-vite`'s own nested install resolved from the bootstrap modules —
  * would split the app's state in half. Every bare specifier the bootstrap
  * graph imports is therefore resolved through an explicit `node_modules`
  * chain seeded from the *project root first*, so the user's install always
  * wins.
  *
  * In a build, user dependencies and Node builtins are externalized (see
- * {@link getUserExternals}) while `@flue/runtime` is bundled into
+ * {@link getUserExternals}) while `@amond-ai/agent` is bundled into
  * `server.mjs`. In dev, the resolver marks its resolutions `external` so the
  * SSR module runner imports the canonical files natively.
  */
@@ -25,7 +25,7 @@ import type { Plugin } from 'vite'
 
 /**
  * Externalize the user's direct deps (bare name + subpath wildcard) in the
- * production build. `@flue/runtime` and `debug` are bundled into the
+ * production build. `@amond-ai/agent` and `debug` are bundled into the
  * generated entry even when the user lists them.
  */
 export function getUserExternals(root: string): string[] {
@@ -34,7 +34,7 @@ export function getUserExternals(root: string): string[] {
 
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-    const bundledGeneratedEntryDependencies = new Set(['@flue/runtime', 'debug'])
+    const bundledGeneratedEntryDependencies = new Set(['@amond-ai/agent', 'debug'])
     const deps = Object.keys({
       ...pkg.dependencies,
       ...pkg.devDependencies,
@@ -59,9 +59,9 @@ function findPackageJson(startDir: string): string | undefined {
 }
 
 /**
- * Mutable state shared with the core `flue` plugin, which fills it in during
+ * Mutable state shared with the core `amond` plugin, which fills it in during
  * Vite config resolution (the project root and the dev/build mode aren't
- * known when `flue()` constructs its plugin array).
+ * known when `amond()` constructs its plugin array).
  */
 export interface DependencyResolverState {
   /** Absolute project root; unset until the core plugin resolves config. */
@@ -69,7 +69,7 @@ export interface DependencyResolverState {
   /** Mark resolutions external (dev SSR) instead of bundling them (build). */
   external: boolean
   /**
-   * Restrict resolution to these importers. `@flue/runtime`(/*),
+   * Restrict resolution to these importers. `@amond-ai/agent`(/*),
    * `@hono/node-server`, and `debug` are always canonicalized regardless of
    * importer, because a second runtime instance anywhere in the graph breaks
    * the module-scoped registries.
@@ -82,20 +82,20 @@ export interface DependencyResolverState {
  * the seeded `node_modules` chain ({@link collectNodePaths}). Ported from the
  * CLI's `viteGeneratedEntryDependencyResolver`.
  */
-export function flueDependencyResolverPlugin(state: DependencyResolverState): Plugin {
+export function amondDependencyResolverPlugin(state: DependencyResolverState): Plugin {
   let resolvers: NodeJS.Require[] | undefined
   let resolversRoot: string | undefined
   const getResolvers = (root: string): NodeJS.Require[] => {
     if (!resolvers || resolversRoot !== root) {
       resolversRoot = root
       resolvers = [...collectNodePaths(root)].map(nodePath =>
-        createRequire(path.join(nodePath, '__flue_vite_resolve__.mjs')),
+        createRequire(path.join(nodePath, '__amond_vite_resolve__.mjs')),
       )
     }
     return resolvers
   }
   return {
-    name: 'flue-generated-entry-dependency-resolver',
+    name: 'amond-generated-entry-dependency-resolver',
     enforce: 'pre',
     resolveId(source: string, importer?: string) {
       const root = state.root
@@ -103,8 +103,8 @@ export function flueDependencyResolverPlugin(state: DependencyResolverState): Pl
       if (
         state.importers &&
         (!importer || !state.importers.includes(importer)) &&
-        source !== '@flue/runtime' &&
-        !source.startsWith('@flue/runtime/') &&
+        source !== '@amond-ai/agent' &&
+        !source.startsWith('@amond-ai/agent/') &&
         source !== '@hono/node-server' &&
         source !== 'debug'
       ) { return null }
@@ -138,10 +138,10 @@ export function flueDependencyResolverPlugin(state: DependencyResolverState): Pl
 function collectNodePaths(root: string): Set<string> {
   const nodePathsSet = new Set<string>()
   // Walk up from the project root (user's deps), this package's own location
-  // (so workspace-linked installs reach `@flue/vite`'s helpers), and
-  // `@flue/runtime`'s install location as resolved from the project. The
+  // (so workspace-linked installs reach `@amond-ai/agent-vite`'s helpers), and
+  // `@amond-ai/agent`'s install location as resolved from the project. The
   // latter is what surfaces the runtime deps (`@hono/node-server`, `hono`,
-  // `pi-ai`, etc.) that the generated `server.mjs` imports — `@flue/runtime`
+  // `pi-ai`, etc.) that the generated `server.mjs` imports — `@amond-ai/agent`
   // is the package that lists them, so the Vite build must be able to reach
   // its `node_modules/` subtree.
   const seeds = [root, getPackageDir()]
@@ -163,19 +163,19 @@ function getPackageDir(): string {
 }
 
 /**
- * Resolve the install directory of `@flue/runtime` as seen from the project
- * `root`. We walk up from `root` looking for `node_modules/@flue/runtime` —
- * `require.resolve` would be cleaner, but `@flue/runtime`'s `package.json`
+ * Resolve the install directory of `@amond-ai/agent` as seen from the project
+ * `root`. We walk up from `root` looking for `node_modules/@amond-ai/agent` —
+ * `require.resolve` would be cleaner, but `@amond-ai/agent`'s `package.json`
  * isn't part of the package's `exports` map and its subpaths are ESM-only,
  * both of which trip up `createRequire`. Walking the `node_modules` chain is
  * what npm/pnpm/yarn all do internally for resolution anyway. Returns the
  * package directory, or `undefined` if the project doesn't have
- * `@flue/runtime` installed yet.
+ * `@amond-ai/agent` installed yet.
  */
 function resolveRuntimeDir(root: string): string | undefined {
   let dir = root
   while (dir !== path.dirname(dir)) {
-    const candidate = path.join(dir, 'node_modules', '@flue', 'runtime')
+    const candidate = path.join(dir, 'node_modules', '@amond-ai', 'agent')
     if (fs.existsSync(candidate)) { return candidate }
     dir = path.dirname(dir)
   }

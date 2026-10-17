@@ -7,16 +7,16 @@
  *
  * Contract: the result always serializes to valid JSON, the serialized form
  * fits the byte budget, what was removed is represented inside the payload
- * itself by `[flue]`-prefixed sentinels (the greppable marker that replaces
+ * itself by `[amond]`-prefixed sentinels (the greppable marker that replaces
  * side-channel `*.truncated` attributes), and the input value is never
  * mutated.
  */
 
 const ENCODER = new TextEncoder()
 
-export const CONTENT_UNSERIALIZABLE = '[flue] content unserializable'
-export const CONTENT_TRANSFORM_FAILED = '[flue] content transform failed; content omitted'
-export const CONTENT_BUDGET_EXCEEDED = '[flue] content exceeds attribute budget'
+export const CONTENT_UNSERIALIZABLE = '[amond] content unserializable'
+export const CONTENT_TRANSFORM_FAILED = '[amond] content transform failed; content omitted'
+export const CONTENT_BUDGET_EXCEEDED = '[amond] content exceeds attribute budget'
 
 /** Sentinels must themselves fit, so pathologically small budgets are refused. */
 export const MIN_BUDGET_BYTES = 128
@@ -67,7 +67,7 @@ function truncateString(value: string, budget: number): string {
     const mid = Math.floor((low + high) / 2)
     const prefix = safeSlice(value, mid)
     const dropped = totalBytes - ENCODER.encode(prefix).byteLength
-    const candidate = `${prefix} [flue:truncated, ${dropped} more bytes]`
+    const candidate = `${prefix} [amond:truncated, ${dropped} more bytes]`
     if (ENCODER.encode(JSON.stringify(candidate)).byteLength <= budget) {
       best = candidate
       low = mid + 1
@@ -76,7 +76,7 @@ function truncateString(value: string, budget: number): string {
       high = mid - 1
     }
   }
-  return best ?? `[flue:truncated, ${totalBytes} bytes]`
+  return best ?? `[amond:truncated, ${totalBytes} bytes]`
 }
 
 /** Slice that never ends on the high half of a surrogate pair. */
@@ -257,14 +257,14 @@ function isOutputMessageArray(value: unknown[]): boolean {
  */
 function diagnosticMessage(diagnostic: string, outputShaped: boolean): unknown {
   return {
-    role: 'flue',
+    role: 'amond',
     ...(outputShaped ? { finish_reason: 'error' } : {}),
     parts: [{ type: 'text', content: diagnostic }],
   }
 }
 
 /**
- * `role: 'flue'` is deliberate: honest, filterable, and never confused with a
+ * `role: 'amond'` is deliberate: honest, filterable, and never confused with a
  * real conversation turn. Output-message fallbacks keep the schema's required
  * `finish_reason`.
  */
@@ -274,10 +274,10 @@ function sentinelItem(
   count: number,
   bytes: number,
 ): unknown {
-  const text = `[flue] ${count} ${messageShaped ? 'messages' : 'items'} omitted (${bytes} bytes) to fit the attribute budget`
+  const text = `[amond] ${count} ${messageShaped ? 'messages' : 'items'} omitted (${bytes} bytes) to fit the attribute budget`
   if (!messageShaped) { return text }
   return {
-    role: 'flue',
+    role: 'amond',
     ...(outputShaped ? { finish_reason: 'error' } : {}),
     parts: [{ type: 'text', content: text }],
   }

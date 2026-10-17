@@ -3,7 +3,7 @@ import type { SqlStorage } from './sql-storage.ts'
 
 export function ensureSqlSubmissionChunkTable(sql: SqlStorage): void {
   sql.exec(
-    `CREATE TABLE IF NOT EXISTS flue_submission_chunks (
+    `CREATE TABLE IF NOT EXISTS amond_submission_chunks (
 		 submission_id TEXT NOT NULL,
 		 item_id TEXT NOT NULL,
 		 chunk_index INTEGER NOT NULL,
@@ -20,7 +20,7 @@ export function createSqlSubmissionChunkStore(sql: SqlStorage): SubmissionChunkS
       return sql
         .exec(
           `SELECT item_id, chunk_index, chunk_count, data
-					 FROM flue_submission_chunks
+					 FROM amond_submission_chunks
 					 WHERE submission_id = ?
 					 ORDER BY item_id, chunk_index`,
           submissionId,
@@ -29,7 +29,7 @@ export function createSqlSubmissionChunkStore(sql: SqlStorage): SubmissionChunkS
         .map(parseChunkRow)
     },
     replace(submissionId, chunks) {
-      sql.exec('DELETE FROM flue_submission_chunks WHERE submission_id = ?', submissionId)
+      sql.exec('DELETE FROM amond_submission_chunks WHERE submission_id = ?', submissionId)
       insertChunks(sql, submissionId, chunks)
     },
   }
@@ -44,7 +44,7 @@ function parseChunkRow(row: Record<string, unknown>): SubmissionChunkRow {
     !Number.isInteger(row.chunk_count) ||
     typeof row.data !== 'string'
   ) {
-    throw new Error('[flue] Persisted submission chunk row is malformed.')
+    throw new Error('[amond] Persisted submission chunk row is malformed.')
   }
   return {
     itemId: row.item_id,
@@ -61,7 +61,7 @@ function insertChunks(
 ): void {
   for (const chunk of chunks) {
     sql.exec(
-      `INSERT INTO flue_submission_chunks
+      `INSERT INTO amond_submission_chunks
 			 (submission_id, item_id, chunk_index, chunk_count, data)
 			 VALUES (?, ?, ?, ?, ?)`,
       submissionId,

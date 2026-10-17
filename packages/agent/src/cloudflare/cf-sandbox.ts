@@ -7,9 +7,9 @@ import type { Sandbox, SandboxFactory } from '../types.ts'
 
 /**
  * Minimal structural surface of a `@cloudflare/sandbox` Durable Object stub
- * (the value returned by `getSandbox()`). Kept structural so `@flue/runtime`
+ * (the value returned by `getSandbox()`). Kept structural so `@amond-ai/agent`
  * does not depend on `@cloudflare/sandbox` and stays importable on Node;
- * only the methods Flue calls are listed. A wrong object fails loudly on
+ * only the methods amond calls are listed. A wrong object fails loudly on
  * the first method call.
  */
 export interface CloudflareSandboxStub {
@@ -41,13 +41,13 @@ export interface CloudflareSandboxOptions {
 }
 
 /**
- * Wrap a Cloudflare Sandbox Durable Object stub into a Flue
+ * Wrap a Cloudflare Sandbox Durable Object stub into an amond
  * {@link SandboxFactory}:
  *
  * ```ts
  * import { getSandbox } from '@cloudflare/sandbox';
  * import { env } from 'cloudflare:workers';
- * import { cloudflareSandbox } from '@flue/runtime/cloudflare';
+ * import { cloudflareSandbox } from '@amond-ai/agent/cloudflare';
  *
  * export function MyAgent({ id }: AgentProps) {
  *   useSandbox(cloudflareSandbox(getSandbox(env.Sandbox, id)));

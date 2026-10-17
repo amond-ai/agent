@@ -17,7 +17,7 @@
  * span's content can never collectively exhaust workerd's aggregate span
  * budget and knock out the operational attributes recorded after it.
  */
-import type { FlueObservation } from '../types.ts'
+import type { AmondObservation } from '../types.ts'
 import {
   CONTENT_TRANSFORM_FAILED,
   CONTENT_UNSERIALIZABLE,
@@ -38,7 +38,7 @@ export type GenAIContentType =
 
 export interface GenAIContentScope {
   contentType: GenAIContentType
-  eventType: FlueObservation['type']
+  eventType: AmondObservation['type']
   agentName?: string
   harness?: string
   session?: string
@@ -49,7 +49,7 @@ export interface GenAIContentScope {
   operationId?: string
   turnId?: string
   taskId?: string
-  /** Supplied by `@flue/opentelemetry` from the span context; absent on the Cloudflare backend (platform spans expose no ids). */
+  /** Supplied by an OpenTelemetry adapter from the span context; absent on the Cloudflare backend (platform spans expose no ids). */
   traceId?: string
   spanId?: string
 }
@@ -133,7 +133,7 @@ function messageContentFallback(
   return serialize(
     [
       {
-        role: 'flue',
+        role: 'amond',
         parts: [{ type: 'text', content: diagnostic }],
         ...(options.contentType === 'output_messages' ? { finish_reason: 'error' } : {}),
       },
@@ -145,7 +145,7 @@ function messageContentFallback(
 export function contentAttribute(
   policy: ContentOption | undefined,
   content: unknown,
-  event: FlueObservation,
+  event: AmondObservation,
   options: ContentAttributeOptions,
 ): ContentAttributeResult {
   if (policy === false || content === undefined) { return {} }
@@ -254,7 +254,7 @@ export function drawContentAttribute(
   ledger: ContentLedger,
   policy: ContentOption | undefined,
   produce: () => unknown,
-  event: FlueObservation,
+  event: AmondObservation,
   options: ContentDrawOptions,
 ): ContentAttributeResult {
   if (policy === false) { return {} }
@@ -280,7 +280,7 @@ function serialize(value: unknown, options: ContentAttributeOptions): string | u
   }
 }
 
-function contentScope(event: FlueObservation, options: ContentAttributeOptions): GenAIContentScope {
+function contentScope(event: AmondObservation, options: ContentAttributeOptions): GenAIContentScope {
   return {
     contentType: options.contentType,
     eventType: event.type,

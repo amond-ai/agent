@@ -1,5 +1,5 @@
 {
-  "name": "@flue/runtime",
+  "name": "@amond-ai/agent",
   "type": "module",
   "version": "2.3.0",
   "license": "Apache-2.0",

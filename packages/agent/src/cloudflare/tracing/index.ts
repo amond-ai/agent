@@ -6,7 +6,7 @@
  * makes that invocation real platform work).
  *
  * Span lifetime is split across the two instrumentation seams, opposite to
- * `@flue/opentelemetry`: the *interceptor* opens spans with
+ * an OpenTelemetry adapter: the *interceptor* opens spans with
  * `tracing.startActiveSpan` — activation must wrap the real work, because
  * parenting is async-context-based and platform sub-spans (provider `fetch`)
  * only nest under a span whose activation callback initiated them — and the
@@ -24,7 +24,7 @@
  * fired, and `submission_settled` — emitted while an invocation is still
  * live, from the attempt fiber's settle path or a supervisor pass —
  * force-closes anything the submission leaves behind (operations orphaned by
- * deadline force-settlement or recovery), stamped `flue.span.forced_close`
+ * deadline force-settlement or recovery), stamped `amond.span.forced_close`
  * so lost primary closes stay measurable. A fiber that outlives its
  * invocation entirely (isolate replacement, platform teardown mid-run) is
  * beyond in-process repair: spans still open at that boundary cannot be
@@ -32,7 +32,7 @@
  *
  * Platform traces carry conversation content by default — input/output
  * messages, system instructions, tool definitions/arguments/results — via the
- * shared `@flue/runtime/telemetry` pipeline: an optional `transform` is
+ * shared `@amond-ai/agent/telemetry` pipeline: an optional `transform` is
  * policy, the structural in-band truncation is physics. Content draws from
  * one per-span `CONTENT_BUDGET_BYTES` pool (workerd caps a span's *total*
  * attribute bytes and ignores every write after the first overflow), and
@@ -45,15 +45,15 @@
  * spans (`isTraced`).
  *
  * This module is the only runtime value-importer of `cloudflare:workers`
- * (reached from the `@flue/runtime/cloudflare` and `cloudflare/internal`
+ * (reached from the `@amond-ai/agent/cloudflare` and `cloudflare/internal`
  * entries, which only evaluate inside workerd); keep it out of the
  * coordinator / root-internal module graph, which must stay Node-evaluable.
  */
 import * as cloudflareWorkers from 'cloudflare:workers'
-import type { FlueExecutionInterceptor } from '../../execution-interceptor.ts'
+import type { AmondExecutionInterceptor } from '../../execution-interceptor.ts'
 import { hasInstrumentation, instrument } from '../../instrumentation.ts'
-import type { FlueInstrumentation } from '../../instrumentation.ts'
-import type { FlueObservationSubscriber } from '../../observation.ts'
+import type { AmondInstrumentation } from '../../instrumentation.ts'
+import type { AmondObservationSubscriber } from '../../observation.ts'
 import {
   agentInputMessage,
   agentOutputMessage,
@@ -70,8 +70,8 @@ import {
   toolDefinitions,
 } from '../../telemetry/index.ts'
 import type { ContentLedger, ContentOption, GenAIContentType } from '../../telemetry/index.ts'
-import type { FlueObservation, PromptUsage } from '../../types.ts'
-import { ATTR, FLUE_ATTR } from './attributes.ts'
+import type { AmondObservation, PromptUsage } from '../../types.ts'
+import { AMOND_ATTR, ATTR } from './attributes.ts'
 
 export interface CloudflareTracingOptions {
   /**
@@ -154,7 +154,7 @@ const noopTracing: PlatformTracing = {
   },
 }
 
-const CLOUDFLARE_TRACING_INSTRUMENTATION_KEY = Symbol.for('@flue/runtime/cloudflare-tracing')
+const CLOUDFLARE_TRACING_INSTRUMENTATION_KEY = Symbol.for('@amond-ai/agent/cloudflare-tracing')
 
 /**
  * Accessed via the namespace and probed per-method so runtimes that predate
@@ -170,7 +170,7 @@ function bindPlatformTracing(): PlatformTracing {
 
 export function createCloudflareTracing(
   options: CloudflareTracingOptions = {},
-): FlueInstrumentation {
+): AmondInstrumentation {
   assertContentBudgetBytes(options.contentBudgetBytes)
   const platform = bindPlatformTracing()
   const content = options.content
@@ -240,7 +240,7 @@ export function createCloudflareTracing(
       // registries pin the object, so no destruction backstop applies) —
       // report it; tracing must never alter execution, but a silent loss
       // here is undiagnosable downstream.
-      console.error('[flue:tracing] Failed to end span:', error)
+      console.error('[amond:tracing] Failed to end span:', error)
     }
     active.delete(key)
   }
@@ -268,20 +268,20 @@ export function createCloudflareTracing(
    * reserves that suffix slot for an entity name (agent/workflow/tool) —
    * "when gen_ai.agent.name is not available, [the name] SHOULD be
    * `invoke_agent`" — not for a sub-operation discriminator. `event.operation`
-   * already rides `FLUE_ATTR.recoveryOperation`, the attribute the spec
+   * already rides `AMOND_ATTR.recoveryOperation`, the attribute the spec
    * intends for it; folding it into the name would fragment the aggregation
    * axis into six span names instead of one.
    */
   function recordRecoveryEvent(
-    event: Extract<FlueObservation, { type: 'submission_recovery' }>,
+    event: Extract<AmondObservation, { type: 'submission_recovery' }>,
   ): void {
     platform.startActiveSpan('submission_recovery', (span) => {
       writeAttributes(
         { span, ended: false, ledger: createContentLedger(options.contentBudgetBytes) },
         {
-          [FLUE_ATTR.submissionId]: event.submissionId,
-          [FLUE_ATTR.recoveryOperation]: event.operation,
-          [FLUE_ATTR.recoveryOutcome]: event.outcome,
+          [AMOND_ATTR.submissionId]: event.submissionId,
+          [AMOND_ATTR.recoveryOperation]: event.operation,
+          [AMOND_ATTR.recoveryOutcome]: event.outcome,
           ...(event.errorInfo ? { [ATTR.errorType]: lowCardinality(event.errorInfo.type) } : {}),
         },
       )
@@ -289,7 +289,7 @@ export function createCloudflareTracing(
     })
   }
 
-  const observe: FlueObservationSubscriber = (event) => {
+  const observe: AmondObservationSubscriber = (event) => {
     if (disposed) { return }
     if (event.type === 'submission_recovery') {
       recordRecoveryEvent(event)
@@ -308,7 +308,7 @@ export function createCloudflareTracing(
       let swept = 0
       for (const [key, tracked] of active) {
         if (tracked.submissionId !== event.submissionId) { continue }
-        settleSpan(key, tracked, { [FLUE_ATTR.forcedClose]: 'settlement' })
+        settleSpan(key, tracked, { [AMOND_ATTR.forcedClose]: 'settlement' })
         swept++
       }
       for (const [key, stash] of pending) {
@@ -316,7 +316,7 @@ export function createCloudflareTracing(
       }
       if (swept > 0) {
         console.warn(
-          `[flue:tracing] Submission ${event.submissionId} settled with ${swept} span(s) still open — force-closed.`,
+          `[amond:tracing] Submission ${event.submissionId} settled with ${swept} span(s) still open — force-closed.`,
         )
       }
       return
@@ -332,11 +332,11 @@ export function createCloudflareTracing(
         attributes: () => ({
           [ATTR.operationName]: 'invoke_agent',
           [ATTR.agentName]: event.agentName,
-          [FLUE_ATTR.instanceId]: event.instanceId,
+          [AMOND_ATTR.instanceId]: event.instanceId,
           [ATTR.conversationId]: event.conversationId,
-          [FLUE_ATTR.submissionId]: event.submissionId,
-          [FLUE_ATTR.operationId]: event.operationId,
-          [FLUE_ATTR.operationKind]: event.operationKind,
+          [AMOND_ATTR.submissionId]: event.submissionId,
+          [AMOND_ATTR.operationId]: event.operationId,
+          [AMOND_ATTR.operationKind]: event.operationKind,
         }),
       })
       return
@@ -350,9 +350,9 @@ export function createCloudflareTracing(
           [ATTR.agentName]: event.agent,
           [ATTR.conversationId]: event.conversationId,
           [ATTR.toolCallId]: event.toolCallId,
-          [FLUE_ATTR.submissionId]: event.submissionId,
-          [FLUE_ATTR.operationId]: event.operationId,
-          [FLUE_ATTR.taskId]: event.taskId,
+          [AMOND_ATTR.submissionId]: event.submissionId,
+          [AMOND_ATTR.operationId]: event.operationId,
+          [AMOND_ATTR.taskId]: event.taskId,
           ...contentEntry(
             ledger,
             content,
@@ -384,9 +384,9 @@ export function createCloudflareTracing(
           // agent context on LLM-call spans the same way (#535).
           [ATTR.agentName]: event.agentName,
           [ATTR.conversationId]: event.conversationId,
-          [FLUE_ATTR.submissionId]: event.submissionId,
-          [FLUE_ATTR.operationId]: event.operationId,
-          [FLUE_ATTR.turnId]: event.turnId,
+          [AMOND_ATTR.submissionId]: event.submissionId,
+          [AMOND_ATTR.operationId]: event.operationId,
+          [AMOND_ATTR.turnId]: event.turnId,
           [ATTR.reasoningLevel]: request.reasoningLevel,
           [ATTR.maxTokens]: request.maxTokens,
           [ATTR.temperature]: request.temperature,
@@ -397,7 +397,7 @@ export function createCloudflareTracing(
           // keeps that shape.
           [ATTR.compacted]: request.contextCompacted,
           ...openaiAttributes(request.providerName, request.api),
-          ...(event.purpose !== 'agent' ? { [FLUE_ATTR.turnPurpose]: event.purpose } : {}),
+          ...(event.purpose !== 'agent' ? { [AMOND_ATTR.turnPurpose]: event.purpose } : {}),
           ...contentEntry(
             ledger,
             content,
@@ -434,18 +434,18 @@ export function createCloudflareTracing(
       // call: `execute_tool` (and the `gen_ai.tool.*` attributes) describe
       // tools the framework runs on behalf of the model, so claiming them
       // here would pollute that aggregation axis. It gets the same
-      // flue-owned span `@flue/opentelemetry` emits for this event — no
+      // amond-owned span an OpenTelemetry adapter emits for this event — no
       // `gen_ai.*` claims — and its command line and output stay out of
       // trace content.
       if (event.origin === 'caller' && event.toolName === 'bash') {
         pending.set(toolKey(event), {
-          name: 'flue.operation shell',
+          name: 'amond.operation shell',
           owner: ownerKey(event),
           submissionId: event.submissionId,
           attributes: () => ({
-            [FLUE_ATTR.submissionId]: event.submissionId,
-            [FLUE_ATTR.operationId]: event.operationId,
-            [FLUE_ATTR.toolOrigin]: event.origin,
+            [AMOND_ATTR.submissionId]: event.submissionId,
+            [AMOND_ATTR.operationId]: event.operationId,
+            [AMOND_ATTR.toolOrigin]: event.origin,
           }),
         })
         return
@@ -463,10 +463,10 @@ export function createCloudflareTracing(
           // tool runs on behalf of.
           [ATTR.agentName]: event.agentName,
           [ATTR.conversationId]: event.conversationId,
-          [FLUE_ATTR.submissionId]: event.submissionId,
-          [FLUE_ATTR.operationId]: event.operationId,
-          [FLUE_ATTR.turnId]: event.turnId,
-          [FLUE_ATTR.toolOrigin]: event.origin,
+          [AMOND_ATTR.submissionId]: event.submissionId,
+          [AMOND_ATTR.operationId]: event.operationId,
+          [AMOND_ATTR.turnId]: event.turnId,
+          [AMOND_ATTR.toolOrigin]: event.origin,
           ...contentEntry(
             ledger,
             content,
@@ -488,7 +488,7 @@ export function createCloudflareTracing(
         [ATTR.responseModel]: event.response.responseModel,
         [ATTR.responseId]: event.response.responseId,
         ...(event.response.finishReason
-          ? { [FLUE_ATTR.finishReason]: normalizeFinishReason(event.response.finishReason) }
+          ? { [AMOND_ATTR.finishReason]: normalizeFinishReason(event.response.finishReason) }
           : {}),
         ...usageAttributes(event.response.usage),
         ...(event.isError ? terminalErrorAttributes(event.response.error?.type) : {}),
@@ -576,11 +576,11 @@ export function createCloudflareTracing(
 
   // Same guard the interceptor applies when tagging opened spans, so a
   // stash's owner and its operation's terminal key meet on the same value.
-  function ownerKey(event: FlueObservation): string | undefined {
+  function ownerKey(event: AmondObservation): string | undefined {
     return event.operationId ? operationKey(event) : undefined
   }
 
-  const interceptor: FlueExecutionInterceptor = (operation, ctx, next) => {
+  const interceptor: AmondExecutionInterceptor = (operation, ctx, next) => {
     if (disposed) { return next() }
     if (operation.type === 'coordinator') {
       // Framework bookkeeping around agent invocations, spanned so the
@@ -592,7 +592,7 @@ export function createCloudflareTracing(
       // interception returns, so the semconv spans never nest under it.
       // One stable span name; phases distinguish by attribute so views
       // keyed on the name survive new phases.
-      return platform.startActiveSpan('flue.coordinator', (opened) => {
+      return platform.startActiveSpan('amond.coordinator', (opened) => {
         const tracked: TrackedSpan = {
           span: opened,
           ended: false,
@@ -600,9 +600,9 @@ export function createCloudflareTracing(
         }
         if (opened.isTraced) {
           writeAttributes(tracked, {
-            [FLUE_ATTR.coordinatorPhase]: operation.phase,
-            [FLUE_ATTR.instanceId]: ctx.instanceId,
-            'flue.agent.name': ctx.agentName,
+            [AMOND_ATTR.coordinatorPhase]: operation.phase,
+            [AMOND_ATTR.instanceId]: ctx.instanceId,
+            'amond.agent.name': ctx.agentName,
           })
         }
         return next().finally(() => {
@@ -667,7 +667,7 @@ export function createCloudflareTracing(
  * always registers first and wins (same evaluation-order contract as the
  * entry's Workers-AI provider guard). Applications never call this: to
  * customize, install the adapter yourself; to suppress the default entirely,
- * set `tracing: false` in `flue.config.ts`, which drops the call from the
+ * set `tracing: false` in `amond.config.ts`, which drops the call from the
  * generated entry. The install is a platform no-op until Workers Traces is
  * enabled on the account (wrangler `observability.traces` or the dashboard).
  *
@@ -680,7 +680,7 @@ export function installDefaultCloudflareTracing(): (() => Promise<void>) | undef
 
 /**
  * `openai.api.type` distinguishes the Chat Completions and Responses
- * surfaces, same mapping as `@flue/opentelemetry`.
+ * surfaces, same mapping as an OpenTelemetry adapter.
  */
 function openaiAttributes(providerName: string, api: string): AttributeValues {
   if (providerName !== 'openai') { return {} }
@@ -698,7 +698,7 @@ function usageAttributes(usage: PromptUsage | undefined): AttributeValues {
     [ATTR.outputTokens]: usage.output,
     [ATTR.cacheReadTokens]: usage.cacheRead,
     [ATTR.cacheCreationTokens]: usage.cacheWrite,
-    [FLUE_ATTR.usageTotalTokens]: usage.totalTokens,
+    [AMOND_ATTR.usageTotalTokens]: usage.totalTokens,
   }
 }
 
@@ -708,7 +708,7 @@ function usageAttributes(usage: PromptUsage | undefined): AttributeValues {
  * error rates); everything else records only the low-cardinality error class.
  */
 function rejectionAttributes(error: unknown): AttributeValues {
-  if (isCancellation(error)) { return { [FLUE_ATTR.canceled]: true } }
+  if (isCancellation(error)) { return { [AMOND_ATTR.canceled]: true } }
   return {
     [ATTR.errorType]: error instanceof Error ? error.name || 'Error' : typeof error,
   }
@@ -716,7 +716,7 @@ function rejectionAttributes(error: unknown): AttributeValues {
 
 /** Same policy for the runtime's classified error type on terminal events. */
 function terminalErrorAttributes(type: string | undefined): AttributeValues {
-  if (type === 'aborted') { return { [FLUE_ATTR.canceled]: true } }
+  if (type === 'aborted') { return { [AMOND_ATTR.canceled]: true } }
   return { [ATTR.errorType]: lowCardinality(type) }
 }
 
@@ -739,7 +739,7 @@ function lowCardinality(value: string | undefined): string {
 function contentEntry(
   ledger: ContentLedger,
   content: ContentOption | undefined,
-  event: FlueObservation,
+  event: AmondObservation,
   name: string,
   produce: () => unknown,
   contentType: GenAIContentType,
@@ -756,12 +756,12 @@ function contentEntry(
 /**
  * Tool payloads of every shape ride the semconv `gen_ai.tool.call.*` keys
  * (typed `any` there, with JSON-string form sanctioned on spans), mirroring
- * `@flue/opentelemetry`. The draw is charged under the semconv key.
+ * an OpenTelemetry adapter. The draw is charged under the semconv key.
  */
 function toolPayloadEntry(
   ledger: ContentLedger,
   content: ContentOption | undefined,
-  event: FlueObservation,
+  event: AmondObservation,
   kind: 'arguments' | 'result',
   value: unknown,
 ): AttributeValues {
@@ -787,8 +787,8 @@ function spanName(operation: string, target: string | undefined): string {
 
 /**
  * Identity keys shared by the interceptor (which builds them from
- * `FlueExecutionContext`) and the observe subscriber (from event fields) —
- * the same scheme `@flue/opentelemetry` uses, so the two sides meet on the
+ * `AmondExecutionContext`) and the observe subscriber (from event fields) —
+ * the same scheme an OpenTelemetry adapter uses, so the two sides meet on the
  * same entries even when one isolate hosts several agent instances.
  */
 interface ExecutionIdentity {

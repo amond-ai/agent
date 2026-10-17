@@ -8,7 +8,7 @@ import type { RegisteredSkill, Sandbox, Skill, WorkspaceSkill } from './types.ts
 export function isWorkspaceSkill(skill: RegisteredSkill): skill is WorkspaceSkill {
   const candidate = skill as Partial<WorkspaceSkill>
   return (
-    candidate.__flueWorkspaceSkill === true &&
+    candidate.__amondWorkspaceSkill === true &&
     typeof candidate.directory === 'string' &&
     typeof candidate.skillMdPath === 'string'
   )
@@ -83,11 +83,11 @@ async function discoverLocalSkills(
     }
     catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      console.warn(`[flue] Skipping invalid workspace skill "${entry}": ${detail}`)
+      console.warn(`[amond] Skipping invalid workspace skill "${entry}": ${detail}`)
       continue
     }
     const workspaceSkill: WorkspaceSkill = {
-      __flueWorkspaceSkill: true,
+      __amondWorkspaceSkill: true,
       name: parsed.name,
       description: parsed.description,
       directory: skillDir,
@@ -110,7 +110,7 @@ function mergeSkillCatalog(
   for (const [name, skill] of Object.entries(discoveredSkills)) {
     if (Object.hasOwn(merged, name)) {
       throw new Error(
-        `[flue] Skill name "${name}" appears in both agent definition and workspace discovery.`,
+        `[amond] Skill name "${name}" appears in both agent definition and workspace discovery.`,
       )
     }
     merged[name] = skill
@@ -127,7 +127,7 @@ export interface SkillCatalogEntry {
 /**
  * The composed system prompt is load-bearing machinery only: the agent's
  * instructions, discovered workspace context, the skill catalog, the task
- * roster, and environment facts. Flue adds no behavioral stance of its own
+ * roster, and environment facts. amond adds no behavioral stance of its own
  * (an autonomy preamble used to live here) — how an agent should behave is
  * the agent function's instructions to give.
  */

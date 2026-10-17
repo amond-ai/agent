@@ -162,7 +162,7 @@ export class ConversationRecordWriter {
         !sameAppendOptions(this.pendingOptions ?? {}, options)
       ) {
         throw new Error(
-          '[flue] Canonical batch ownership changed before the pending batch flushed.',
+          '[amond] Canonical batch ownership changed before the pending batch flushed.',
         )
       }
       this.pendingOptions = options
@@ -337,7 +337,7 @@ export class ConversationRecordWriter {
       parent.harness !== input.parent.harness ||
       parent.session !== input.parent.session
     ) {
-      throw new Error('[flue] Canonical child parent is missing or conflicts with its scope.')
+      throw new Error('[amond] Canonical child parent is missing or conflicts with its scope.')
     }
     const existing = state.conversations.get(input.child.conversationId)
     const retained = parent.childConversations.get(input.child.conversationId)
@@ -351,7 +351,7 @@ export class ConversationRecordWriter {
         existing.parentConversationId !== input.parent.conversationId ||
         JSON.stringify(retained) !== JSON.stringify(input.ref)
       ) {
-        throw new Error('[flue] Canonical child conversation conflicts with retained topology.')
+        throw new Error('[amond] Canonical child conversation conflicts with retained topology.')
       }
       return { offset: state.recordsThroughOffset }
     }
@@ -410,7 +410,7 @@ export class ConversationRecordWriter {
         existing.actionInvocationId !== input.actionInvocationId
       ) {
         throw new Error(
-          '[flue] Canonical conversation identity conflicts with the requested session.',
+          '[amond] Canonical conversation identity conflicts with the requested session.',
         )
       }
       return { offset: state.recordsThroughOffset }

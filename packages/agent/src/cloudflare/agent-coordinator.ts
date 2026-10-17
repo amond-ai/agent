@@ -1,6 +1,6 @@
 import { SUBMISSION_HARNESS_NAME, SUBMISSION_SESSION_NAME } from '../adapter-helpers.ts'
 import type { AgentSubmission, AgentSubmissionStore } from '../agent-execution-store.ts'
-import type { FlueContextInternal } from '../client.ts'
+import type { AmondContextInternal } from '../client.ts'
 import { ConversationRecordWriter } from '../conversation-writer.ts'
 import {
   AgentInstanceExistsError,
@@ -55,12 +55,12 @@ import {
   createSqlConversationStores,
 } from './agent-execution-store.ts'
 
-export const CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH = '/__flue/internal/dispatch'
-export const CLOUDFLARE_AGENT_INTERNAL_INSTANCE_INFO_PATH = '/__flue/internal/instance-info'
+export const CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH = '/__amond/internal/dispatch'
+export const CLOUDFLARE_AGENT_INTERNAL_INSTANCE_INFO_PATH = '/__amond/internal/instance-info'
 
-const FLUE_AGENT_SUBMISSION_WAKE_CALLBACK = '__flueWakeAgentSubmissions'
-const FLUE_AGENT_SUBMISSION_WAKE_SECONDS = 30
-const FLUE_AGENT_SUBMISSION_ATTEMPT_FIBER = 'flue:submission-attempt'
+const AMOND_AGENT_SUBMISSION_WAKE_CALLBACK = '__amondWakeAgentSubmissions'
+const AMOND_AGENT_SUBMISSION_WAKE_SECONDS = 30
+const AMOND_AGENT_SUBMISSION_ATTEMPT_FIBER = 'amond:submission-attempt'
 /**
  * How long past a deadline (durability timeout, or a durable abort intent) a
  * live attempt fiber gets to unwind through its own settle path after its
@@ -71,7 +71,7 @@ const FLUE_AGENT_SUBMISSION_ATTEMPT_FIBER = 'flue:submission-attempt'
  * path. Two heartbeat periods, so the abort is guaranteed at least one full
  * pass to land before force-settlement.
  */
-const FLUE_AGENT_SUBMISSION_SETTLE_GRACE_MS = 2 * FLUE_AGENT_SUBMISSION_WAKE_SECONDS * 1000
+const AMOND_AGENT_SUBMISSION_SETTLE_GRACE_MS = 2 * AMOND_AGENT_SUBMISSION_WAKE_SECONDS * 1000
 
 import type { SqlStorage } from '../sql-storage.ts'
 
@@ -140,7 +140,7 @@ interface CloudflareAgentRuntimeOptions {
     readonly agentName: string
     readonly request: Request
     readonly submissionId?: string
-  }) => FlueContextInternal
+  }) => AmondContextInternal
   readonly runWithInstanceContext: <T>(
     instance: CloudflareAgentInstance,
     agentName: string,
@@ -161,7 +161,7 @@ export interface CloudflareAgentRuntime {
   ): Promise<void>
   /**
    * The single place submission attempts start. Dispatched by the
-   * `__flueWakeAgentSubmissions` schedule target from inside the Durable
+   * `__amondWakeAgentSubmissions` schedule target from inside the Durable
    * Object's alarm invocation as one bounded, storage-only supervisor
    * pass: it reconciles durable state, enforces deadlines, and starts
    * attempt fibers detached — the pass returns without awaiting agent
@@ -199,7 +199,7 @@ export function createCloudflareAgentRuntime(
   const getCoordinator = (instance: CloudflareAgentInstance): CloudflareAgentCoordinator => {
     const coordinator = coordinators.get(instance)
     if (!coordinator) {
-      throw new Error('[flue] Generated Cloudflare agent coordinator was not initialized.')
+      throw new Error('[amond] Generated Cloudflare agent coordinator was not initialized.')
     }
     return coordinator
   }
@@ -290,7 +290,7 @@ class CloudflareAgentCoordinator {
   // Durable Object, and a recovered fiber resumes with no ambient context, so
   // each must (re)establish it. onAlarm wraps the Agents SDK alarm handler,
   // covering every scheduled callback it dispatches — including
-  // extension-authored schedule/scheduleEvery/queue targets (#437); Flue's
+  // extension-authored schedule/scheduleEvery/queue targets (#437); amond's
   // own wake target still self-wraps via drainSubmissions, which simply
   // nests. Everything reachable from these boundaries — dispatch admission,
   // reconciliation, materialization, submission processing — assumes the
@@ -367,7 +367,7 @@ class CloudflareAgentCoordinator {
     // after return, losing the wake.
     await this.armBackstop()
     // The reconcile pass is storage-only and runs under the
-    // `flue.coordinator` interception so tracing backends can group
+    // `amond.coordinator` interception so tracing backends can group
     // its platform-instrumented storage spans. Attempt fibers start
     // AFTER the interception settles, deliberately: `runFiber` runs
     // its callback in the caller's async context, so a fiber started
@@ -516,7 +516,7 @@ class CloudflareAgentCoordinator {
     inherited: () => Promise<unknown> | unknown,
   ): Promise<unknown> {
     return this.runWithInstanceContext(async () => {
-      if (ctx.name !== FLUE_AGENT_SUBMISSION_ATTEMPT_FIBER) { return inherited() }
+      if (ctx.name !== AMOND_AGENT_SUBMISSION_ATTEMPT_FIBER) { return inherited() }
       await this.armDrain()
     })
   }
@@ -559,7 +559,7 @@ class CloudflareAgentCoordinator {
     return this.conversationWriterCreation
   }
 
-  private createContext(request: Request, submissionId?: string): FlueContextInternal {
+  private createContext(request: Request, submissionId?: string): AmondContextInternal {
     return this.options.createContext({
       submissionStore: this.submissions,
       instance: this.instance,
@@ -569,7 +569,7 @@ class CloudflareAgentCoordinator {
     })
   }
 
-  private createDurableContext(request: Request, submissionId?: string): FlueContextInternal {
+  private createDurableContext(request: Request, submissionId?: string): AmondContextInternal {
     const ctx = this.createContext(request, submissionId)
     ctx.setConversationWriter?.(this.conversationWriter)
     ctx.setAttachmentStore?.(this.prepared.attachmentStore)
@@ -580,7 +580,7 @@ class CloudflareAgentCoordinator {
   private assertAgentsDurabilityApi(method: 'runFiber' | 'schedule'): void {
     if (typeof this.instance[method] !== 'function') {
       throw new Error(
-        `[flue] The installed "agents" package does not provide the required Cloudflare Agents SDK method "${method}". Upgrade @flue/vite (which supplies the Cloudflare Agents SDK), or remove the "agents" dependency from your project if it declares an older one.`,
+        `[amond] The installed "agents" package does not provide the required Cloudflare Agents SDK method "${method}". Upgrade @amond-ai/agent-vite (which supplies the Cloudflare Agents SDK), or remove the "agents" dependency from your project if it declares an older one.`,
       )
     }
   }
@@ -595,7 +595,7 @@ class CloudflareAgentCoordinator {
    */
   private armDrain(): Promise<unknown> {
     this.assertAgentsDurabilityApi('schedule')
-    return this.instance.schedule(0, FLUE_AGENT_SUBMISSION_WAKE_CALLBACK, undefined, {
+    return this.instance.schedule(0, AMOND_AGENT_SUBMISSION_WAKE_CALLBACK, undefined, {
       idempotent: false,
     })
   }
@@ -604,8 +604,8 @@ class CloudflareAgentCoordinator {
   private armBackstop(): Promise<unknown> {
     this.assertAgentsDurabilityApi('schedule')
     return this.instance.schedule(
-      FLUE_AGENT_SUBMISSION_WAKE_SECONDS,
-      FLUE_AGENT_SUBMISSION_WAKE_CALLBACK,
+      AMOND_AGENT_SUBMISSION_WAKE_SECONDS,
+      AMOND_AGENT_SUBMISSION_WAKE_CALLBACK,
       undefined,
       { idempotent: false },
     )
@@ -658,13 +658,13 @@ class CloudflareAgentCoordinator {
             (await this.terminalizeUnreadySubmission(
               submission,
               new Error(
-                `[flue] Submission target agent "${submission.input.agent}" has no registered definition, so the submission could never start.`,
+                `[amond] Submission target agent "${submission.input.agent}" has no registered definition, so the submission could never start.`,
               ),
             ))
           ) {
             continue
           }
-          console.error('[flue:submission-reconciliation]', {
+          console.error('[amond:submission-reconciliation]', {
             agentName: this.agentName,
             instanceId: this.instance.name,
             submissionId: submission.submissionId,
@@ -757,7 +757,7 @@ class CloudflareAgentCoordinator {
     }
     catch (error) {
       console.error(
-        '[flue:submission-reconciliation]',
+        '[amond:submission-reconciliation]',
         {
           agentName: this.agentName,
           instanceId: this.instance.name,
@@ -799,7 +799,7 @@ class CloudflareAgentCoordinator {
     )
     if (!settled) { return false }
     console.error(
-      '[flue:submission-reconciliation]',
+      '[amond:submission-reconciliation]',
       {
         agentName: this.agentName,
         instanceId: this.instance.name,
@@ -823,7 +823,7 @@ class CloudflareAgentCoordinator {
     error: unknown,
   ): void {
     console.error(
-      '[flue:submission-reconciliation]',
+      '[amond:submission-reconciliation]',
       {
         agentName: this.agentName,
         instanceId: this.instance.name,
@@ -858,7 +858,7 @@ class CloudflareAgentCoordinator {
    * own settle path (`processSubmission` settles failed/aborted durably
    * and emits the live event). Returns true — demand interrupted-attempt
    * reconciliation NOW, settling over the live fiber — only once the
-   * deadline is more than FLUE_AGENT_SUBMISSION_SETTLE_GRACE_MS old and
+   * deadline is more than AMOND_AGENT_SUBMISSION_SETTLE_GRACE_MS old and
    * the fiber still has not settled: a signal-deaf hang (a sandbox RPC
    * pending against a healthy-reporting container, a wedged stream
    * reader). The hung fiber is orphaned; its late writes lose the
@@ -887,7 +887,7 @@ class CloudflareAgentCoordinator {
         ? Math.min(submission.abortRequestedAt, now)
         : now)
     if (signaledAt === undefined) { this.attemptDeadlineSignaledAt.set(controller, deadline) }
-    if (now < deadline + FLUE_AGENT_SUBMISSION_SETTLE_GRACE_MS) {
+    if (now < deadline + AMOND_AGENT_SUBMISSION_SETTLE_GRACE_MS) {
       this.emitCoordinatorEvent({
         type: 'submission_recovery',
         submissionId: submission.submissionId,
@@ -902,7 +902,7 @@ class CloudflareAgentCoordinator {
       })
       return false
     }
-    console.error('[flue:submission-reconciliation]', {
+    console.error('[amond:submission-reconciliation]', {
       agentName: this.agentName,
       instanceId: this.instance.name,
       submissionId: submission.submissionId,
@@ -925,7 +925,7 @@ class CloudflareAgentCoordinator {
   ): Promise<AgentSubmission | undefined> {
     const conversationWriter = await this.ensureConversationWriter()
     const agent = this.options.agents.find(record => record.name === this.agentName)?.agent
-    if (!agent) { throw new Error('[flue] Agent target unavailable during durable reconciliation.') }
+    if (!agent) { throw new Error('[amond] Agent target unavailable during durable reconciliation.') }
     const replacement = await reconcileInterruptedSubmission(
       this.submissions,
       submission,
@@ -958,7 +958,7 @@ class CloudflareAgentCoordinator {
     this.activeControllers.set(submission.submissionId, controller)
     let running: Promise<void>
     try {
-      running = this.instance.runFiber(FLUE_AGENT_SUBMISSION_ATTEMPT_FIBER, async (fiberCtx) => {
+      running = this.instance.runFiber(AMOND_AGENT_SUBMISSION_ATTEMPT_FIBER, async (fiberCtx) => {
         fiberCtx.stash({ submissionId: submission.submissionId, attemptId: submission.attemptId })
         // The fiber is the second context boundary: it may resume on a
         // fresh isolate (via the SDK's crash replay) with no ambient
@@ -976,7 +976,7 @@ class CloudflareAgentCoordinator {
       running: running
         .catch((error) => {
           console.error(
-            '[flue:submission-processing]',
+            '[amond:submission-processing]',
             {
               agentName: this.agentName,
               instanceId: this.instance.name,
@@ -1099,7 +1099,7 @@ class CloudflareAgentCoordinator {
       submission,
       resolveAgent: (name) => {
         const agent = this.options.agents.find(record => record.name === name)?.agent
-        if (!agent) { throw new Error('[flue] Agent target unavailable during durable processing.') }
+        if (!agent) { throw new Error('[amond] Agent target unavailable during durable processing.') }
         return agent
       },
       createContext: submissionId =>
@@ -1125,7 +1125,7 @@ class CloudflareAgentCoordinator {
     })
     const keyed = idempotencyKey !== undefined
     const agent = this.options.agents.find(record => record.name === this.agentName)?.agent
-    if (!agent) { throw new Error('[flue] Agent target unavailable during durable admission.') }
+    if (!agent) { throw new Error('[amond] Agent target unavailable during durable admission.') }
     const loadReducedState = async () => (await this.ensureConversationWriter()).loadReducedState()
     // A deduplicated replay re-attaches from the stream origin: the original
     // admission-time offset is not persisted, and settlement records are
@@ -1210,7 +1210,7 @@ class CloudflareAgentCoordinator {
       }
       if (instanceUid === undefined) {
         throw new Error(
-          '[flue] invariant: a materialized instance\'s birth record must carry a uid.',
+          '[amond] invariant: a materialized instance\'s birth record must carry a uid.',
         )
       }
       return {
@@ -1328,7 +1328,7 @@ class CloudflareAgentCoordinator {
         if (uid === undefined && deduplicated) { uid = (await loadReducedState()).uid }
         if (uid === undefined) {
           throw new Error(
-            '[flue] invariant: a materialized instance\'s birth record must carry a uid.',
+            '[amond] invariant: a materialized instance\'s birth record must carry a uid.',
           )
         }
         return Response.json({

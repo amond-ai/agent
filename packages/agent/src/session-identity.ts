@@ -38,12 +38,12 @@ export function isPublicSessionName(name: string): boolean {
 export function assertPublicSessionName(name: string): void {
   if (isTaskSessionName(name)) {
     throw new Error(
-      '[flue] Session names beginning with "task:" are reserved for delegated tasks.',
+      '[amond] Session names beginning with "task:" are reserved for delegated tasks.',
     )
   }
   if (isActionScopeName(name)) {
     throw new Error(
-      '[flue] Session names beginning with "action:" are reserved for invocation-scoped harness children.',
+      '[amond] Session names beginning with "action:" are reserved for invocation-scoped harness children.',
     )
   }
 }

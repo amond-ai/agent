@@ -29,7 +29,7 @@ export interface JsonRequestOptions {
 }
 
 /** Failed SDK HTTP JSON request. */
-export class FlueApiError extends Error {
+export class AmondApiError extends Error {
   /** HTTP response status. */
   readonly status: number
   /** Parsed response body when available; otherwise the response text. */
@@ -37,7 +37,7 @@ export class FlueApiError extends Error {
   /**
    * Server-minted error correlation ref (`err_…`), present when the runtime
    * logged the failure server-side. Parsed from the envelope's `error.ref`,
-   * falling back to the `flue-error-ref` response header, and included in
+   * falling back to the `amond-error-ref` response header, and included in
    * the composed `message` so the ref lands in the calling service's own
    * logs. Quote it when reporting a production 500.
    */
@@ -46,7 +46,7 @@ export class FlueApiError extends Error {
   constructor(status: number, body: unknown, headerRef?: string) {
     const ref = envelopeRef(body) ?? headerRef
     super(errorMessage(status, body, ref))
-    this.name = 'FlueApiError'
+    this.name = 'AmondApiError'
     this.status = status
     this.body = body
     this.ref = ref
@@ -130,7 +130,7 @@ function resolveConversationUrl(url: string): string {
   const resolved = resolveUrl(url)
   if (resolved.search || resolved.hash) {
     throw new TypeError(
-      'createFlueClient url must not carry a query string or fragment — path suffixes (like /abort) are appended after it, so a query string would swallow them. Pass auth via headers/token instead.',
+      'createAmondClient url must not carry a query string or fragment — path suffixes (like /abort) are appended after it, so a query string would swallow them. Pass auth via headers/token instead.',
     )
   }
   return `${resolved.origin}${resolved.pathname}`
@@ -153,10 +153,10 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   const text = await response.text()
   const body = text ? safeJsonParse(text) : undefined
   if (!response.ok) {
-    throw new FlueApiError(
+    throw new AmondApiError(
       response.status,
       text ? body : text,
-      response.headers.get('flue-error-ref') ?? undefined,
+      response.headers.get('amond-error-ref') ?? undefined,
     )
   }
   return body as T
@@ -181,7 +181,7 @@ function errorMessage(status: number, body: unknown, ref: string | undefined): s
   const refSuffix = ref ? ` (ref ${ref})` : ''
   if (typeof body === 'object' && body !== null && 'error' in body) {
     const error = (body as { error?: { type?: string, message?: string } }).error
-    return `Flue API error ${status}${error?.type ? ` [${error.type}]` : ''}${refSuffix}: ${error?.message ?? 'request failed'}`
+    return `amond API error ${status}${error?.type ? ` [${error.type}]` : ''}${refSuffix}: ${error?.message ?? 'request failed'}`
   }
-  return `Flue API error ${status}${refSuffix}: request failed`
+  return `amond API error ${status}${refSuffix}: request failed`
 }

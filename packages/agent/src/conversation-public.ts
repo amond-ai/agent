@@ -33,7 +33,7 @@ interface AgentConversationSettlement {
 
 /**
  * A materialized conversation read at a durable-stream offset. Wire-compatible
- * with @flue/sdk's `FlueConversationSnapshot`.
+ * with @amond-ai/agent-sdk's `AmondConversationSnapshot`.
  */
 export interface AgentConversationSnapshot {
   v: 1
@@ -62,7 +62,7 @@ export interface AgentConversationSnapshot {
 
 /**
  * Incremental UI projection protocol carried by the `updates` view.
- * Wire-compatible with @flue/sdk's internal `ConversationStreamChunk`. The
+ * Wire-compatible with @amond-ai/agent-sdk's internal `ConversationStreamChunk`. The
  * canonical record schema is never exposed; these chunks describe only
  * UI-relevant conversation operations.
  *

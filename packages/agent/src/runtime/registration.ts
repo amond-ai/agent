@@ -7,14 +7,14 @@
  * function itself, in order:
  *
  *   1. The build-stamped binding — the `'use agent'` transform injects
- *      `__flueBindAgentModule(fn, { identity: '<literal>' })` per agent
+ *      `__amondBindAgentModule(fn, { identity: '<literal>' })` per agent
  *      export, capturing the source-level name (or its `agentName` static
  *      override) before minification can touch identifiers.
  *   2. The `agentName` static (`fn.agentName = 'issue-triage'`).
  *   3. The function's own name (`fn.name`) — safe in plugin-less contexts
- *      (`flue run`, unit tests, `start()` scripts) where no minifier runs.
+ *      (`amond run`, unit tests, `start()` scripts) where no minifier runs.
  *
- * App membership comes from {@link registerFlueAgents}, called once by the
+ * App membership comes from {@link registerAmondAgents}, called once by the
  * generated bootstrap with the full scanned agent set (or by `start()` for
  * standalone scripts). Durability rides the function as the `durability`
  * static — read per identity through the registry via
@@ -39,18 +39,18 @@ import {
   executeAgentConversationRead,
   executeAgentPrompt,
 } from './agent-routes.ts'
-import { getFlueRuntime } from './flue-app.ts'
+import { getAmondRuntime } from './amond-app.ts'
 
 /**
- * IDENTITY BINDING CONTRACT — consumed by the `@flue/vite` `'use agent'`
+ * IDENTITY BINDING CONTRACT — consumed by the `@amond-ai/agent-vite` `'use agent'`
  * transform.
  *
  * For every agent export of a marked module (each exported function with a
  * capitalized name), the transform appends:
  *
  * ```ts
- * import { __flueBindAgentModule } from '@flue/runtime';
- * __flueBindAgentModule(<namespace>.<ExportName>, { identity: '<literal>' });
+ * import { __amondBindAgentModule } from '@amond-ai/agent';
+ * __amondBindAgentModule(<namespace>.<ExportName>, { identity: '<literal>' });
  * ```
  *
  * The identity is the function's source-level name, or its `agentName`
@@ -63,7 +63,7 @@ export interface AgentIdentityBinding {
 }
 
 /** One registered agent: the function joined to its identity. */
-export interface FlueAgentRegistration extends AgentIdentityBinding {
+export interface AmondAgentRegistration extends AgentIdentityBinding {
   agent: Agent
 }
 
@@ -72,13 +72,13 @@ export interface FlueAgentRegistration extends AgentIdentityBinding {
  * binding names on Cloudflare, conversation storage slugs on Node), so they
  * are restricted to predictable identifier-ish shapes: PascalCase function
  * names (`IssueTriage`) and kebab-case overrides (`issue-triage`) both
- * match. Canonical copy — `@flue/vite`'s agent-scan mirrors it for
+ * match. Canonical copy — `@amond-ai/agent-vite`'s agent-scan mirrors it for
  * build-time enforcement.
  */
 export const AGENT_IDENTITY_PATTERN = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$/
 
 let identityBindings = new WeakMap<Agent, AgentIdentityBinding>()
-let registeredAgents = new Map<string, FlueAgentRegistration>()
+let registeredAgents = new Map<string, AmondAgentRegistration>()
 
 /**
  * Bind a build-derived identity to an agent function.
@@ -92,7 +92,7 @@ let registeredAgents = new Map<string, FlueAgentRegistration>()
  * Returns the function so the transform may also use it in expression
  * position.
  */
-export function __flueBindAgentModule<TAgent extends Agent>(
+export function __amondBindAgentModule<TAgent extends Agent>(
   agent: TAgent,
   binding: AgentIdentityBinding,
 ): TAgent {
@@ -101,7 +101,7 @@ export function __flueBindAgentModule<TAgent extends Agent>(
   const existing = identityBindings.get(agent)
   if (existing && existing.identity !== binding.identity) {
     throw new Error(
-      `[flue] Agent function is already bound to identity "${existing.identity}" and cannot be rebound as "${binding.identity}". ` +
+      `[amond] Agent function is already bound to identity "${existing.identity}" and cannot be rebound as "${binding.identity}". ` +
       'Each agent function carries exactly one durable identity.',
     )
   }
@@ -114,10 +114,10 @@ export function __flueBindAgentModule<TAgent extends Agent>(
  * modules). Called by the generated bootstrap; replaces any previous
  * registration wholesale, so a dev-reload bootstrap simply registers again.
  *
- * Not public API — exposed via `@flue/runtime/internal` for generated code.
+ * Not public API — exposed via `@amond-ai/agent/internal` for generated code.
  */
-export function registerFlueAgents(records: readonly FlueAgentRegistration[]): void {
-  const next = new Map<string, FlueAgentRegistration>()
+export function registerAmondAgents(records: readonly AmondAgentRegistration[]): void {
+  const next = new Map<string, AmondAgentRegistration>()
   for (const record of records) {
     const identity = record?.identity ?? '(unknown)'
     assertAgentFunction(record?.agent, identity)
@@ -125,21 +125,21 @@ export function registerFlueAgents(records: readonly FlueAgentRegistration[]): v
     const duplicateIdentity = next.get(record.identity)
     if (duplicateIdentity) {
       throw new Error(
-        `[flue] Duplicate agent identity "${record.identity}". ` +
+        `[amond] Duplicate agent identity "${record.identity}". ` +
         'Agent identities derive from function names (or their `agentName` static override) and must be unique.',
       )
     }
     const duplicateAgent = [...next.values()].find(existing => existing.agent === record.agent)
     if (duplicateAgent) {
       throw new Error(
-        `[flue] Agents "${duplicateAgent.identity}" and "${record.identity}" are the same function value. ` +
+        `[amond] Agents "${duplicateAgent.identity}" and "${record.identity}" are the same function value. ` +
         'Each registered agent must be a distinct function.',
       )
     }
     const bound = identityBindings.get(record.agent)
     if (bound && bound.identity !== record.identity) {
       throw new Error(
-        `[flue] Agent function is already bound to identity "${bound.identity}" and cannot be registered as "${record.identity}".`,
+        `[amond] Agent function is already bound to identity "${bound.identity}" and cannot be registered as "${record.identity}".`,
       )
     }
     next.set(record.identity, { identity: record.identity, agent: record.agent })
@@ -153,7 +153,7 @@ export function registerFlueAgents(records: readonly FlueAgentRegistration[]): v
 }
 
 /** The currently registered agent set, in registration order. */
-export function getRegisteredFlueAgents(): readonly FlueAgentRegistration[] {
+export function getRegisteredAmondAgents(): readonly AmondAgentRegistration[] {
   return [...registeredAgents.values()]
 }
 
@@ -185,7 +185,7 @@ export function resolveAgentIdentity(agent: Agent): string | undefined {
   if (agent.agentName !== undefined) {
     if (typeof agent.agentName !== 'string' || !AGENT_IDENTITY_PATTERN.test(agent.agentName)) {
       throw new Error(
-        `[flue] Agent "${agent.name || '(anonymous)'}" has an invalid agentName static ` +
+        `[amond] Agent "${agent.name || '(anonymous)'}" has an invalid agentName static ` +
         `("${String(agent.agentName)}"). Agent identities must match ${AGENT_IDENTITY_PATTERN}.`,
       )
     }
@@ -220,14 +220,14 @@ export function resolveAgentInitialDataSchema(agent: Agent): v.GenericSchema | u
   if (agent.initialData === undefined) { return undefined }
   if (!isValibotSchema(agent.initialData)) {
     throw new Error(
-      `[flue] Agent "${resolveAgentIdentity(agent) ?? agent.name}" has an invalid initialData static: ` +
+      `[amond] Agent "${resolveAgentIdentity(agent) ?? agent.name}" has an invalid initialData static: ` +
       'it must be a Valibot schema for the instance creation data.',
     )
   }
   return agent.initialData
 }
 
-export function resetFlueAgentRegistrationForTests(): void {
+export function resetAmondAgentRegistrationForTests(): void {
   identityBindings = new WeakMap()
   registeredAgents = new Map()
 }
@@ -255,7 +255,7 @@ export function createAgentRouter(agent: Agent): Hono {
   const identity = resolveAgentIdentity(agent)
   if (identity === undefined) {
     throw new Error(
-      '[flue] createAgentRouter() could not resolve an identity for this agent: the function is ' +
+      '[amond] createAgentRouter() could not resolve an identity for this agent: the function is ' +
       'anonymous and carries no agentName static. Name the function (or assign ' +
       '`fn.agentName = \'<identity>\'`).',
     )
@@ -335,21 +335,21 @@ export function createAgentRouter(agent: Agent): Hono {
 }
 
 function requireRuntime() {
-  const rt = getFlueRuntime()
+  const rt = getAmondRuntime()
   if (!rt) {
     throw new Error(
-      '[flue] Agent route invoked before the runtime was configured. ' +
-      'This usually means the mounted app is served outside a Flue-built server entry.',
+      '[amond] Agent route invoked before the runtime was configured. ' +
+      'This usually means the mounted app is served outside an amond-built server entry.',
     )
   }
   return rt
 }
 
 function assertAgentFunction(value: unknown, identity: string): asserts value is Agent {
-  // Twin: `isAgentFunction` in flue-app.ts — keep in sync.
+  // Twin: `isAgentFunction` in amond-app.ts — keep in sync.
   if (typeof value !== 'function') {
     throw new Error(
-      `[flue] Agent "${identity}" must be a function — the agent IS the function. ` +
+      `[amond] Agent "${identity}" must be a function — the agent IS the function. ` +
       'Export a capitalized function from a \'use agent\' module (there is no wrapper to call).',
     )
   }
@@ -363,7 +363,7 @@ function assertAgentFunction(value: unknown, identity: string): asserts value is
 function assertAgentIdentity(identity: unknown): asserts identity is string {
   if (typeof identity !== 'string' || !AGENT_IDENTITY_PATTERN.test(identity)) {
     throw new Error(
-      `[flue] Agent identity "${String(identity)}" is invalid. Agent identities must match ${AGENT_IDENTITY_PATTERN} ` +
+      `[amond] Agent identity "${String(identity)}" is invalid. Agent identities must match ${AGENT_IDENTITY_PATTERN} ` +
       '(a function name like "IssueTriage", or a kebab-case override like "issue-triage").',
     )
   }

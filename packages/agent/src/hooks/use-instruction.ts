@@ -20,7 +20,7 @@ import { requireRenderFrame } from './frame.ts'
 export function useInstruction(text: string): void {
   const frame = requireRenderFrame('useInstruction')
   if (typeof text !== 'string' || text.trim().length === 0) {
-    throw new Error('[flue] useInstruction() requires a non-empty string.')
+    throw new Error('[amond] useInstruction() requires a non-empty string.')
   }
   frame.instructions.push(text)
 }

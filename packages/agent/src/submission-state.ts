@@ -439,7 +439,7 @@ export function findTrailingPartialToolBatch(
  * a transient interruption stamps `RETRYABLE_INTERRUPTION_MARKER` into the
  * message (the persisted record carries only `errorMessage` text, so the
  * marker is the transport) — checked first. The pattern list is the
- * best-effort heuristic for error messages Flue does not author.
+ * best-effort heuristic for error messages amond does not author.
  */
 export function isRetryableModelError(message: AssistantMessage): boolean {
   if (message.stopReason !== 'error' || !message.errorMessage) { return false }

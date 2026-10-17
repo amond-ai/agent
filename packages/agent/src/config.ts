@@ -1,24 +1,24 @@
 /**
- * `@flue/runtime/config` — the host-independent Flue project configuration.
+ * `@amond-ai/agent/config` — the host-independent amond project configuration.
  *
- * `flue.config.ts` describes a Flue *project* (not a deployment host): which
+ * `amond.config.ts` describes an amond *project* (not a deployment host): which
  * target it builds for, where its entry modules live, and which files the
  * `'use agent'` scan covers. Both hosts consume it:
  *
- *   - the `@flue/vite` plugin auto-discovers it (inline `flue(config)` values
- *     merged over the file via {@link mergeFlueConfig}), and
- *   - `flue run <path>` reads it directly.
+ *   - the `@amond-ai/agent-vite` plugin auto-discovers it (inline `amond(config)` values
+ *     merged over the file via {@link mergeAmondConfig}), and
+ *   - `amond run <path>` reads it directly.
  *
  * This module is host-side tooling (it touches the filesystem); import it
  * from build/CLI code, never from agent modules.
  *
- * Config-module evaluation: {@link loadFlueConfig} evaluates the config file
+ * Config-module evaluation: {@link loadAmondConfig} evaluates the config file
  * with the host's native dynamic `import()`, which handles plain JS, ESM, and
  * TypeScript via Node's type-stripping (Node ≥ 22.18 / ≥ 23.6). A host with
  * its own module loader (e.g. a Vite plugin evaluating through the module
  * runner, or one that must honor TS syntax that type-stripping rejects) can
  * instead evaluate the module itself and validate the raw default export with
- * {@link parseFlueConfig}.
+ * {@link parseAmondConfig}.
  */
 
 import * as fs from 'node:fs'
@@ -29,10 +29,10 @@ import * as v from 'valibot'
 // ─── Authoring API ──────────────────────────────────────────────────────────
 
 /**
- * Configuration authored in `flue.config.ts`. Only the fields declared by
+ * Configuration authored in `amond.config.ts`. Only the fields declared by
  * this interface are accepted.
  */
-export interface FlueConfig {
+export interface AmondConfig {
   /**
    * Build and development target.
    *
@@ -40,7 +40,7 @@ export interface FlueConfig {
    * - `'cloudflare'` builds a Workers-compatible application.
    *
    * Optional: the Vite plugin auto-detects `'cloudflare'` from the presence
-   * of the `@cloudflare/vite-plugin` sibling when unset; `flue run` is
+   * of the `@cloudflare/vite-plugin` sibling when unset; `amond run` is
    * always Node-local.
    */
   target?: 'node' | 'cloudflare'
@@ -54,17 +54,17 @@ export interface FlueConfig {
   app?: string
   /**
    * Path to the persistence entry (`db.ts`); Node hosts only. Same
-   * resolution rules as {@link FlueConfig.app}.
+   * resolution rules as {@link AmondConfig.app}.
    */
   db?: string
   /**
    * Path to the non-HTTP Cloudflare handlers entry (`cloudflare.ts`). Same
-   * resolution rules as {@link FlueConfig.app}.
+   * resolution rules as {@link AmondConfig.app}.
    */
   cloudflare?: string
   /**
    * Glob narrowing the `'use agent'` scan, relative to the source root
-   * (`.flue/`, `src/`, or the project root — whichever resolves). Defaults
+   * (`.amond/`, `src/`, or the project root — whichever resolves). Defaults
    * to the whole source root, recursively. Passed through verbatim for the
    * scanner to interpret.
    */
@@ -91,18 +91,18 @@ export interface FlueConfig {
 }
 
 /**
- * Provides type checking and editor completion for `flue.config.ts`. Returns
+ * Provides type checking and editor completion for `amond.config.ts`. Returns
  * the configuration unchanged.
  *
  * ```ts
- * import { defineConfig } from '@flue/runtime/config';
+ * import { defineConfig } from '@amond-ai/agent/config';
  *
  * export default defineConfig({
  *   target: 'node',
  * });
  * ```
  */
-export function defineConfig(config: FlueConfig): FlueConfig {
+export function defineConfig(config: AmondConfig): AmondConfig {
   return config
 }
 
@@ -117,7 +117,7 @@ const ProviderIdSchema = v.pipe(
   v.regex(/^[a-z0-9][a-z0-9-]*$/, 'Provider IDs are lowercase alphanumerics and dashes.'),
 )
 
-const FlueConfigSchema = v.strictObject({
+const AmondConfigSchema = v.strictObject({
   target: v.optional(v.picklist(['node', 'cloudflare'] as const)),
   app: v.optional(NonEmptyPathSchema),
   db: v.optional(NonEmptyPathSchema),
@@ -132,13 +132,13 @@ const FlueConfigSchema = v.strictObject({
  * plugin options). Throws with per-field diagnostics naming `source`
  * (a config-file path, `"inline options"`, …).
  */
-export function parseFlueConfig(value: unknown, source = 'flue config'): FlueConfig {
+export function parseAmondConfig(value: unknown, source = 'amond config'): AmondConfig {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`[flue] ${source} must be a config object.`)
+    throw new Error(`[amond] ${source} must be a config object.`)
   }
-  const result = v.safeParse(FlueConfigSchema, value)
+  const result = v.safeParse(AmondConfigSchema, value)
   if (!result.success) {
-    const lines = [`[flue] Invalid config in ${source}:`]
+    const lines = [`[amond] Invalid config in ${source}:`]
     for (const issue of result.issues) {
       const dotPath = v.getDotPath(issue)
       lines.push(dotPath ? `  • ${dotPath}: ${issue.message}` : `  • ${issue.message}`)
@@ -152,7 +152,7 @@ export function parseFlueConfig(value: unknown, source = 'flue config'): FlueCon
  * Merge inline (host-provided) config over a discovered file config,
  * per-field. `undefined` inline fields fall through to the file value.
  */
-export function mergeFlueConfig(file: FlueConfig, inline: FlueConfig): FlueConfig {
+export function mergeAmondConfig(file: AmondConfig, inline: AmondConfig): AmondConfig {
   return {
     target: inline.target ?? file.target,
     app: inline.app ?? file.app,
@@ -168,42 +168,42 @@ export function mergeFlueConfig(file: FlueConfig, inline: FlueConfig): FlueConfi
 
 /**
  * Config file basenames searched, in priority order. TypeScript first because
- * Flue's audience writes TS agents; the rest mirror Vite's supported set.
+ * amond's audience writes TS agents; the rest mirror Vite's supported set.
  */
-export const FLUE_CONFIG_BASENAMES = Object.freeze([
-  'flue.config.ts',
-  'flue.config.mts',
-  'flue.config.mjs',
-  'flue.config.js',
-  'flue.config.cjs',
-  'flue.config.cts',
+export const AMOND_CONFIG_BASENAMES = Object.freeze([
+  'amond.config.ts',
+  'amond.config.mts',
+  'amond.config.mjs',
+  'amond.config.js',
+  'amond.config.cjs',
+  'amond.config.cts',
 ])
 
-export interface ResolveFlueConfigPathOptions {
-  /** Directory to search for `flue.config.*`, and base for `configFile`. */
+export interface ResolveAmondConfigPathOptions {
+  /** Directory to search for `amond.config.*`, and base for `configFile`. */
   cwd: string
   /** Explicit config-file path (relative to `cwd`, or absolute). */
   configFile?: string
 }
 
 /**
- * Resolve the absolute path of the project's `flue.config.*` file, or
+ * Resolve the absolute path of the project's `amond.config.*` file, or
  * `undefined` when none exists and none was asked for.
  *
  * Throws if `configFile` is an explicit path that doesn't exist on disk —
  * that's a typo, not a "config not configured" situation.
  */
-export function resolveFlueConfigPath(opts: ResolveFlueConfigPathOptions): string | undefined {
+export function resolveAmondConfigPath(opts: ResolveAmondConfigPathOptions): string | undefined {
   const cwd = path.resolve(opts.cwd)
   if (opts.configFile) {
     const explicit = path.resolve(cwd, opts.configFile)
     if (!fs.existsSync(explicit)) {
-      throw new Error(`[flue] Config file not found: ${opts.configFile}`)
+      throw new Error(`[amond] Config file not found: ${opts.configFile}`)
     }
     return explicit
   }
 
-  for (const basename of FLUE_CONFIG_BASENAMES) {
+  for (const basename of AMOND_CONFIG_BASENAMES) {
     const candidate = path.join(cwd, basename)
     if (fs.existsSync(candidate)) { return candidate }
   }
@@ -212,36 +212,36 @@ export function resolveFlueConfigPath(opts: ResolveFlueConfigPathOptions): strin
 
 // ─── Loading ────────────────────────────────────────────────────────────────
 
-export interface LoadedFlueConfig {
+export interface LoadedAmondConfig {
   /** Absolute path of the loaded config file, or `undefined` if none. */
   configPath: string | undefined
   /** The validated config ({} when no config file exists). */
-  config: FlueConfig
+  config: AmondConfig
 }
 
 /**
- * Discover, evaluate, and validate the project's `flue.config.*`.
+ * Discover, evaluate, and validate the project's `amond.config.*`.
  *
  * Evaluation uses the host's native dynamic `import()`: plain JS, ESM, and
  * TypeScript via Node's type-stripping (Node ≥ 22.18 / ≥ 23.6 enable this by
  * default). Hosts with their own module loader should evaluate the file
- * themselves and validate with {@link parseFlueConfig} instead.
+ * themselves and validate with {@link parseAmondConfig} instead.
  *
  * Cache-busts via a query param so repeated loads (e.g. a dev-server config
  * watcher) get a fresh module instead of the cached one.
  */
-export async function loadFlueConfig(
-  opts: ResolveFlueConfigPathOptions,
-): Promise<LoadedFlueConfig> {
-  const configPath = resolveFlueConfigPath(opts)
+export async function loadAmondConfig(
+  opts: ResolveAmondConfigPathOptions,
+): Promise<LoadedAmondConfig> {
+  const configPath = resolveAmondConfigPath(opts)
   if (!configPath) { return { configPath: undefined, config: {} } }
-  const configModule = await loadFlueConfigModule(configPath)
+  const configModule = await loadAmondConfigModule(configPath)
   const source = path.relative(path.resolve(opts.cwd), configPath) || configPath
   const raw = configModule.default
   if (raw == null || typeof raw !== 'object') {
-    throw new Error(`[flue] ${source} must export a config object as the default export.`)
+    throw new Error(`[amond] ${source} must export a config object as the default export.`)
   }
-  return { configPath, config: parseFlueConfig(raw, source) }
+  return { configPath, config: parseAmondConfig(raw, source) }
 }
 
 /**
@@ -250,7 +250,7 @@ export async function loadFlueConfig(
  * are repackaged with a hint pointing at the constraint, since the original
  * Node message is terse.
  */
-export async function loadFlueConfigModule(
+export async function loadAmondConfigModule(
   absConfigPath: string,
 ): Promise<Record<string, unknown>> {
   const fileUrl = `${pathToFileURL(absConfigPath).href}?t=${Date.now()}`
@@ -261,7 +261,7 @@ export async function loadFlueConfigModule(
     const code = (err as { code?: string }).code
     if (code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX') {
       throw new Error(
-        `[flue] ${path.basename(absConfigPath)} uses TypeScript syntax that Node's ` +
+        `[amond] ${path.basename(absConfigPath)} uses TypeScript syntax that Node's ` +
         `type-stripping loader doesn't support (e.g. \`enum\`, \`namespace\` with ` +
         `runtime code, parameter properties, decorators). Rewrite using only ` +
         `erasable types (or move the config to plain JS).\n  Original: ${(err as Error).message}`,
@@ -269,7 +269,7 @@ export async function loadFlueConfigModule(
     }
     if (code === 'ERR_UNKNOWN_FILE_EXTENSION') {
       throw new Error(
-        `[flue] Cannot load ${path.basename(absConfigPath)}: this Node ` +
+        `[amond] Cannot load ${path.basename(absConfigPath)}: this Node ` +
         `(v${process.versions.node}) does not support TypeScript natively. ` +
         `Upgrade to Node ≥ 22.18 or ≥ 23.6.`,
       )
@@ -281,11 +281,11 @@ export async function loadFlueConfigModule(
 // ─── Source-root and entry lookup ───────────────────────────────────────────
 
 /**
- * The directory authored modules are discovered from: `<root>/.flue` when it
+ * The directory authored modules are discovered from: `<root>/.amond` when it
  * exists as a directory, otherwise `<root>/src`, otherwise `<root>` itself.
  */
 export function resolveSourceRoot(root: string): string {
-  for (const sourceDirectory of ['.flue', 'src']) {
+  for (const sourceDirectory of ['.amond', 'src']) {
     const candidate = path.join(root, sourceDirectory)
     try {
       if (fs.statSync(candidate).isDirectory()) { return candidate }
@@ -313,11 +313,11 @@ export function discoverProjectEntry(sourceRoot: string, basename: string): stri
 
 // ─── Project resolution ─────────────────────────────────────────────────────
 
-export interface ResolveFlueProjectOptions {
+export interface ResolveAmondProjectOptions {
   /** Absolute (or cwd-relative) project root. */
   root: string
   /** The (merged) config to resolve. Defaults to `{}`. */
-  config?: FlueConfig
+  config?: AmondConfig
   /**
    * Path of the config file the values came from; relative config paths
    * resolve from its directory. Defaults to resolving from `root`.
@@ -325,8 +325,8 @@ export interface ResolveFlueProjectOptions {
   configPath?: string
 }
 
-/** A Flue project's fully resolved filesystem layout. */
-export interface ResolvedFlueProject {
+/** An amond project's fully resolved filesystem layout. */
+export interface ResolvedAmondProject {
   /** Absolute project root. */
   root: string
   /** Absolute directory authored modules are discovered from. */
@@ -349,15 +349,15 @@ export interface ResolvedFlueProject {
 
 /**
  * Resolve a validated config against the filesystem: source-root lookup
- * (`.flue/` → `src/` → root) plus entry discovery with the `ts > mts > js >
+ * (`.amond/` → `src/` → root) plus entry discovery with the `ts > mts > js >
  * mjs` extension priority. Explicit entry paths resolve from the config
  * file's directory and must exist (a typo, not a "not configured" state);
  * unset entries fall back to the source-root lookup and may be absent.
  *
  * Whether a missing entry is an error is the host's call (e.g. the Vite
- * plugin requires `app`; `flue run` requires none).
+ * plugin requires `app`; `amond run` requires none).
  */
-export function resolveFlueProject(opts: ResolveFlueProjectOptions): ResolvedFlueProject {
+export function resolveAmondProject(opts: ResolveAmondProjectOptions): ResolvedAmondProject {
   const root = path.resolve(opts.root)
   const config = opts.config ?? {}
   const baseDir = opts.configPath ? path.dirname(path.resolve(opts.configPath)) : root
@@ -384,7 +384,7 @@ function resolveEntry(
   if (configured !== undefined) {
     const explicit = path.resolve(baseDir, configured)
     if (!fs.existsSync(explicit)) {
-      throw new Error(`[flue] Configured \`${field}\` entry not found: ${configured}`)
+      throw new Error(`[amond] Configured \`${field}\` entry not found: ${configured}`)
     }
     return explicit
   }

@@ -4,7 +4,7 @@
  * A cheap `enforce: 'pre'` resolveId hook records every resolution edge
  * (resolved child id → importer). When a load later fails on a module that
  * cannot exist in this environment — the motivating case is a `cloudflare:*`
- * import reaching a Node graph (`vite dev`, `vite build`, `flue run`) — the
+ * import reaching a Node graph (`vite dev`, `vite build`, `amond run`) — the
  * recorded edges reconstruct the import chain from the user's entry down to
  * the offending specifier, so the diagnostic names the route to the problem
  * instead of just the problem:
@@ -37,7 +37,7 @@ export function createImportTrace(options: { enabled: () => boolean }): ImportTr
   const importers = new Map<string, string>()
 
   const plugin: Plugin = {
-    name: 'flue-import-trace',
+    name: 'amond-import-trace',
     enforce: 'pre',
     buildStart() {
       // Build phases get fresh plugin drivers; stale edges from a previous

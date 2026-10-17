@@ -486,7 +486,7 @@ export interface CompactionResult {
   /**
    * Aggregate token usage from the 1–2 summarization calls that produced
    * this result. Undefined when no call reported usage (rare — some
-   * providers may stream without totals). Already normalized into Flue's
+   * providers may stream without totals). Already normalized into amond's
    * `PromptUsage` shape so callers can persist it directly on a
    * `CompactionEntry`.
    */
@@ -684,7 +684,7 @@ export async function compact(
   // Sum the usage of every summarization call that produced a value.
   // Split-turn compaction fires two calls; regular compaction fires one.
   // A call may report `undefined` usage (rare provider behaviour) — those
-  // contribute zero. Normalize from pi-ai's `Usage` to Flue's `PromptUsage`
+  // contribute zero. Normalize from pi-ai's `Usage` to amond's `PromptUsage`
   // at this boundary so the result is a persistable shape for the
   // downstream `CompactionEntry`.
   let aggregateUsage: PromptUsage | undefined

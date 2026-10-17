@@ -16,7 +16,7 @@ export function enterHarnessTool(
 ): HarnessToolLineage {
   if (lineage.has(tool)) {
     throw new Error(
-      `[flue] Harness tool "${tool.name}" cannot be invoked recursively while it is already active.`,
+      `[amond] Harness tool "${tool.name}" cannot be invoked recursively while it is already active.`,
     )
   }
   return new Set([...lineage, tool])

@@ -20,10 +20,10 @@
  * - `abort()` requests a durable abort of the instance's in-flight and
  *   queued work; a concurrent `read()` observes the aborted settlement.
  *
- * Like the top-level verb, the handle taps the process's one configured Flue
- * runtime: it works inside a Flue server (a cron callback in app.ts), in a
- * standalone script after `start()` from `@flue/runtime/node`, under
- * `flue run`, and inside a deployed Cloudflare Worker — including Workflow
+ * Like the top-level verb, the handle taps the process's one configured amond
+ * runtime: it works inside an amond server (a cron callback in app.ts), in a
+ * standalone script after `start()` from `@amond-ai/agent/node`, under
+ * `amond run`, and inside a deployed Cloudflare Worker — including Workflow
  * steps. No in-memory state is load-bearing: if the process dies between
  * `dispatch()` and `read()`, the submission survives exactly as the
  * configured store persists it, and a later `read()` picks up where the
@@ -46,8 +46,8 @@ import {
 } from './runtime/conversation-observer.ts'
 import type { SubmissionReply, SubmissionSettlement } from './runtime/conversation-observer.ts'
 import { enqueueDispatch } from './runtime/dispatch.ts'
-import type { CloudflareRuntime, FlueRuntime, NodeRuntime } from './runtime/flue-app.ts'
-import { getAgentInstance, getFlueRuntime } from './runtime/flue-app.ts'
+import type { AmondRuntime, CloudflareRuntime, NodeRuntime } from './runtime/amond-app.ts'
+import { getAgentInstance, getAmondRuntime } from './runtime/amond-app.ts'
 import { generateInstanceId } from './runtime/ids.ts'
 import { normalizeMessageInput } from './runtime/message-input.ts'
 import { getRegisteredAgentIdentity } from './runtime/registration.ts'
@@ -112,7 +112,7 @@ export class AgentRunError extends Error {
 
   constructor(options: { outcome: 'failed' | 'aborted', submissionId: string, cause?: unknown }) {
     super(
-      `[flue] Agent run ${options.outcome === 'aborted' ? 'was aborted' : 'failed'} ` +
+      `[amond] Agent run ${options.outcome === 'aborted' ? 'was aborted' : 'failed'} ` +
       `(submission ${options.submissionId}).`,
       options.cause === undefined ? undefined : { cause: options.cause },
     )
@@ -187,7 +187,7 @@ export function init(agent: Agent, options: InitOptions = {}): AgentInstanceHand
     })
   }
   if (options.id !== undefined && (typeof options.id !== 'string' || options.id.trim() === '')) {
-    throw new Error('[flue] init() requires a non-empty string instance id when one is given.')
+    throw new Error('[amond] init() requires a non-empty string instance id when one is given.')
   }
   const id = options.id ?? generateInstanceId()
 
@@ -278,7 +278,7 @@ function normalizeReadTarget(target: string | DispatchReceipt): {
 } {
   if (typeof target === 'string') {
     if (target.trim() === '') {
-      throw new Error('[flue] The handle read() requires a non-empty submission id.')
+      throw new Error('[amond] The handle read() requires a non-empty submission id.')
     }
     return { submissionId: target }
   }
@@ -288,7 +288,7 @@ function normalizeReadTarget(target: string | DispatchReceipt): {
     typeof target.submissionId !== 'string' ||
     target.submissionId === ''
   ) {
-    throw new Error('[flue] The handle read() takes a dispatch receipt or a submission id string.')
+    throw new Error('[amond] The handle read() takes a dispatch receipt or a submission id string.')
   }
   return { submissionId: target.submissionId, uid: target.uid }
 }
@@ -343,7 +343,7 @@ async function awaitSettledReply(
 }
 
 function createSettlementTransport(
-  rt: FlueRuntime,
+  rt: AmondRuntime,
   agentName: string,
   instanceId: string,
 ): SettlementTransport {
@@ -389,12 +389,12 @@ function cloudflareSettlementTransport(
   agentName: string,
   instanceId: string,
 ): SettlementTransport {
-  const base = `https://flue.invalid/agents/${encodeURIComponent(agentName)}/${encodeURIComponent(instanceId)}`
+  const base = `https://amond.invalid/agents/${encodeURIComponent(agentName)}/${encodeURIComponent(instanceId)}`
   const route = async (request: Request): Promise<Response> => {
     const response = await cf.routeAgentRequest(request, undefined, { agentName, instanceId })
     if (!response) {
       throw new Error(
-        `[flue] init() target agent "${agentName}" Durable Object binding is unavailable.`,
+        `[amond] init() target agent "${agentName}" Durable Object binding is unavailable.`,
       )
     }
     return response
@@ -461,17 +461,17 @@ function cloudflareSettlementTransport(
 
 function routeFailure(action: string, agentName: string, response: Response): Error {
   return new Error(
-    `[flue] init() ${action} for agent "${agentName}" failed with status ${response.status}.`,
+    `[amond] init() ${action} for agent "${agentName}" failed with status ${response.status}.`,
   )
 }
 
-function requireRuntime(api: string): FlueRuntime {
-  const rt = getFlueRuntime()
+function requireRuntime(api: string): AmondRuntime {
+  const rt = getAmondRuntime()
   if (!rt) {
     throw new Error(
-      `[flue] ${api}() was used before the Flue runtime was configured. ` +
-      'Inside a Flue-built server this happens automatically; in a standalone ' +
-      'script, call start() from \'@flue/runtime/node\' first.',
+      `[amond] ${api}() was used before the amond runtime was configured. ` +
+      'Inside an amond-built server this happens automatically; in a standalone ' +
+      'script, call start() from \'@amond-ai/agent/node\' first.',
     )
   }
   return rt
@@ -480,7 +480,7 @@ function requireRuntime(api: string): FlueRuntime {
 function resolveAgentName(agent: Agent, api: string): string {
   const name = getRegisteredAgentIdentity(agent)
   if (!name) {
-    throw new Error(`[flue] ${api}() target agent is not registered in this built application.`)
+    throw new Error(`[amond] ${api}() target agent is not registered in this built application.`)
   }
   return name
 }
@@ -530,13 +530,13 @@ function normalizeHandleDispatchRequest(
   if (typeof request === 'string') { return { message: request } }
   if (typeof request !== 'object' || request === null || !('message' in request)) {
     throw new Error(
-      '[flue] The handle dispatch() takes a string or the dispatch payload object. ' +
+      '[amond] The handle dispatch() takes a string or the dispatch payload object. ' +
       'Wrap a message value as dispatch({ message, initialData? }).',
     )
   }
   if ('id' in request || 'uid' in request) {
     throw new Error(
-      '[flue] The handle dispatch() payload cannot carry "id" or "uid" — the handle owns ' +
+      '[amond] The handle dispatch() payload cannot carry "id" or "uid" — the handle owns ' +
       'the address and send condition. Pass them to init(agent, { id, uid }) instead.',
     )
   }

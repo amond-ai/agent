@@ -1,5 +1,5 @@
 import { AttachmentConflictError, AttachmentIntegrityError } from './errors.ts'
-import { migrateFlueSqlSchema } from './format-version.ts'
+import { migrateAmondSqlSchema } from './format-version.ts'
 import {
   attachmentBytesEqual,
   
@@ -31,9 +31,9 @@ export function ensureSqlAttachmentTable(sql: SqlStorage): void {
   // DDL must stay behind the format-version fence like its two siblings
   // (ensureSqlAgentExecutionTables, ensureSqlConversationStreamTables): a
   // store recorded with an unknown version must reject before any write.
-  migrateFlueSqlSchema(sql, () => {
+  migrateAmondSqlSchema(sql, () => {
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS flue_attachments (
+      `CREATE TABLE IF NOT EXISTS amond_attachments (
 			stream_path TEXT NOT NULL,
 			attachment_id TEXT NOT NULL,
 			mime_type TEXT NOT NULL,
@@ -46,14 +46,14 @@ export function ensureSqlAttachmentTable(sql: SqlStorage): void {
 		)`,
     )
     sql.exec(
-      `CREATE TABLE IF NOT EXISTS flue_attachment_chunks (
+      `CREATE TABLE IF NOT EXISTS amond_attachment_chunks (
 			stream_path TEXT NOT NULL,
 			attachment_id TEXT NOT NULL,
 			chunk_index INTEGER NOT NULL CHECK (chunk_index >= 0),
 			bytes BLOB NOT NULL,
 			PRIMARY KEY (stream_path, attachment_id, chunk_index),
 			FOREIGN KEY (stream_path, attachment_id)
-				REFERENCES flue_attachments (stream_path, attachment_id) ON DELETE CASCADE
+				REFERENCES amond_attachments (stream_path, attachment_id) ON DELETE CASCADE
 		)`,
     )
   })
@@ -77,7 +77,7 @@ export class SqliteAttachmentStore implements AttachmentStore {
       }
       const chunks = splitAttachmentBytes(input.bytes)
       this.sql.exec(
-        `INSERT INTO flue_attachments
+        `INSERT INTO amond_attachments
 				 (stream_path, attachment_id, mime_type, byte_size, digest, conversation_id, chunk_count, created_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         input.streamPath,
@@ -91,7 +91,7 @@ export class SqliteAttachmentStore implements AttachmentStore {
       )
       for (const [index, bytes] of chunks.entries()) {
         this.sql.exec(
-          `INSERT INTO flue_attachment_chunks
+          `INSERT INTO amond_attachment_chunks
 					 (stream_path, attachment_id, chunk_index, bytes) VALUES (?, ?, ?, ?)`,
           input.streamPath,
           input.attachment.id,
@@ -118,7 +118,7 @@ export class SqliteAttachmentStore implements AttachmentStore {
     const value = this.sql
       .exec(
         `SELECT mime_type, byte_size, digest, conversation_id, chunk_count
-				 FROM flue_attachments WHERE stream_path = ? AND attachment_id = ?`,
+				 FROM amond_attachments WHERE stream_path = ? AND attachment_id = ?`,
         streamPath,
         attachmentId,
       )
@@ -127,7 +127,7 @@ export class SqliteAttachmentStore implements AttachmentStore {
     const chunkCount = parseChunkCount(value.chunk_count, attachmentId)
     const chunks = this.sql
       .exec(
-        `SELECT chunk_index, bytes FROM flue_attachment_chunks
+        `SELECT chunk_index, bytes FROM amond_attachment_chunks
 			 WHERE stream_path = ? AND attachment_id = ? ORDER BY chunk_index`,
         streamPath,
         attachmentId,

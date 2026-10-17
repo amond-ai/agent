@@ -1,4 +1,4 @@
-export type FlueExecutionOperation =
+export type AmondExecutionOperation =
   | { type: 'agent', operationId: string, operationKind: 'prompt' | 'skill' | 'task' }
   | { type: 'model', turnId: string }
   | { type: 'tool', toolCallId: string, toolName: string }
@@ -7,7 +7,7 @@ export type FlueExecutionOperation =
 	 * Framework bookkeeping around agent invocations — the coordinator's
 	 * storage-only work (submission listing/claiming, conversation
 	 * materialization, settlement finalization). Tracing backends wrap it in
-	 * an internal `flue.coordinator` span so platform-instrumented storage
+	 * an internal `amond.coordinator` span so platform-instrumented storage
 	 * and RPC calls group under it instead of landing as unparented noise;
 	 * the semconv spans (`invoke_agent`/`chat`/`execute_tool`) are never
 	 * children of it. New phases distinguish by the attribute, not by new
@@ -15,13 +15,13 @@ export type FlueExecutionOperation =
 	 */
   | { type: 'coordinator', phase: 'reconcile' }
 
-export interface FlueTraceCarrier {
+export interface AmondTraceCarrier {
   traceparent: string
   tracestate?: string
 }
 
-export interface FlueExecutionContext {
-  eventContext?: import('./types.ts').FlueEventContext
+export interface AmondExecutionContext {
+  eventContext?: import('./types.ts').AmondEventContext
   instanceId?: string
   submissionId?: string
   agentName?: string
@@ -31,18 +31,18 @@ export interface FlueExecutionContext {
   operationId?: string
   turnId?: string
   taskId?: string
-  traceCarrier?: FlueTraceCarrier
+  traceCarrier?: AmondTraceCarrier
 }
 
-export type FlueExecutionInterceptor = <T>(
-  operation: FlueExecutionOperation,
-  ctx: FlueExecutionContext,
+export type AmondExecutionInterceptor = <T>(
+  operation: AmondExecutionOperation,
+  ctx: AmondExecutionContext,
   next: () => Promise<T>,
 ) => Promise<T>
 
-const interceptors: FlueExecutionInterceptor[] = []
+const interceptors: AmondExecutionInterceptor[] = []
 
-export function extractTraceCarrier(headers: Headers): FlueTraceCarrier | undefined {
+export function extractTraceCarrier(headers: Headers): AmondTraceCarrier | undefined {
   const traceparent = headers.get('traceparent')
   if (!traceparent || !/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/.test(traceparent)) { return undefined }
   const [, traceId, spanId] = traceparent.split('-')
@@ -57,7 +57,7 @@ export function extractTraceCarrier(headers: Headers): FlueTraceCarrier | undefi
   return { traceparent, ...(tracestate ? { tracestate } : {}) }
 }
 
-export function registerExecutionInterceptor(interceptor: FlueExecutionInterceptor): () => void {
+export function registerExecutionInterceptor(interceptor: AmondExecutionInterceptor): () => void {
   interceptors.push(interceptor)
   return () => {
     const index = interceptors.indexOf(interceptor)
@@ -66,28 +66,28 @@ export function registerExecutionInterceptor(interceptor: FlueExecutionIntercept
 }
 
 export function interceptExecution<T>(
-  operation: FlueExecutionOperation,
-  ctx: FlueExecutionContext,
+  operation: AmondExecutionOperation,
+  ctx: AmondExecutionContext,
   next: () => Promise<T>,
 ): Promise<T> {
   return Promise.resolve().then(() => dispatchExecution(operation, ctx, next))
 }
 
 function dispatchExecution<T>(
-  operation: FlueExecutionOperation,
-  ctx: FlueExecutionContext,
+  operation: AmondExecutionOperation,
+  ctx: AmondExecutionContext,
   next: () => Promise<T>,
 ): Promise<T> {
   const registered = [...interceptors]
   let index = -1
   const dispatch = (nextIndex: number): Promise<T> => {
-    if (nextIndex <= index) { return Promise.reject(new Error('Flue execution next() called more than once.')) }
+    if (nextIndex <= index) { return Promise.reject(new Error('amond execution next() called more than once.')) }
     index = nextIndex
     const interceptor = registered[nextIndex]
     if (!interceptor) { return next() }
     let called = false
     return interceptor(operation, ctx, () => {
-      if (called) { return Promise.reject(new Error('Flue execution next() called more than once.')) }
+      if (called) { return Promise.reject(new Error('amond execution next() called more than once.')) }
       called = true
       return dispatch(nextIndex + 1)
     })

@@ -1,13 +1,13 @@
 /**
- * `flue run <path>` — transport-free, one-shot local agent execution.
+ * `amond run <path>` — transport-free, one-shot local agent execution.
  *
  * The CLI process owns orchestration only: resolve the module path and
  * project config, spin up a NON-LISTENING Vite server (middleware mode,
  * hmr off — no port is ever bound), and hand execution to the run
  * bootstrap. The bootstrap itself (run-bootstrap.ts) is loaded THROUGH that
- * Vite server, not imported here, so its `@flue/runtime` imports resolve
+ * Vite server, not imported here, so its `@amond-ai/agent` imports resolve
  * inside the same single-runtime module graph as the user's agent module
- * (see `flueDependencyResolverPlugin` — module-scoped runtime registries
+ * (see `amondDependencyResolverPlugin` — module-scoped runtime registries
  * make dual copies a real hazard).
  */
 
@@ -17,24 +17,24 @@ import { fileURLToPath } from 'node:url'
 import { format } from 'node:util'
 import {
   
-  loadFlueConfigModule,
-  parseFlueConfig,
-  resolveFlueConfigPath,
-  resolveFlueProject,
-} from '@flue/runtime/config'
-import type { FlueConfig } from '@flue/runtime/config'
+  loadAmondConfigModule,
+  parseAmondConfig,
+  resolveAmondConfigPath,
+  resolveAmondProject,
+} from '@amond-ai/agent/config'
+import type { AmondConfig } from '@amond-ai/agent/config'
 import {
+  amondDependencyResolverPlugin,
   createImportTrace,
   findCloudflareSpecifier,
-  flueDependencyResolverPlugin,
   
   markdownImportPlugin,
   scanAgentModuleCode,
-} from '@flue/vite/internal'
-import type { ImportTrace } from '@flue/vite/internal'
+} from '@amond-ai/agent-vite/internal'
+import type { ImportTrace } from '@amond-ai/agent-vite/internal'
 import { ulid } from 'ulidx'
 import { UsageError } from '../errors.ts'
-import type { FlueRunOutcome, FlueRunSession, FlueRunSessionOptions } from './run-bootstrap.ts'
+import type { AmondRunOutcome, AmondRunSession, AmondRunSessionOptions } from './run-bootstrap.ts'
 
 interface LocalAgentRunReadyInfo {
   identity: string
@@ -69,7 +69,7 @@ export interface LocalAgentRunOptions {
   onReady?: (info: LocalAgentRunReadyInfo) => void
 }
 
-interface LocalAgentRunResult extends FlueRunOutcome {
+interface LocalAgentRunResult extends AmondRunOutcome {
   identity: string
   conversationId: string
 }
@@ -84,15 +84,15 @@ export interface LocalAgentRun {
   forceCloseSync(): void
 }
 
-const RUN_DB_RELATIVE_PATH = path.join('node_modules', '.cache', 'flue', 'run.db')
+const RUN_DB_RELATIVE_PATH = path.join('node_modules', '.cache', 'amond', 'run.db')
 
-/** Config fields `flue run` honors; anything else (legacy `root`/`output`, …) is ignored. */
+/** Config fields `amond run` honors; anything else (legacy `root`/`output`, …) is ignored. */
 const RUN_CONFIG_FIELDS = ['target', 'app', 'db', 'cloudflare', 'agents'] as const
 
 export function createLocalAgentRun(options: LocalAgentRunOptions): LocalAgentRun {
   const controller = new AbortController()
   let viteServer: ViteDevServerLike | undefined
-  let session: FlueRunSession | undefined
+  let session: AmondRunSession | undefined
   let started: Promise<LocalAgentRunResult> | undefined
   let closePromise: Promise<void> | undefined
 
@@ -117,7 +117,7 @@ export function createLocalAgentRun(options: LocalAgentRunOptions): LocalAgentRu
       viteServer = undefined
     }
     if (errors.length === 1) { throw errors[0] }
-    if (errors.length > 1) { throw new AggregateError(errors, '[flue] flue run teardown failed.') }
+    if (errors.length > 1) { throw new AggregateError(errors, '[amond] amond run teardown failed.') }
   }
 
   return {
@@ -148,7 +148,7 @@ export function createLocalAgentRun(options: LocalAgentRunOptions): LocalAgentRu
     const cwd = options.cwd ?? process.cwd()
     const agentPath = resolveAgentModule(cwd, options.modulePath)
     // The build scanner's export-shape rule decides what counts as an agent
-    // (classes and factory-made functions never do), so `flue run` and
+    // (classes and factory-made functions never do), so `amond run` and
     // `vite dev`/build can never disagree about a module's agents. The module
     // is named by explicit path, so the directive is not required.
     const agentScan = await scanAgentModuleCode(fs.readFileSync(agentPath, 'utf8'), agentPath, {
@@ -175,10 +175,10 @@ export function createLocalAgentRun(options: LocalAgentRunOptions): LocalAgentRu
         resolveBootstrapModulePath(),
         loadContext,
       )) as {
-        createFlueRunSession(sessionOptions: FlueRunSessionOptions): Promise<FlueRunSession>
+        createAmondRunSession(sessionOptions: AmondRunSessionOptions): Promise<AmondRunSession>
       }
       throwIfAborted(controller.signal)
-      session = await bootstrap.createFlueRunSession({
+      session = await bootstrap.createAmondRunSession({
         agentModulePath: agentPath,
         agentExports: agentScan.agents.map(agent => agent.exportName),
         ...(options.agentName !== undefined ? { agentName: options.agentName } : {}),
@@ -230,9 +230,9 @@ function resolveAgentModule(cwd: string, rawPath: string): string {
   if (!exists) {
     if (!looksLikeModulePath(rawPath)) {
       throw new UsageError(
-        `\`flue run\` takes a module path, not a name. ` +
+        `\`amond run\` takes a module path, not a name. ` +
         `Pass the path of a module that exports an agent function, ` +
-        `e.g. \`flue run src/agents/${rawPath}.ts --message "..."\`.`,
+        `e.g. \`amond run src/agents/${rawPath}.ts --message "..."\`.`,
       )
     }
     throw new UsageError(`Agent module not found: ${rawPath}`)
@@ -253,23 +253,23 @@ function looksLikeModulePath(value: string): boolean {
 // ─── Project config ─────────────────────────────────────────────────────────
 
 /**
- * Load `flue.config.*` honoring the NEW schema (`target`/`app`/`db`/
+ * Load `amond.config.*` honoring the NEW schema (`target`/`app`/`db`/
  * `cloudflare`/`agents`). Legacy fields (`root`, `output`) and unknown keys
  * are dropped before validation so old config files keep working under
- * `flue run`, which only needs source-root/db resolution.
+ * `amond run`, which only needs source-root/db resolution.
  */
 async function resolveRunProject(cwd: string): Promise<{
   configPath: string | undefined
-  project: ReturnType<typeof resolveFlueProject>
+  project: ReturnType<typeof resolveAmondProject>
 }> {
-  const configPath = resolveFlueConfigPath({ cwd })
-  let config: FlueConfig = {}
+  const configPath = resolveAmondConfigPath({ cwd })
+  let config: AmondConfig = {}
   if (configPath) {
-    const configModule = await loadFlueConfigModule(configPath)
+    const configModule = await loadAmondConfigModule(configPath)
     const raw = configModule.default
     if (raw == null || typeof raw !== 'object') {
       throw new Error(
-        `[flue] ${path.basename(configPath)} must export a config object as the default export.`,
+        `[amond] ${path.basename(configPath)} must export a config object as the default export.`,
       )
     }
     const picked: Record<string, unknown> = {}
@@ -277,9 +277,9 @@ async function resolveRunProject(cwd: string): Promise<{
       const value = (raw as Record<string, unknown>)[field]
       if (value !== undefined) { picked[field] = value }
     }
-    config = parseFlueConfig(picked, path.basename(configPath))
+    config = parseAmondConfig(picked, path.basename(configPath))
   }
-  const project = resolveFlueProject({
+  const project = resolveAmondProject({
     root: cwd,
     config,
     ...(configPath !== undefined ? { configPath } : {}),
@@ -297,7 +297,7 @@ interface ViteDevServerLike {
 /**
  * Non-listening module server: middleware mode with hmr disabled binds no
  * port and starts no websocket. The dependency resolver keeps exactly ONE
- * copy of `@flue/runtime` in the graph (externalized to the project's
+ * copy of `@amond-ai/agent` in the graph (externalized to the project's
  * install); `@earendil-works/pi-ai` is forced external for the same
  * module-scoped-registry reason (Vite would otherwise inline a symlinked
  * copy, splitting the provider registry the runtime shares with it).
@@ -319,7 +319,7 @@ async function createRunModuleServer(
       middlewareMode: true,
       hmr: false,
       // Without this Vite still creates a standalone HMR websocket server
-      // (default port 24678) even when `hmr` is false — `flue run` must
+      // (default port 24678) even when `hmr` is false — `amond run` must
       // never bind a port.
       ws: false,
       watch: null,
@@ -327,7 +327,7 @@ async function createRunModuleServer(
     plugins: [
       markdownImportPlugin(),
       importTrace.plugin,
-      flueDependencyResolverPlugin({ root, external: true, importers: [] }),
+      amondDependencyResolverPlugin({ root, external: true, importers: [] }),
     ],
   })
 }
@@ -351,8 +351,8 @@ async function loadRunModule(
     if (specifier !== undefined) {
       const chain = context.importTrace.explain(specifier, context.root)
       throw new Error(
-        `[flue] Failed to load ${displayPath(context.cwd, modulePath)}: it (or a module it imports) ` +
-        `depends on '${specifier}'. \`flue run\` is Node-local; ` +
+        `[amond] Failed to load ${displayPath(context.cwd, modulePath)}: it (or a module it imports) ` +
+        `depends on '${specifier}'. \`amond run\` is Node-local; ` +
         `platform behavior belongs to \`vite dev\`. If the import is only used for types, ` +
         `change it to \`import type\` so it is erased at build time.${ 
           chain ? `\n\nImport chain:\n${chain}` : ''}`,
@@ -365,7 +365,7 @@ async function loadRunModule(
 
 /**
  * Locate the bootstrap module for `ssrLoadModule`. In the published/built
- * CLI this file is bundled into `dist/flue.js`, and the bootstrap ships as
+ * CLI this file is bundled into `dist/amond.js`, and the bootstrap ships as
  * the sibling `dist/run-bootstrap.mjs` build entry; when running from
  * source it sits next to this file as `run-bootstrap.ts`.
  */
@@ -374,13 +374,13 @@ function resolveBootstrapModulePath(): string {
     const candidatePath = fileURLToPath(new URL(candidate, import.meta.url))
     if (fs.existsSync(candidatePath)) { return candidatePath }
   }
-  throw new Error('[flue] Internal error: the flue run bootstrap module is missing.')
+  throw new Error('[amond] Internal error: the amond run bootstrap module is missing.')
 }
 
 // ─── Console redirection ────────────────────────────────────────────────────
 
 /**
- * `flue run` reserves stdout for the final message (pipeable output), so
+ * `amond run` reserves stdout for the final message (pipeable output), so
  * stdout-bound console methods are rerouted for the duration of the run —
  * agent/module `console.log` output surfaces on stderr via the caller.
  * `console.warn`/`console.error` already write to stderr and pass through.

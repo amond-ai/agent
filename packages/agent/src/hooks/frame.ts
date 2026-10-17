@@ -17,7 +17,7 @@ import type {
 } from '../types.ts'
 
 /**
- * The render frame: the module-global slot Flue Hooks resolve against while
+ * The render frame: the module-global slot amond Hooks resolve against while
  * an agent function runs. Same discipline as Preact's `currentComponent` —
  * agent functions are synchronous, so a single slot never interleaves; it is
  * set for exactly the duration of one render, and hooks throw when it is
@@ -133,8 +133,8 @@ export function isRendering(): boolean {
 export function requireRenderFrame(hookName: string): RenderFrame {
   if (!currentFrame) {
     throw new Error(
-      `[flue] ${hookName}() was called outside an agent function. ` +
-      'Flue Hooks compose an agent while it renders: call them synchronously in the agent function body (or in a custom hook it calls), not from tools, actions, event handlers, or module scope.',
+      `[amond] ${hookName}() was called outside an agent function. ` +
+      'amond Hooks compose an agent while it renders: call them synchronously in the agent function body (or in a custom hook it calls), not from tools, actions, event handlers, or module scope.',
     )
   }
   return currentFrame
@@ -148,7 +148,7 @@ export function renderWithFrame<T>(
 ): { result: T, frame: RenderFrame } {
   if (currentFrame) {
     throw new Error(
-      '[flue] Re-entrant agent render. An agent function must not invoke another agent function directly; compose shared behavior with custom hooks instead.',
+      '[amond] Re-entrant agent render. An agent function must not invoke another agent function directly; compose shared behavior with custom hooks instead.',
     )
   }
   const frame: RenderFrame = {

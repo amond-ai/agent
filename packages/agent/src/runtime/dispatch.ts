@@ -12,7 +12,7 @@ export async function enqueueDispatch(options: {
   const message = validateDispatchRequest(options.request, agent)
   if (typeof options.request.uid === 'string' && options.request.initialData !== undefined) {
     throw new Error(
-      '[flue] dispatch() cannot combine a continue condition (`uid`) with `initialData` — the condition forbids creation, so the seed could never apply.',
+      '[amond] dispatch() cannot combine a continue condition (`uid`) with `initialData` — the condition forbids creation, so the seed could never apply.',
     )
   }
   // A keyed dispatch derives its submission id from the caller's key, so a
@@ -44,13 +44,13 @@ function validateDispatchRequest(
   agent: string,
 ): DeliveredMessage {
   if (typeof agent !== 'string' || agent.trim() === '') {
-    throw new Error('[flue] dispatch() requires a non-empty target agent.')
+    throw new Error('[amond] dispatch() requires a non-empty target agent.')
   }
   if (typeof request.id !== 'string' || request.id.trim() === '') {
-    throw new Error('[flue] dispatch() requires a non-empty "id" target agent instance id.')
+    throw new Error('[amond] dispatch() requires a non-empty "id" target agent instance id.')
   }
   if (!isRegisteredAgentIdentity(agent)) {
-    throw new Error(`[flue] dispatch() target agent "${agent}" is not registered.`)
+    throw new Error(`[amond] dispatch() target agent "${agent}" is not registered.`)
   }
   return parseDeliveredMessage(request.message)
 }
