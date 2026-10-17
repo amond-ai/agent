@@ -217,7 +217,8 @@ one is in place.
 
 **The user owns the deploy config.** `amond build` emits handlers only. It never generates
 `wrangler.jsonc`, `vercel.json`, or cron registration, so a framework release cannot rewrite a
-deployment. ADR-0003 keeps this rule for the Cloudflare Sandbox container.
+deployment. The README keeps this rule for the Cloudflare Sandbox container: `wrangler.jsonc`,
+including the container, stays with the user.
 
 **Durable sessions are idempotent by caller ID.** `start` with an existing ID returns the stored
 record without re-running anything. `resume` drives a session only when it is `waiting` on the

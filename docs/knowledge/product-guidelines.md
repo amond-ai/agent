@@ -14,7 +14,7 @@ Read it before writing documentation, an ADR, or a new package API.
   the reference voice: they say what was chosen, why, and what it costs.
 - Prefer concrete trade-offs to adjectives. A comparison table beats a list of benefits.
 - Say what is not done yet. Status sections name the unimplemented parts explicitly.
-- British spelling already appears in existing prose ("optimises", "behaviour", "neighbours").
+- British spelling already appears in existing prose ("optimises", "behaviour", "favour").
   Keep a document internally consistent rather than rewriting existing text.
 
 ## Architecture decisions

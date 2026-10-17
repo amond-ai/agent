@@ -66,7 +66,7 @@ Planned by [ADR-0003](../adr/0003-build-on-flue-with-ai-sdk-harness.md), not yet
 
 | Path | Points at | Role |
 | --- | --- | --- |
-| `vendor/flue` | `withastro/flue` at `deee93b` (2.3.0) | Read-only reference. Flue's packages are imported into `packages/` with `git subtree` and renamed ([ADR-0004](../adr/0004-ship-flue-as-amond-packages.md)) |
+| `vendor/flue` | `withastro/flue` at `deee93b` (2.3.0) | Read-only reference. Flue's packages will be imported into `packages/` with `git subtree` and renamed ([ADR-0004](../adr/0004-ship-flue-as-amond-packages.md)), tracked in [#20](https://github.com/amond-ai/agent/issues/20) |
 | `vendor/eve` | `vercel/eve` at `0857ff4` | Read-only reference |
 
 Flue builds with pnpm, Biome, and TypeScript 7. Imported packages move onto this repository's bun,

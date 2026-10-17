@@ -37,8 +37,8 @@ and the `amond` CLI.
 | Feature | Source | Status |
 | --- | --- | --- |
 | Agent modules (`'use agent'`), routing, durable submissions, Durable Object SQLite persistence | Flue runtime, shipped as `@amond-ai/agent` | Planned: import and rename ([#20](https://github.com/amond-ai/agent/issues/20)) |
-| Vite build to Cloudflare Durable Objects | Flue Vite plugin, shipped as `@amond-ai/agent-vite` | Planned: import and rename (#20) |
-| `amond` CLI and `amond.config.ts` | Flue CLI, shipped as `amond` | Planned: import and rename (#20) |
+| Vite build to Cloudflare Durable Objects | Flue Vite plugin, shipped as `@amond-ai/agent-vite` | Planned: import and rename ([#20](https://github.com/amond-ai/agent/issues/20)) |
+| `amond` CLI and `amond.config.ts` | Flue CLI, shipped as `amond` | Planned: import and rename ([#20](https://github.com/amond-ai/agent/issues/20)) |
 | One sandbox for Flue's tools and the harness, plus a Cloudflare provider | Flue `Sandbox` extending `Experimental_SandboxSession` | Planned ([#15](https://github.com/amond-ai/agent/issues/15)) |
 | Agent-loop seam in Flue's session layer | Refactor of Flue's `session.ts` | Planned ([#16](https://github.com/amond-ai/agent/issues/16)) |
 | Agent turns through the AI SDK harness, Claude Code first | `HarnessV1` via `@amond-ai/harness-claude-code` | Planned ([#17](https://github.com/amond-ai/agent/issues/17)) |
@@ -71,8 +71,8 @@ and the `amond` CLI.
 
 ## Status and success criteria
 
-**Pre-alpha. The direction is decided and the migration has not started.** Nothing is published
-to npm yet. The packages that predate ADR-0003 (`amond`, `agent-core`, `agent-durable`,
+**Pre-alpha. The direction is decided and the migration has not started.** No amond agent package is
+published to npm yet. The packages that predate ADR-0003 (`amond`, `agent-core`, `agent-durable`,
 `agent-durable-cloudflare`) are retiring in #18. The harness adapter packages are reassessed once
 the agent-loop seam exists.
 
