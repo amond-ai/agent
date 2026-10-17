@@ -89,7 +89,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [ ] T003 Type-check the packages under the repository's TypeScript (depends on T002, file: packages/agent/tsconfig.json)
   Validation: `bun run check` passes at the root, with only tsconfig and type-level edits, each listed in the commit body.
   Method: `bun run check`
-- [ ] T004 Lint the packages with the repository's ESLint config (depends on T002, file: eslint.config.ts)
+- [x] T004 Lint the packages with the repository's ESLint config (depends on T002, file: eslint.config.ts)
   Validation: `bun run lint` passes. The autofix is one commit containing nothing else. Each rule switched off for the imported packages carries its reason in `eslint.config.ts`.
   Method: `bun run lint`; `git show --stat` on the reformat commit
 
