@@ -71,7 +71,7 @@ gh extension install github/gh-stack   # `gh stack`, used by the stacked PR work
 
 ```bash
 bun run build       # tsdown, per package, into dist/
-bun run check       # tsc --noEmit across the workspace
+bun run check       # bun check across the workspace
 ```
 
 A package's `exports` point at `dist/`, so a package has to be built before anything resolves it.

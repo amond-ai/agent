@@ -84,7 +84,7 @@ source of this model, describes the hooks; `amond docs` replaces it once the bun
 mise install
 bun install
 bun run build      # tsdown, per package, into dist/
-bun run check      # tsc across the workspace
+bun run check      # bun check across the workspace
 bun run lint
 bun run test
 ```

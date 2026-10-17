@@ -24,7 +24,7 @@ choices were made. Update this file before a change that adds or replaces any of
 | Item | Choice | Notes |
 | --- | --- | --- |
 | Bundler | tsdown 0.23 | Imported packages carry a `tsdown.config.ts` and emit `dist/*.mjs` and `.d.mts`, except the CLI, which emits no declarations and renames its `amond` entry to `dist/amond.js`. The packages that predate the import (`core`, `durable`, `durable-cloudflare`, `harness-claude-code`, `harness-codex`) have no config and run `tsdown src/index.ts --dts` |
-| Type check | `tsc --noEmit` | Composite project config in the root `tsconfig.json`. Each imported package keeps Flue's stricter compiler options |
+| Type check | `bun check` | Bun 1.4.3's built-in checker. It reads each package's `tsconfig.json` and reports the same errors as `tsc`. Composite project config in the root `tsconfig.json`. Each imported package keeps Flue's stricter compiler options |
 | Agent build | `vite build` | A user's agent project builds through `amond()` from `@amond-ai/agent-vite` |
 | Tests | Vitest 4.1 | Run under Bun (`bun --bun vitest run`) |
 | Coverage | `@vitest/coverage-istanbul` (not wired yet) | Configured in `vitest.shared.ts`: Istanbul, not V8, because Bun's JavaScriptCore emits no V8 profile, and `lcovonly` with repo-root-relative paths for Sonar. The package is only in the root `catalog`, and no package defines `test:coverage` yet |

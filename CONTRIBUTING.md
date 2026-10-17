@@ -23,7 +23,7 @@ bun install         # install dependencies and the git hooks
 ```bash
 bun run build       # build every package into dist/ (what gets published)
 bun run lint        # lint and format
-bun run check       # type-check every package (tsc --noEmit)
+bun run check       # type-check every package (bun check)
 bun run test        # run the test suite
 ```
 
