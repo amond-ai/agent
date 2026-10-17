@@ -5,8 +5,11 @@ coverage/
 .turbo/
 *.tsbuildinfo
 
-# Local tooling state — PR snapshots, review-bot thread bodies, session caches.
-.please/
+# please plugin runtime state — PR snapshots, review-bot thread bodies, session caches.
+.please/state/
+
+# Per-developer config override (overlays .please/config.yml)
+.please/config.local.yml
 
 .env
 .env.*
