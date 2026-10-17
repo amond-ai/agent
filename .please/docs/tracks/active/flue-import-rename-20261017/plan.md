@@ -165,6 +165,8 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Evidence: `git grep -niE "@flue/|\bflue\b|FLUE_" -- packages/{agent,agent-vite,cli,agent-sdk,agent-react}` → 44 lines: 38 README.md, 5 package.json `repository.url` (withastro/flue), 1 withastro/flue/issues/753 link; camelCase grep `[a-z0-9_@./:-]*flue[a-z0-9_./:-]*` outside READMEs → only flueframework.com (14 lines: 5 homepage, 9 code/scaffold) and withastro/flue; `node packages/cli/bin/amond.mjs --help` → `amond/2.3.0`, commands run, init, add, update, docs; `bun install --frozen-lockfile` → no changes; `bun run build` 10/10, `bun run check` 15/15, `bun run lint` 10/10, `CI=true bun run test` 20/20 (@amond-ai/agent-react 27 tests passed)
   Config: a temp project with only `flue.config.ts` → `resolveAmondConfigPath` returns undefined, `loadAmondConfig` → `{"config":{}}` (the file is ignored); explicit lookup → `[amond] Config file not found: amond.config.ts`. See Decision Log.
   Commit: 6bc581e. Root files beyond the packages: `eslint.config.ts` (virtual:amond/providers in a comment), `bun.lock` (new names). No false positives (influence, fluent, …) in the five packages.
+- [x] (2026-10-17 18:20 KST) T007 Wire the packages into release-please at 0.1.0
+  Evidence: `jq` over release-please-config.json and .release-please-manifest.json → nine packages listed, the five new ones at 0.1.0 matching each package.json; `bun scripts/publish.ts --dry-run` → would publish order: agent, agent-react, agent-sdk, agent-vite, amond, then the four existing packages; `bun run build && bun run lint` → 10/10 tasks successful. Release-please dry run not run: it reads config from the remote branch, so it needs the push first.
 
 ## Decision Log
 
@@ -187,6 +189,10 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Date/Author: 2026-10-17 / implement-executor
 - Decision: T005 also ran the ESLint autofix for `perfectionist/sort-named-imports` and `sort-named-exports` (26 hits).
   Rationale: the renames changed the alphabetical order of names inside braces; reordering specifiers within one statement does not change evaluation order.
+  Date/Author: 2026-10-17 / implement-executor
+
+- Decision: anchored release-please with the top-level `bootstrap-sha` 7c8f94c (phase 1 checkpoint), not a per-package option.
+  Rationale: `bootstrap-sha` and `last-release-sha` are top-level only in the schema and manifest docs; the existing four packages have never released either, and no commit before the checkpoint touches them in a way worth a changelog. Ignored once the first release PR merges, so it can be removed then.
   Date/Author: 2026-10-17 / implement-executor
 
 ## Surprises & Discoveries
