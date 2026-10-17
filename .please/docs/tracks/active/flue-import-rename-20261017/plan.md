@@ -101,7 +101,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [ ] T006 Prove the Worker build on a minimal 'use agent' fixture (depends on T005, file: packages/agent-vite/src/worker-build.test.ts)
   Validation: `vite build` with `@amond-ai/agent-vite` on a one-agent fixture emits a Worker that exports `Amond<Name>Agent`, binds it as `AMOND_<NAME>_AGENT`, and contains no `@flue/` or `virtual:flue/` string.
   Method: `bun run --filter @amond-ai/agent-vite test`
-- [ ] T007 Wire the packages into release-please at 0.1.0 (depends on T005, file: release-please-config.json)
+- [x] T007 Wire the packages into release-please at 0.1.0 (depends on T005, file: release-please-config.json)
   Validation: config and manifest list the five directories at 0.1.0, matching each package version. `scripts/publish.ts` orders the CLI after the runtime and the plugin.
   Method: `jq` over both files; a dry-run listing from `scripts/publish.ts`
 
