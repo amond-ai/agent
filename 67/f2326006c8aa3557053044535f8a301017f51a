@@ -1,0 +1,27 @@
+docs/knowledge/tech-stack.md
+  s_4bb86ebd636f39::t_b8ad97b24ac3eb 26-28,37,44,49-56,78,81-85,97-111,115
+README.md
+  s_4bb86ebd636f39::t_ad57b0dace00fe 7,9,17-20,35-41,43,47-59,73-79
+  s_4bb86ebd636f39::t_6653f0e79fa1ad 60-61,92-93
+  s_4bb86ebd636f39::t_efe1322b09cd6f 94
+ARCHITECTURE.md
+  s_4bb86ebd636f39::t_ec80dfcbdc1f34 38-39
+  s_4bb86ebd636f39::t_6653f0e79fa1ad 14-15,18-20,23-26,28-30,36,41-44,50,60-63,67,69-77,79,98-120,122,124-125,127,129-132,157,204-207,217-219
+  s_4bb86ebd636f39::t_3eb4716802b8ac 13,16-17,27,33-35,224-227,229-232,239,246,248,256,258-264,272,275-277,281-282,288-290,295-300,302-303,310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "67f2326006c8aa3557053044535f8a301017f51a",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
