@@ -52,6 +52,12 @@ interface UseAmondAgentResult {
   refresh(): void
 }
 
+/** Everything `client.send()` accepts except `message`, plus attachments. */
+type SendMessageOptions = Omit<AgentPromptOptions, 'message'> & {
+  images?: DeliveredAttachment[]
+  documents?: DeliveredDocumentAttachment[]
+}
+
 type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error'
 ```
 

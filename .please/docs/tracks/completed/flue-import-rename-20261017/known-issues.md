@@ -2,7 +2,7 @@
 
 > Track: flue-import-rename-20261017
 > Recorded: 2026-10-17, after the `/please:review` loop (3 iterations, exit `needs_human_read`) on
-> PR #27 at 2012d1d.
+> PR #27 at 9bf82a2 (rebased onto `main` after #24 merged).
 
 The review loop left these findings open. Each was validated as realistic but unproven, so none
 was fixed automatically. None blocks this track.
