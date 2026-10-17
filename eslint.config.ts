@@ -7,6 +7,8 @@ export default pleaseai({
     '**/dist',
     '**/node_modules',
     '**/coverage',
+    // Wrangler state the Worker build test writes into its fixture.
+    '**/.wrangler',
     'vendor/**',
     // Written by the CLI's prebuild from blueprints/ and gitignored.
     'packages/cli/src/generated/**',
