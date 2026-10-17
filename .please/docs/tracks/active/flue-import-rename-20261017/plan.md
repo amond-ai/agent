@@ -98,7 +98,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] T005 Rename the packages and every brand surface in source (depends on T003, T004, file: packages/agent-vite/src/amond-plugin.ts)
   Validation: names, bin and directories match the spec's table, and `amond --help` lists `init`, `run`, `docs`, `add` and `update`. The SC-2 search returns only attribution lines and `flueframework.com` links (Phase 3's). A project with only `flue.config.ts` runs on defaults (the old name is never read), and a missing explicit config file errors naming `amond.config.ts`. Build, check, lint and test pass.
   Method: `grep -rniE "@flue/|\bflue\b|FLUE_" packages/` plus the root commands
-- [ ] T006 Prove the Worker build on a minimal 'use agent' fixture (depends on T005, file: packages/agent-vite/src/worker-build.test.ts)
+- [x] T006 Prove the Worker build on a minimal 'use agent' fixture (depends on T005, file: packages/agent-vite/src/worker-build.test.ts)
   Validation: `vite build` with `@amond-ai/agent-vite` on a one-agent fixture emits a Worker that exports `Amond<Name>Agent`, binds it as `AMOND_<NAME>_AGENT`, and contains no `@flue/` or `virtual:flue/` string.
   Method: `bun run --filter @amond-ai/agent-vite test`
 - [x] T007 Wire the packages into release-please at 0.1.0 (depends on T005, file: release-please-config.json)
@@ -167,6 +167,10 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Commit: 6bc581e. Root files beyond the packages: `eslint.config.ts` (virtual:amond/providers in a comment), `bun.lock` (new names). No false positives (influence, fluent, …) in the five packages.
 - [x] (2026-10-17 18:20 KST) T007 Wire the packages into release-please at 0.1.0
   Evidence: `jq` over release-please-config.json and .release-please-manifest.json → nine packages listed, the five new ones at 0.1.0 matching each package.json; `bun scripts/publish.ts --dry-run` → would publish order: agent, agent-react, agent-sdk, agent-vite, amond, then the four existing packages; `bun run build && bun run lint` → 10/10 tasks successful. Release-please dry run not run: it reads config from the remote branch, so it needs the push first.
+  Release-please dry run (lead, after push): bootstrapped at 7c8f94c, considered only the 4–5 commits after it per package, and found no imported Flue commits.
+- [x] (2026-10-17 18:30 KST) T006 Prove the Worker build on a minimal 'use agent' fixture
+  Evidence: `bunx turbo run test --filter=@amond-ai/agent-vite` → 1 file, 3 tests passed (rerun by the lead after the cherry-pick); the build exports `AmondIssueTriageAgent`, binds it as `AMOND_ISSUE_TRIAGE_AGENT` in the emitted wrangler.json, and no emitted file contains `@flue/` or `virtual:flue/`. Mutation check: changing the class prefix in agent-scan.ts failed the class and binding tests; reverted.
+  Commit: dca9448 (cherry-picked from the worktree's 2c08bf6). Beyond Files: `.gitignore` and `eslint.config.ts` ignore `.wrangler/`, which the Cloudflare plugin writes into the fixture during the build. The progress record did not reach the sink; the lead wrote this entry from the executor's report.
 
 ## Decision Log
 
