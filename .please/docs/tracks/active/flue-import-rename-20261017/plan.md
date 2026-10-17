@@ -161,6 +161,10 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] (2026-10-17 19:00 KST) T003 Type-check the packages under the repository's TypeScript
   Evidence: `bun run check` → exit 0 (15/15 tasks, all five packages included; repeated runs stable); `bun run build` → exit 0; `CI=true bun run test` → exit 0 (20/20); `bun run lint` → exit 0 (10/10) with no generated blueprints.ts, exit 1 right after a build (see Surprises)
   Commit: 273749c. Edits are config or type-level only: `check:types` renamed `check` (5 package.json); agent tsconfig `include` src and types; agent-vite and cli tsconfig `exclude` dist; provider-diagnostics.ts and telemetry/projection.ts type assertions.
+- [x] (2026-10-17 17:58 KST) T005 Rename the packages and every brand surface in source
+  Evidence: `git grep -niE "@flue/|\bflue\b|FLUE_" -- packages/{agent,agent-vite,cli,agent-sdk,agent-react}` → 44 lines: 38 README.md, 5 package.json `repository.url` (withastro/flue), 1 withastro/flue/issues/753 link; camelCase grep `[a-z0-9_@./:-]*flue[a-z0-9_./:-]*` outside READMEs → only flueframework.com (14 lines: 5 homepage, 9 code/scaffold) and withastro/flue; `node packages/cli/bin/amond.mjs --help` → `amond/2.3.0`, commands run, init, add, update, docs; `bun install --frozen-lockfile` → no changes; `bun run build` 10/10, `bun run check` 15/15, `bun run lint` 10/10, `CI=true bun run test` 20/20 (@amond-ai/agent-react 27 tests passed)
+  Config: a temp project with only `flue.config.ts` → `resolveAmondConfigPath` returns undefined, `loadAmondConfig` → `{"config":{}}` (the file is ignored); explicit lookup → `[amond] Config file not found: amond.config.ts`. See Decision Log.
+  Commit: 6bc581e. Root files beyond the packages: `eslint.config.ts` (virtual:amond/providers in a comment), `bun.lock` (new names). No false positives (influence, fluent, …) in the five packages.
 
 ## Decision Log
 
@@ -176,6 +180,13 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 - Decision: switched off the autofixes that change behaviour (error class, re-export or import evaluation order, expressions, regexes), not only the ones that cannot be fixed.
   Rationale: the reformat commit has to stay mechanical; the first autofix run moved `import 'virtual:flue/providers'`, turned 26 `Error` throws into `TypeError` and reordered re-exports.
+  Date/Author: 2026-10-17 / implement-executor
+
+- Decision: T005 adds no error for a project with only `flue.config.ts`; the old name is ignored, so the project runs on defaults with no config.
+  Rationale: Flue's config is optional: `resolveFlueConfigPath` returns undefined when no file is found, and only an explicit `configFile` that is missing throws. A new error would change behaviour (spec Constraints). The T005 Validation clause and the Review Focus line expect an error naming `amond.config.ts`; the orchestrator decides whether to add one.
+  Date/Author: 2026-10-17 / implement-executor
+- Decision: T005 also ran the ESLint autofix for `perfectionist/sort-named-imports` and `sort-named-exports` (26 hits).
+  Rationale: the renames changed the alphabetical order of names inside braces; reordering specifiers within one statement does not change evaluation order.
   Date/Author: 2026-10-17 / implement-executor
 
 ## Surprises & Discoveries
