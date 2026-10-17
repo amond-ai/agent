@@ -107,19 +107,19 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 ### Phase 3: Website, content, attribution
 
-- [ ] T008 Make docs, add and update fail cleanly with no bundled content (file: packages/cli/src/commands/blueprints.ts)
+- [x] T008 Make docs, add and update fail cleanly with no bundled content (file: packages/cli/src/commands/blueprints.ts)
   Validation: `amond docs`, `amond docs read guide/tools`, `amond add` and `amond update channel slack` each exit non-zero saying no content is bundled, with no network request, including when `AMOND_REGISTRY_URL` names an unreachable host.
   Method: a CLI test that runs the built binary (`bun run --filter amond test`)
-- [ ] T009 Replace links to Flue's website in code, scaffolds and package metadata (file: packages/cli/src/lib/init.ts)
+- [x] T009 Replace links to Flue's website in code, scaffolds and package metadata (file: packages/cli/src/lib/init.ts)
   Validation: no `flueframework.com` remains in the five packages. Docs links read `amond docs read <page>`, except links to pages mostly about a package left in Flue, which are dropped. `homepage` and `repository` point at amond-ai/agent. `amond init` writes files that name amond, not Flue.
   Method: `grep -rn flueframework.com packages/`; a CLI test running `amond init` in a temp dir
-- [ ] T010 Add Flue's notice to NOTICE and rewrite the package READMEs (file: NOTICE)
+- [x] T010 Add Flue's notice to NOTICE and rewrite the package READMEs (file: NOTICE)
   Validation: `NOTICE` carries Flue's copyright and license notice. Each imported README describes the amond package and states that it is derived from Flue.
   Method: read the files; the SC-2 search over `packages/`
-- [ ] T011 Update README, ARCHITECTURE and tech-stack for the imported packages (file: ARCHITECTURE.md)
+- [x] T011 Update README, ARCHITECTURE and tech-stack for the imported packages (file: ARCHITECTURE.md)
   Validation: the three documents describe the five packages and their build path, and none describes `packages/amond` as present.
   Method: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md`
-- [ ] T012 Record the reformat and rename commits in .git-blame-ignore-revs (file: .git-blame-ignore-revs)
+- [x] T012 Record the reformat and rename commits in .git-blame-ignore-revs (file: .git-blame-ignore-revs)
   Validation: the file lists T004's reformat commit and Phase 2's squash commit as they are on `main`, and `git blame` with it attributes a reformatted line to an upstream commit.
   Method: `git blame --ignore-revs-file .git-blame-ignore-revs packages/agent/src/session.ts | head`
   STOP: Phase 1 or Phase 2 is not merged, so the SHAs are not final.
@@ -171,6 +171,20 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] (2026-10-17 18:30 KST) T006 Prove the Worker build on a minimal 'use agent' fixture
   Evidence: `bunx turbo run test --filter=@amond-ai/agent-vite` → 1 file, 3 tests passed (rerun by the lead after the cherry-pick); the build exports `AmondIssueTriageAgent`, binds it as `AMOND_ISSUE_TRIAGE_AGENT` in the emitted wrangler.json, and no emitted file contains `@flue/` or `virtual:flue/`. Mutation check: changing the class prefix in agent-scan.ts failed the class and binding tests; reverted.
   Commit: dca9448 (cherry-picked from the worktree's 2c08bf6). Beyond Files: `.gitignore` and `eslint.config.ts` ignore `.wrangler/`, which the Cloudflare plugin writes into the fixture during the build. The progress record did not reach the sink; the lead wrote this entry from the executor's report.
+- [x] (2026-10-17 20:50 KST) T008 Make docs, add and update fail cleanly with no bundled content
+  Evidence: `bun run build && cd packages/cli && bun --bun vitest run` → 1 file, 11 tests passed (spawns bin/amond.mjs): `docs`, `docs read guide/tools`, `docs search tools` exit non-zero with "No documentation is bundled with this version of amond."; `add`, `add channel slack`, `add channel <url>`, `update channel slack` exit non-zero with "No blueprints are bundled with this version of amond." and empty stdout, with and without `AMOND_REGISTRY_URL=http://127.0.0.1:9` (no registry/ECONNREFUSED text). Root `bun run build`, `check`, `lint`, `CI=true bun run test` → all exit 0. Mutation check: replacing the empty-index throw with a no-op failed 8 of 11 tests (every add/update case); reverted.
+  Commit: e7bf7c8. "No network request" rests on the code path (the empty-index check precedes kind resolution and fetch) plus the unreachable-host run; a cross-process fetch stub is not possible. The registry base now comes only from `AMOND_REGISTRY_URL`; with an index present and the variable unset, `add` reports that no registry is configured. The `apps/docs` docs-root candidate stays (no apps/docs exists here; track 2 decides).
+- [x] (2026-10-17 20:55 KST) T009 Replace links to Flue's website in code, scaffolds and package metadata
+  Evidence: `bun run build && cd packages/cli && bun --bun vitest run src/commands` → 2 files, 14 tests passed; init.test.ts spawns `bin/amond.mjs init <dir> --target node|cloudflare [--deploy]` (3 cases) and asserts no `/flue/i` in any written file, path or output, plus `amond.config.ts` and `@amond-ai/agent` present. Mutation check: README line changed to `[Flue](https://flueframework.com)` failed all 3 cases (`README.md ... not to match /flue/i`); reverted. Root build, check, lint, `CI=true bun run test` → all exit 0. `git grep -n flueframework -- packages/ ':!**/README.md'` → no matches.
+  Commit: 2743445. Beyond Files: packages/cli/package.json (already had the right directory). The `directory` fields use the real folder names (packages/agent, not Flue's packages/runtime); `homepage` is `https://github.com/amond-ai/agent/tree/main/packages/<dir>#readme`, matching core. READMEs still carry flueframework.com until T010 merges.
+
+- [x] (2026-10-17 20:47 KST) T010 Add Flue's notice to NOTICE and rewrite the package READMEs
+  Evidence: `git grep -niE "@flue/|\bflue\b|FLUE_|flueframework"` over packages/*/README.md, NOTICE and packages/*/NOTICE → only the README attribution lines and NOTICE lines 6-7; `bunx eslint` on the five READMEs → 0 errors; commit a465740 (cherry-picked from the worktree's d289fad). Each package also gets a NOTICE and a LICENSE copy, with NOTICE in `files`, matching packages/core.
+- [x] (2026-10-17 20:46 KST) T011 Update README, ARCHITECTURE and tech-stack for the imported packages
+  Evidence: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → no matches; `bunx eslint README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → exit 0; commit 129c7fb (cherry-picked from the worktree's 67f2326). The lead wrote the T010 and T011 entries from the executors' sink records, which the merge script could not apply.
+- [x] (2026-10-18 01:35 KST) Review-stage commits (SHA: `bd2e920`, `9bf82a2`, `e4b911c`, `a2c7353`, `e06467a`) (rebased onto `main` after #24 merged)
+- [x] (2026-10-18 03:52 KST) T012 Record the reformat and rename commits in .git-blame-ignore-revs
+  Evidence: #24 merged as `fc67cdd` (merge commit) and #25 squash-merged as `b6e4652`; the file lists `135eed5` (T004's reformat) and `b6e4652` (Phase 2's squash) with their full SHAs. `git blame --ignore-revs-file .git-blame-ignore-revs packages/agent/src/session.ts` attributes 5850 lines that `git blame` gives to `135eed5` back to upstream Flue commits (line 1 → `b5b5cf7`, Fred K. Schott); 245 lines the reformat or rename created have no earlier source and stay on the ignored commits.
 
 ## Decision Log
 
@@ -198,6 +212,16 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - Decision: anchored release-please with the top-level `bootstrap-sha` 7c8f94c (phase 1 checkpoint), not a per-package option.
   Rationale: `bootstrap-sha` and `last-release-sha` are top-level only in the schema and manifest docs; the existing four packages have never released either, and no commit before the checkpoint touches them in a way worth a changelog. Ignored once the first release PR merges, so it can be removed then.
   Date/Author: 2026-10-17 / implement-executor
+- Decision: scaffold docs links keep the page, drop the `#anchor`, and name the section in parentheses (e.g. `amond docs read guide/cloudflare-target ("Managing migrations")`).
+  Rationale: normalizeDocsPath does not strip `#fragment`, so `docs read page#anchor` would not find the page.
+  Date/Author: 2026-10-17 / implement-executor
+- Decision: link keep/drop calls for init.ts. guide/database kept (the page is mostly about db.ts, the in-memory default and the built-in sqlite(), all in the runtime; the Postgres/libSQL adapter names were removed from the comment since those packages stay in Flue). guide/cloudflare-target (entrypoint, migrations) kept: Cloudflare target is runtime and vite. guide/observability `#cloudflare` kept: the section describes the built-in Workers Traces adapter (createCloudflareTracing in the runtime), not OpenTelemetry/Sentry. guide/models `#cloudflare-workers-ai` kept: built-in `cloudflare` provider. Site links `[amond](flueframework.com)` now link this repo; `[amond docs](.../docs/)` became "Read the amond docs from the terminal: `amond docs`".
+  Rationale: the spec drops only links to pages mostly about packages left in Flue; none of these pages is.
+  Date/Author: 2026-10-17 / implement-executor
+
+- Decision: NOTICE names Flue, its repository and Apache-2.0 but no copyright holder.
+  Rationale: Flue's LICENSE is the unfilled Apache template, and Flue has no NOTICE file and no package author, so there is no holder to carry forward; inventing one would be wrong.
+  Date/Author: 2026-10-17 / implement-executor (T010)
 
 ## Surprises & Discoveries
 - Observation: `git subtree add` keeps the split commits at root-level paths, so `git log -- packages/agent`
@@ -209,9 +233,35 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - Observation: After `bun run build`, `bun run lint` fails on the gitignored generated `packages/cli/src/generated/blueprints.ts` (7 style errors: member-delimiter, semi).
   Evidence: `bun run lint` → @flue/cli:lint 7 errors; with `src/generated` moved away → 10/10 tasks pass. Not caused by T003; needs an ESLint ignore for generated files (T004 follow-up).
 
-- Decision: corrected T005's Validation and Review Focus to the config behaviour Flue has: no config file is optional, so a stray `flue.config.ts` is ignored, and only a missing explicit config file errors (naming `amond.config.ts`).
+- Decision: corrected T005's Validation and Review Focus to the config behaviour Flue has: a config file is optional, so a stray `flue.config.ts` is ignored, and only a missing explicit config file errors (naming `amond.config.ts`).
   Rationale: the plan's original clause assumed an error that would be a behaviour change, which the spec's Constraints rule out.
   Date/Author: 2026-10-17 / lead
 - Decision: T004 ran before T003.
   Rationale: the pre-commit hook lints staged files, so T003's type-level edits needed the imported packages lint-clean first.
   Date/Author: 2026-10-17 / lead
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+- Flue's runtime, Vite plugin, CLI, SDK and React packages imported under `packages/` with their history (PR #24, merged with a merge commit so `git log -- packages/<pkg>` shows Flue's commits).
+- The packages renamed to `@amond-ai/agent`, `@amond-ai/agent-vite`, `amond`, `@amond-ai/agent-sdk` and `@amond-ai/agent-react` (0.1.0), moved onto this repo's Bun, turbo, ESLint and release-please toolchain; the old `amond` CLI package retired (PR #25).
+- `amond docs`, `amond add` and `amond update` report that no content is bundled and make no network request; Flue's default registry removed; `amond init` scaffolds point at `amond docs read` and this repository; NOTICE files, rewritten package READMEs and updated root docs (PR #27).
+- `.git-blame-ignore-revs` lists the reformat (`135eed5`) and the rename squash (`b6e4652`), so `git blame` traces imported lines to Flue's authors (T012).
+
+### What Went Well
+- Rewriting each split history under its prefix before merging kept per-package `git log` usable (Surprises & Discoveries).
+- Running the built binary in `no-content.test.ts`, across both a missing and an unreachable registry, caught a real regression during review: a bare `amond update` failed on missing arguments before reaching the guard.
+- The rejected-findings ledger kept the review loops from re-litigating by-design decisions.
+
+### What Could Improve
+- External review engines reworded recurring findings, which slipped past the ledger's file+title key; verdicts had to be reused by hand.
+- greptile was not installed, so both review loops ended `needs_human_read` instead of `no_issues`.
+- One turbo test run failed and its log was lost to a session interruption; reruns passed, and the cause is unknown.
+- Issue #20's done criteria named `amond build` though the spec chose `vite build`; the criteria should have been corrected when the spec was written.
+
+### Tech Debt Created
+- See `known-issues.md`: `docs.ts:86` message hides broken installs; CLI tests depend on a built `dist/` and run under Bun via `process.execPath`.
+- Lint rules switched off in T004 (`regexp/no-super-linear-backtracking`, `ts/no-this-alias`, `no-unmodified-loop-condition`) need a look.
+- Registry source is only the internal `AMOND_REGISTRY_URL`; track 2 decides the real registry and bundled content.
+- `docs-pages.ts` is a candidate to move to `apps/docs` in track 2.
+- No test asserts `amond --help` (SC-5 partial).

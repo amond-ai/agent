@@ -10,39 +10,44 @@ decisions behind it live in [`docs/adr/`](docs/adr/index.md).
 containers, on Cloudflare. The repository is in the middle of a change of base, so it holds two
 architectures at once.
 
-**What the code is today.** Six packages built to ADR-0001 and ADR-0002. An agent is a directory,
-`agent/`, holding Markdown instructions, a typed config, and one module per tool, schedule, or
-channel. The `amond build` command resolves that directory into a static manifest module and one
-entry point per platform. At runtime the entry point hands the manifest to `createHandlers`, which
-would route requests and cron firings through a durable runtime to a harness adapter. Only the
-build half works. `createHandlers`, the Cloudflare durable runtime, and both harness adapters throw
-`not implemented`.
+**What the code is today.** Ten packages in two groups. Five were imported from Flue v2.3.0
+with their history and renamed in source (ADR-0004). They are `@amond-ai/agent` (the runtime),
+`@amond-ai/agent-vite` (the Vite plugin), `amond` (the CLI), `@amond-ai/agent-sdk` (the client),
+and `@amond-ai/agent-react` (React hooks). The other five were built to ADR-0001 and ADR-0002, and
+three of them retire. An agent in the imported packages is a `'use agent'` module. The `amond()`
+Vite plugin scans for those modules, and `vite build` turns them into a Node server or, with
+`cloudflare({ config: amondWorkerConfig() })`, a Cloudflare Worker with one Durable Object class
+per agent. Turns still run through Flue's host-side Pi agent loop.
 
 ```text
-agent/                         amond build (Node, has fs)              platform (no fs)
-├── instructions.md   ──┐
-├── agent.ts            │      loader.ts ──► emit.ts ──► build.ts     .amond/cloudflare.ts
-├── tools/*.ts          ├──►   AgentTree     strings     staged swap  .amond/vercel.ts
-├── schedules/*.ts      │                                     │              │
-├── channels/*.ts       │                                     ▼              ▼
-└── skills/*/SKILL.md ──┘                              .amond/manifest.ts ─► createHandlers
-                                                                             (not implemented)
+vite.config.ts                        vite build                         deployed target
+amond()                               ┌──────────────────────┐
+cloudflare({ config:        ──────►   │ agent-vite           │  ──►   Node server, or Worker +
+  amondWorkerConfig() })              │ scan 'use agent'     │        Durable Object per agent
+'use agent' modules            ─────► │ modules, emit entry  │        (runtime: @amond-ai/agent)
+                                      └──────────────────────┘
+clients: @amond-ai/agent-sdk ──► @amond-ai/agent-react (useAmondAgent)
+CLI: amond init | run | docs | add | update
 ```
 
+The ADR-0001 build step, `amond build` over an `agent/` tree, is retired with the old `amond`
+package. `createHandlers`, the Cloudflare durable runtime, and both harness adapters still throw
+`not implemented`.
+
 **Where it is going.** [ADR-0003](docs/adr/0003-build-on-flue-with-ai-sdk-harness.md) and
-[ADR-0004](docs/adr/0004-ship-flue-as-amond-packages.md) supersede that design. Flue's packages
-are imported into `packages/` with their history and renamed in source to amond names. Each agent
-becomes a `'use agent'` module that runs as a Cloudflare Durable Object. Its turns run through the
+[ADR-0004](docs/adr/0004-ship-flue-as-amond-packages.md) supersede the ADR-0001 design. Each agent
+runs as a Cloudflare Durable Object, and its turns run through the
 AI SDK harness (`HarnessV1`) inside a Cloudflare Sandbox container, instead of through Flue's
-host-side Pi loop. None of this code is in the repository yet. The work is tracked in
-[#15](https://github.com/amond-ai/agent/issues/15)–[#18](https://github.com/amond-ai/agent/issues/18)
-and [#20](https://github.com/amond-ai/agent/issues/20).
+host-side Pi loop. The Durable Object runtime is in the repository now; the seam, the harness
+turns, and the sandbox are not. The work is tracked in
+[#15](https://github.com/amond-ai/agent/issues/15)–[#18](https://github.com/amond-ai/agent/issues/18).
+The import itself is [#20](https://github.com/amond-ai/agent/issues/20).
 
 ```text
 request / cron / event
         │
         ▼
-Durable Object per agent  (@amond-ai/agent, from @flue/runtime)
+Durable Object per agent  (@amond-ai/agent, imported from @flue/runtime)
         │  durable submission, persistence in the DO's SQLite
         ▼
 session ──► agent-loop seam (#16) ──► HarnessV1 turn (#17)
@@ -52,24 +57,26 @@ session ──► agent-loop seam (#16) ──► HarnessV1 turn (#17)
                             one sandbox shared by Flue's tools and the harness
 ```
 
-Four of the packages that predate ADR-0003 retire in #18: `amond`, `agent-core`, `agent-durable`,
-and `agent-durable-cloudflare`. The two harness adapters are reassessed once the agent-loop seam
-exists. Read all six to understand the current code, not as the place for new features.
+Three of the packages that predate ADR-0003 retire in #18: `agent-core`, `agent-durable`, and
+`agent-durable-cloudflare`. The old ADR-0001 `amond` CLI is already retired, and its name now
+belongs to the imported CLI. The two harness adapters are reassessed once the agent-loop seam
+exists. Do not grow those five; new framework work goes in the imported packages.
 
 ## Entry points
 
-Start with the build pipeline, the only path that runs end to end:
+Start with the imported packages, which are the product:
 
-- `packages/amond/src/index.ts` — the `amond` CLI. It parses the command and dispatches. Only
-  `build` is implemented; `init` and `dev` exit 1.
-- `packages/amond/src/build.ts` — `build(cwd)`. It loads `agent/`, emits the output, and swaps it
-  into `.amond/`. It is the only CLI code that writes to disk.
-- `packages/amond/src/loader.ts` — `loadAgentTree`. It turns an `agent/` directory into an
-  `AgentTree` or throws an `AgentTreeError` that names the file at fault.
-- `packages/amond/src/emit.ts` — `emitManifestModule` and `emitEntryPoint`. They turn an
-  `AgentTree` into the source text of the generated modules.
+- `packages/agent/src/index.ts` — `@amond-ai/agent`, the runtime. `packages/agent/src/cloudflare/`
+  and `packages/agent/src/node/` hold the two platform adapters.
+- `packages/agent-vite/src/amond-plugin.ts` — the `amond()` Vite plugin.
+  `cloudflare-worker-config.ts` holds `amondWorkerConfig()`, and `agent-scan.ts` finds the
+  `'use agent'` modules.
+- `packages/cli/src/main.ts` — the `amond` CLI. `commands/` holds `init` and `run`, plus `docs`,
+  `add`, and `update`, which report that no bundled content exists yet.
+- `packages/agent-sdk/src/index.ts` — the client. `packages/agent-react/src/use-agent.ts` —
+  `useAmondAgent`, built on the client.
 
-For the runtime contracts the generated code targets:
+For the contracts of the packages that predate ADR-0003:
 
 - `packages/core/src/index.ts` — `AgentManifest`, `HarnessAdapter`, `TurnSpec`, `TurnOutcome`,
   and `createHandlers`.
@@ -88,21 +95,42 @@ For releases:
 
 ## Module structure
 
-### `packages/amond/` — the `amond` CLI
+### `packages/agent/` — `@amond-ai/agent`
 
-Published as `amond`, with the `amond` binary. It implements the ADR-0001 build step. Running on a
-machine with a filesystem, it reads the `agent/` tree and emits a manifest in which every import
-is static. That way the deployed target never reads a directory.
+The runtime, imported from `@flue/runtime`. It defines agents, sessions, durable submissions,
+conversation persistence, and the tools an agent calls. Subpath exports select the platform:
+`./node` for development and `./cloudflare` for Durable Objects. Turns run through Pi
+(`@earendil-works/pi-agent-core` and `@earendil-works/pi-ai`) until the agent-loop seam replaces it
+(#16–#18). Other dependencies are Hono with `@hono/node-server` for HTTP, valibot for schemas, and
+`@modelcontextprotocol/client` for MCP tools.
 
-- `loader.ts` validates the `agent/` layout and resolves it into an `AgentTree`.
-- `emit.ts` turns that tree into a manifest module and one entry point per `BUILD_TARGETS`
-  member (`cloudflare`, `vercel`).
-- `build.ts` writes the output into `.amond/`.
-- `tree-fixture.ts` is a test helper that writes a real `agent/` tree into a temp directory.
+**Status**: the base of the product. The Pi loop will be replaced behind the seam in #16–#18;
+the rest stays.
 
-**Key abstractions**: `AgentTree`, `AgentTreeError`, `BuildTarget`.
+### `packages/agent-vite/` — `@amond-ai/agent-vite`
 
-**Status**: retiring in #18. The `amond` name passes to the CLI imported from `@flue/cli`.
+The Vite plugin, imported from `@flue/vite`. `amond()` scans for `'use agent'` modules and
+generates the entry. On Cloudflare it pairs with `cloudflare({ config: amondWorkerConfig() })` from
+`@cloudflare/vite-plugin`, which makes each agent a Durable Object class. The Cloudflare `agents`
+SDK is a dependency, and `vite` is a peer. The build is `vite build`.
+
+### `packages/cli/` — `amond`
+
+The CLI, imported from `@flue/cli`, with the `amond` binary. Its commands are `init`, `run`,
+`docs`, `add`, and `update`. `docs`, `add`, and `update` report that no bundled content exists
+until a later track ships it.
+
+### `packages/agent-sdk/` — `@amond-ai/agent-sdk`
+
+The client for a deployed agent, imported from `@flue/sdk`. It streams conversation state through
+`@durable-streams/client`.
+
+### `packages/agent-react/` — `@amond-ai/agent-react`
+
+React hooks over the SDK, imported from `@flue/react`. `useAmondAgent` is the entry point. `react`
+(18 or later) and `@amond-ai/agent-sdk` are peer dependencies.
+
+All five packages are at 0.1.0, versioned by release-please, and not yet published.
 
 ### `packages/core/` — `@amond-ai/agent-core`
 
@@ -127,7 +155,7 @@ The ADR-0002 durable execution contract. A session is driven by a `SessionStep` 
 `createMemoryRuntime` is the reference implementation and the test double. It keeps state in
 `Map`s, so state is lost when the process exits.
 
-**Status**: retiring in #18. Flue's durable submissions and persistence replace it.
+**Status**: retiring in #18. The durable submissions and persistence in `@amond-ai/agent` replace it.
 
 ### `packages/durable-cloudflare/` — `@amond-ai/agent-durable-cloudflare`
 
@@ -171,15 +199,13 @@ revisions are listed in [the tech stack](docs/knowledge/tech-stack.md#upstream-c
 - `knowledge/` — product, guidelines, tech stack, and workflow references.
 - `specs/` — product specs index.
 
-### Planned packages
-
-Issue #20 imports Flue's runtime, Vite plugin, CLI, SDK, and React packages, published as
-`@amond-ai/agent`, `@amond-ai/agent-vite`, `amond`, `@amond-ai/agent-sdk`, and
-`@amond-ai/agent-react`. ADR-0004 maps each Flue package to its new name.
-
 ### Dependency direction
 
 ```text
+@amond-ai/agent-react ──► @amond-ai/agent-sdk (peer)
+amond (CLI) ──► @amond-ai/agent-vite ──► @amond-ai/agent
+amond (CLI) ──► @amond-ai/agent
+
 @amond-ai/agent-durable
         ▲            ▲
         │            └── @amond-ai/agent-durable-cloudflare
@@ -187,57 +213,40 @@ Issue #20 imports Flue's runtime, Vite plugin, CLI, SDK, and React packages, pub
         ▲            ▲
         │            ├── @amond-ai/agent-harness-claude-code ──► @amond-ai/harness-claude-code, @amond-ai/sandbox
         │            └── @amond-ai/agent-harness-codex
-      amond  (also depends on agent-durable directly)
 ```
 
-Arrows point from a package to what it depends on. `agent-durable` depends on nothing in the
-workspace, and `agent-core` never depends on the CLI or on an adapter.
+Arrows point from a package to what it depends on. The imported packages and the retiring ones do
+not depend on each other. `agent-durable` depends on nothing in the workspace, and `agent-core`
+never depends on an adapter.
 
 ## Architecture invariants
 
 **Unimplemented means it throws.** `createHandlers`, `createCloudflareRuntime`, `claudeCode`, and
-`codex` throw `not implemented`, and `amond init` and `amond dev` exit 1. None returns a plausible
-placeholder, because a shaped fake would let a build look deployable, or a test pass, while
-proving nothing.
+`codex` throw `not implemented`. None returns a plausible placeholder, because a shaped fake would
+let a build look deployable, or a test pass, while proving nothing. The imported CLI follows the
+same rule: `amond docs`, `add`, and `update` report that no bundled content exists rather than
+print fake pages.
 
-**The loader never evaluates user code.** `loadAgentTree` stats paths, reads Markdown, and reads the
-source text of each entry module to check for a default export. It never
-imports a tool, schedule, channel, or `agent.ts`, so a build does not need the user's environment
-to report a misplaced file.
-
-**Nothing reads the filesystem at runtime.** The deployed targets have no `fs`. Every directory
-walk happens in `amond build`. The generated manifest inlines instructions and skills as literals
-and reaches every entry module through a static `import`.
-
-**Emitters return strings; only `build.ts` writes.** `emit.ts` produces source text, so its tests
-assert on strings without a temp directory. `build.ts` is the one place in the CLI that touches
-the disk.
-
-**A failed build never leaves a half-written `.amond/`.** Output is staged beside the target and
-moved into place by rename. The previous build is renamed aside rather than deleted until the new
-one is in place.
-
-**The user owns the deploy config.** `amond build` emits handlers only. It never generates
-`wrangler.jsonc`, `vercel.json`, or cron registration, so a framework release cannot rewrite a
-deployment. The README keeps this rule for the Cloudflare Sandbox container: `wrangler.jsonc`,
-including the container, stays with the user.
+**The user owns the deploy config.** The Vite plugin generates the Worker entry and Durable Object
+classes, but not `wrangler.jsonc`. The README keeps this rule for the Cloudflare Sandbox
+container: `wrangler.jsonc`, including the container, stays with the user, so a framework release
+cannot rewrite a deployment.
 
 **Durable sessions are idempotent by caller ID.** `start` with an existing ID returns the stored
 record without re-running anything. `resume` drives a session only when it is `waiting` on the
 same event name, and it passes the event to the first step call only.
 
 **No package pins `@cloudflare/workers-types`.** `agent-durable-cloudflare` takes it as a peer
-dependency, and the generated Cloudflare entry types its `scheduled` argument structurally.
+dependency.
 
 **`vendor/` is never imported or edited.** It is a reference to upstream. Flue code enters the
 repository through `git subtree` into `packages/`, and upstream changes are ported by hand
 (ADR-0004).
 
 **Do not grow the retiring packages.** New framework work belongs in the packages imported from
-Flue. `amond`, `agent-core`, `agent-durable`, and `agent-durable-cloudflare` are removed in #18.
+Flue. `agent-core`, `agent-durable`, and `agent-durable-cloudflare` are removed in #18.
 
-**Users see amond names only.** Once Flue's code is imported, its brand surfaces are renamed in
-source: `amond`, `amond.config.ts`, `AMOND_*`, `virtual:amond/*`, `Amond<Name>Agent`. No
+**Users see amond names only.** The imported packages' brand surfaces are renamed in source: `amond`, `amond.config.ts`, `AMOND_*`, `virtual:amond/*`, `Amond<Name>Agent`. No
 publish-time rewrite exists. Flue's name appears only in `NOTICE` and in each imported package's
 README.
 
@@ -245,55 +254,61 @@ README.
 
 Nothing is published to npm yet, and every package is pre-1.0.
 
-**Public** (each package's `exports["."]`, built to `dist/index.mjs` and `dist/index.d.mts`):
+**Public**:
 
-- `amond`: the `amond` binary and `main(argv)`.
+- `@amond-ai/agent`: the runtime, through `.` and the subpaths `./node`, `./cloudflare`,
+  `./cloudflare/workers-ai`, `./config`, `./tool`, `./adapter`, `./routing`, `./telemetry`,
+  `./test-utils`, `./test-utils/conversation-stream`, and `./test-utils/attachment-store`. The
+  `./internal` and `./cloudflare/internal` subpaths are for sibling packages.
+- `@amond-ai/agent-vite`: `amond()` and `amondWorkerConfig()`. `./internal` serves the CLI.
+- `amond`: the `amond` binary and its commands `init`, `run`, `docs`, `add`, and `update`.
+- `@amond-ai/agent-sdk`: the client.
+- `@amond-ai/agent-react`: `useAmondAgent` and its types.
 - `@amond-ai/agent-core`: the manifest, config, harness, and handler types, and `createHandlers`.
 - `@amond-ai/agent-durable`: the `DurableRuntime` contract and `createMemoryRuntime`.
 - `@amond-ai/agent-durable-cloudflare`: `createCloudflareRuntime`.
 - `@amond-ai/agent-harness-claude-code`: `claudeCode`.
-- The `agent/` directory layout that `amond build` reads.
 
 **Internal**:
 
-- `loader.ts`, `emit.ts`, and `build.ts` in `packages/amond/`. The package entry exports only
-  `main`.
-- The shape of the generated `.amond/` files. They carry a `Generated by amond build` header and
-  are rebuilt, not edited.
+- The `./internal` subpaths above, and the `'use agent'` scanner in `agent-vite`.
 - `scripts/`, `vitest.shared.ts`, and `eslint.rules.ts`.
 
-The surfaces above retire with their packages. The lasting public surface is the set of
-amond names that ADR-0004 assigns to Flue's packages.
+The `agent-core`, `agent-durable`, and `agent-durable-cloudflare` surfaces retire with their
+packages. The lasting public surface is the set of amond names that ADR-0004 assigns to Flue's
+packages.
 
 ## Cross-cutting concerns
 
-**Error handling**: A rejected `agent/` tree raises `AgentTreeError`, whose message and `path`
-name the file at fault. `amond build` prints it and exits 1. Any other error, such as a permission
-error or a full disk, propagates with its stack. The CLI exits 1 with no command and 2 with an
-unknown one. In the durable runtime, a step that throws settles the session as `failed`, with the
-error stored as a string.
+**Error handling**: The imported CLI reports a usage error and exits non-zero. In the durable
+runtime, a step that throws settles the session as `failed`, with the error stored as a string.
 
 **Configuration**: Shared dependency versions live in the root `package.json` `catalog`, plus
 `catalogs.workers-v5` for workers-types. Shared lint overrides live in `eslint.rules.ts`, and
 shared coverage settings in `vitest.shared.ts`.
 
-**Build**: Each package builds with `tsdown src/index.ts --dts` into `dist/`. Turborepo runs
+**Build**: Each package builds with tsdown into `dist/`; the imported packages carry a
+`tsdown.config.ts`, and the retiring ones run `tsdown src/index.ts --dts`. A user's agent project
+builds with `vite build`, through `amond()`. Turborepo runs
 `build` after the dependencies' builds, `test` after the package's own build, and `check` after
 the dependencies' builds.
 
 **Testing**: Tests sit next to the code as `*.test.ts` and run with Vitest under Bun. Coverage
-uses Istanbul, because Bun's JavaScriptCore produces no V8 profile. Loader tests use real
-temporary directories through `tree-fixture.ts`, not a mocked `fs`.
+uses Istanbul, because Bun's JavaScriptCore produces no V8 profile.
 
-**Release**: release-please with the `node-workspace` plugin versions the five published packages
-from Conventional Commits. `scripts/publish.ts` publishes them through npm trusted publishing
+**Toolchain**: The imported code moved from Flue's pnpm, Biome, and TypeScript 7 onto bun
+workspaces, ESLint, and TypeScript 5.9. A single reformat commit applied the ESLint style, and
+some rules stay off for the imported packages. Each package keeps Flue's stricter `tsconfig`
+options.
+
+**Release**: release-please with the `node-workspace` plugin versions the packages
+from Conventional Commits, the five imported ones at 0.1.0. `scripts/publish.ts` publishes them through npm trusted publishing
 with provenance.
 
 **Licensing**: Every package ships `LICENSE` (Apache-2.0) and `NOTICE` alongside `dist/`.
 
 ---
 
-_Last updated: 2026-10-17 — first version, after ADR-0004 was accepted and before the Flue
-import (#20)._
+_Last updated: 2026-10-17 — after the Flue import and rename (#20)._
 
 _See `docs/adr/` for the decisions behind this structure._

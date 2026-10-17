@@ -3,16 +3,17 @@
   "type": "module",
   "version": "0.1.0",
   "license": "Apache-2.0",
-  "homepage": "https://flueframework.com/",
+  "homepage": "https://github.com/amond-ai/agent/tree/main/packages/cli#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/withastro/flue",
+    "url": "git+https://github.com/amond-ai/agent.git",
     "directory": "packages/cli"
   },
   "bin": {
     "amond": "bin/amond.mjs"
   },
   "files": [
+    "NOTICE",
     "bin/amond.mjs",
     "dist",
     "docs"

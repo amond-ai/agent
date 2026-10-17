@@ -23,8 +23,9 @@ choices were made. Update this file before a change that adds or replaces any of
 
 | Item | Choice | Notes |
 | --- | --- | --- |
-| Bundler | tsdown 0.23 | `tsdown src/index.ts --dts` emits `dist/index.mjs` and `dist/index.d.mts` |
-| Type check | `tsc --noEmit` | Composite project config in the root `tsconfig.json` |
+| Bundler | tsdown 0.23 | Imported packages carry a `tsdown.config.ts` and emit `dist/*.mjs` and `.d.mts`, except the CLI, which emits no declarations and renames its `amond` entry to `dist/amond.js`. The packages that predate the import (`core`, `durable`, `durable-cloudflare`, `harness-claude-code`, `harness-codex`) have no config and run `tsdown src/index.ts --dts` |
+| Type check | `tsc --noEmit` | Composite project config in the root `tsconfig.json`. Each imported package keeps Flue's stricter compiler options |
+| Agent build | `vite build` | A user's agent project builds through `amond()` from `@amond-ai/agent-vite` |
 | Tests | Vitest 4.1 | Run under Bun (`bun --bun vitest run`) |
 | Coverage | `@vitest/coverage-istanbul` (not wired yet) | Configured in `vitest.shared.ts`: Istanbul, not V8, because Bun's JavaScriptCore emits no V8 profile, and `lcovonly` with repo-root-relative paths for Sonar. The package is only in the root `catalog`, and no package defines `test:coverage` yet |
 | Shared test config | `vitest.shared.ts` | `sharedCoverage`, and `sharedInlineDeps` (`zod`) for a Bun namespace re-export quirk |
@@ -33,18 +34,26 @@ choices were made. Update this file before a change that adds or replaces any of
 
 | Item | Choice |
 | --- | --- |
-| Lint and format | ESLint 10 with `@pleaseai/eslint-config` (`type: 'app'`) |
+| Lint and format | ESLint 10 with `@pleaseai/eslint-config` (`type: 'app'`). The imported packages turn some rules off after one reformat commit |
 | Shared overrides | `eslint.rules.ts` |
 | Git hooks | husky, lint-staged, commitlint (`@commitlint/config-conventional`) |
 | Editor | `.editorconfig` |
 
 ## Libraries
 
-Current dependencies of the packages in `packages/`, and entries in the root `catalog` that no
+Main dependencies of the packages in `packages/`, and entries in the root `catalog` that no
 package uses yet:
 
 | Library | Purpose | Used by |
 | --- | --- | --- |
+| Hono, `@hono/node-server` | HTTP routing and the Node server | `agent`, `agent-vite` |
+| valibot, `@valibot/to-json-schema` | Schema validation and JSON Schema output | `agent` |
+| `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai` | Pi agent loop and model client. Removal planned in [#16](https://github.com/amond-ai/agent/issues/16)–[#18](https://github.com/amond-ai/agent/issues/18) | `agent` |
+| `@modelcontextprotocol/client` | MCP tools | `agent` |
+| Cloudflare `agents` SDK | Durable Object agent base on Cloudflare | `agent-vite` |
+| Vite 8, `@cloudflare/vite-plugin` | The build that turns `'use agent'` modules into a Node server or Worker | `agent-vite` (`vite` peer); `cli` uses Vite only |
+| `@durable-streams/client` | Streams conversation state to clients | `agent-sdk` |
+| React 18 or later | Hooks runtime | `agent-react` (peer) |
 | `@amond-ai/harness-claude-code` 0.1.0 | Claude Code turn execution | `agent-harness-claude-code` |
 | `@amond-ai/sandbox` 0.1.0 | Sandbox contract (e2b, Cloudflare, local) | `agent-harness-claude-code` |
 | `@cloudflare/workers-types` v5 | Workers type definitions | `agent-durable-cloudflare` (peer) |
@@ -61,19 +70,19 @@ Planned by [ADR-0003](../adr/0003-build-on-flue-with-ai-sdk-harness.md), not yet
 | `@amond-ai/harness-transport-cloudflare` | Reaches harness turns running in Cloudflare Sandbox containers |
 | `@amond-ai/sandbox-cloudflare` | Cloudflare sandbox provider, to be added to `amond-ai/harness` |
 | Cloudflare Sandbox SDK (`@cloudflare/sandbox`) | The container each harness turn runs in |
-| Vite | Flue's build, which turns each `'use agent'` module into a Durable Object class |
 
 ## Upstream code
 
 | Path | Points at | Role |
 | --- | --- | --- |
-| `vendor/flue` | `withastro/flue` at `deee93b` (2.3.0) | Read-only reference. Flue's packages will be imported into `packages/` with `git subtree` and renamed ([ADR-0004](../adr/0004-ship-flue-as-amond-packages.md)), tracked in [#20](https://github.com/amond-ai/agent/issues/20) |
+| `vendor/flue` | `withastro/flue` at `deee93b` (2.3.0) | Read-only reference, and the source of the five imported packages |
 | `vendor/eve` | `vercel/eve` at `0857ff4` | Read-only reference |
 
-Flue builds with pnpm, Biome, and TypeScript 7. Imported packages move onto this repository's bun,
-ESLint, tsdown, Vitest, and TypeScript 5.9 toolchain before they pass `check` and `lint`. Upstream
-changes are ported by hand, because after the renames an upstream commit no longer applies
-directly.
+Flue's packages entered `packages/` from v2.3.0 with their history ([ADR-0004](../adr/0004-ship-flue-as-amond-packages.md),
+[#20](https://github.com/amond-ai/agent/issues/20)) and were renamed in source. Flue builds with
+pnpm, Biome, and TypeScript 7. The imported code moved onto this repository's bun, ESLint, tsdown,
+Vitest, and TypeScript 5.9 toolchain. Upstream changes are ported by hand, because after the
+renames an upstream commit no longer applies directly.
 
 ## Deployment targets
 
@@ -85,26 +94,29 @@ directly.
 
 ## Packages
 
-Packages in `packages/` today:
+Packages in `packages/`, all at version 0.1.0 and versioned by release-please. None is published
+yet.
+
+Imported from Flue v2.3.0 in [#20](https://github.com/amond-ai/agent/issues/20):
+
+| Flue package | Package | Depends on |
+| --- | --- | --- |
+| `@flue/runtime` | `@amond-ai/agent` | none in the workspace |
+| `@flue/vite` | `@amond-ai/agent-vite` | agent |
+| `@flue/cli` | `amond` (CLI, `bin: amond`) | agent, agent-vite |
+| `@flue/sdk` | `@amond-ai/agent-sdk` | none in the workspace |
+| `@flue/react` | `@amond-ai/agent-react` | agent-sdk (peer) |
+
+Built to ADR-0001 and ADR-0002. The old ADR-0001 CLI at `amond` is retired and its name belongs to
+the imported CLI:
 
 | Package | Depends on | Future |
 | --- | --- | --- |
-| `amond` (CLI, `bin: amond`) | agent-core, agent-durable | Retiring in [#18](https://github.com/amond-ai/agent/issues/18); the name passes to the CLI imported from Flue |
-| `@amond-ai/agent-core` | agent-durable | Retiring in #18 |
+| `@amond-ai/agent-core` | agent-durable | Retiring in [#18](https://github.com/amond-ai/agent/issues/18) |
 | `@amond-ai/agent-durable` | none | Retiring in #18 |
 | `@amond-ai/agent-durable-cloudflare` | agent-durable | Retiring in #18 |
 | `@amond-ai/agent-harness-claude-code` | agent-core, harness-claude-code, sandbox | Reassessed once the agent-loop seam exists |
 | `@amond-ai/agent-harness-codex` | agent-core | Unpublished spike; reassessed with the seam |
-
-Packages imported from Flue in [#20](https://github.com/amond-ai/agent/issues/20):
-
-| Flue package | Published as |
-| --- | --- |
-| `@flue/runtime` | `@amond-ai/agent` |
-| `@flue/vite` | `@amond-ai/agent-vite` |
-| `@flue/cli` | `amond` |
-| `@flue/sdk` | `@amond-ai/agent-sdk` |
-| `@flue/react` | `@amond-ai/agent-react` |
 
 ## CI and release
 

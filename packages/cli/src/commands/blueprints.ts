@@ -12,29 +12,48 @@ import { BLUEPRINTS, KIND_ROOTS } from '../generated/blueprints.ts'
  * requires an explicit kind + name.
  */
 
+const hasBlueprints = BLUEPRINTS.length > 0 || KIND_ROOTS.length > 0
+const NO_BLUEPRINTS_MESSAGE = 'No blueprints are bundled with this version of amond.'
+
 export function registerBlueprintCommands(cli: CAC): void {
-  cli
+  const add = cli
     .command(
       'add [kind] [name|url]',
-      'Fetch a blueprint implementation guide (no args: list blueprints)',
+      hasBlueprints
+        ? 'Fetch a blueprint implementation guide (no args: list blueprints)'
+        : NO_BLUEPRINTS_MESSAGE,
     )
-    .usage('add [<kind> <name|url>] [options]')
+    // Registered either way, so `--print` still reaches the empty-index guard.
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
-    .example('  $ amond add')
-    .example('  $ amond add sandbox daytona | claude')
-    .example('  $ amond add channel https://developers.notion.com/reference/webhooks | codex')
-    .action((kind: string | undefined, name: string | undefined, options: CliOptions) =>
-      blueprintAction('add', kind, name, options),
-    )
+  if (hasBlueprints) {
+    add
+      .usage('add [<kind> <name|url>] [options]')
+      .example('  $ amond add')
+      .example('  $ amond add sandbox daytona | claude')
+      .example('  $ amond add channel https://developers.notion.com/reference/webhooks | codex')
+  }
+  add.action((kind: string | undefined, name: string | undefined, options: CliOptions) =>
+    blueprintAction('add', kind, name, options),
+  )
 
-  cli
-    .command('update <kind> <name|url>', 'Fetch an updated blueprint implementation guide')
-    .usage('update <kind> <name|url> [options]')
-    .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
-    .example('  $ amond update channel slack | claude')
-    .action((kind: string, name: string, options: CliOptions) =>
-      blueprintAction('update', kind, name, options),
+  const update = cli
+    .command(
+      // Optional when nothing is bundled, so bare `amond update` reaches the
+      // empty-index guard instead of failing on missing arguments.
+      hasBlueprints ? 'update <kind> <name|url>' : 'update [kind] [name|url]',
+      hasBlueprints
+        ? 'Fetch an updated blueprint implementation guide'
+        : NO_BLUEPRINTS_MESSAGE,
     )
+    .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
+  if (hasBlueprints) {
+    update
+      .usage('update <kind> <name|url> [options]')
+      .example('  $ amond update channel slack | claude')
+  }
+  update.action((kind: string | undefined, name: string | undefined, options: CliOptions) =>
+    blueprintAction('update', kind, name, options),
+  )
 }
 
 interface BlueprintArgs {
@@ -52,6 +71,12 @@ async function blueprintAction(
 ): Promise<void> {
   rejectDoubleDashArgs(options, command)
   const print = booleanOption(options, 'print')
+
+  // Checked before kind resolution and any fetch, so an empty index never
+  // reaches the registry.
+  if (!hasBlueprints) {
+    throw new Error(NO_BLUEPRINTS_MESSAGE)
+  }
 
   if (command === 'add' && kind === undefined) {
     printListing(process.stderr)
@@ -100,17 +125,20 @@ async function blueprintAction(
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
-// Default blueprint registry base. AMOND_REGISTRY_URL is an internal-only
-// override used for local development against a locally served registry.
-const DEFAULT_REGISTRY_URL = 'https://flueframework.com/cli/blueprints'
-
 // Bound on one registry fetch — a blackholed connection must fail with a
 // diagnosis, not hold the command until the OS gives up on the socket.
 // AMOND_REGISTRY_TIMEOUT_MS is an internal-only override used by tests.
 const REGISTRY_FETCH_TIMEOUT_MS = 30_000
 
+// The registry base comes only from AMOND_REGISTRY_URL (internal-only, used
+// for local development against a locally served registry); there is no
+// default registry.
 function registryUrlFor(slug: string): string {
-  const base = (process.env.AMOND_REGISTRY_URL ?? DEFAULT_REGISTRY_URL).replace(/\/+$/, '')
+  const registry = process.env.AMOND_REGISTRY_URL
+  if (!registry) {
+    throw new Error('No blueprint registry is configured. Set AMOND_REGISTRY_URL.')
+  }
+  const base = registry.replace(/\/+$/, '')
   return `${base}/${slug}.md`
 }
 

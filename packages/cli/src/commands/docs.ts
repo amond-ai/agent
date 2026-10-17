@@ -83,7 +83,7 @@ function loadPagesOrThrow(): ReturnType<typeof loadDocsPages> {
   const root = resolveDocsRoot()
   if (!root) {
     throw new Error(
-      'Could not locate the bundled documentation. Your amond installation may be incomplete — try reinstalling it.',
+      'No documentation is bundled with this version of amond.',
     )
   }
   return loadDocsPages(root)

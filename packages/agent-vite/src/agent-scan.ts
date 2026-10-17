@@ -307,7 +307,7 @@ export function isAgentModulePath(filePath: string): boolean {
   return AGENT_MODULE_EXTENSIONS.has(path.extname(filePath))
 }
 
-/** `amond<PascalCase>Agent` — matches the Cloudflare codegen exactly. */
+/** `Amond<PascalCase>Agent` — matches the Cloudflare codegen exactly. */
 export function agentClassName(identity: string): string {
   return `Amond${pascalCaseName(identity)}Agent`
 }
