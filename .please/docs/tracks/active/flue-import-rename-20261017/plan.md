@@ -158,6 +158,9 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Evidence: `bun run lint` → exit 0 (10/10 tasks); `git show --stat 135eed5` → 209 files changed, 41818 insertions(+), 41438 deletions(-), nothing but the five packages; `bun run build` → exit 0; `CI=true bun run test` → exit 0 (20/20 tasks, @flue/react 2 files / 27 tests passed)
   Reformat commit: 135eed5 (config commit 8750eef). T012 lists 135eed5 in `.git-blame-ignore-revs`.
   Switched off for the five packages in `eslint.config.ts` (reason beside each there): perfectionist/sort-imports (moves `import 'virtual:flue/providers'`); behaviour-changing autofixes unicorn/prefer-type-error, unicorn/prefer-number-properties, unicorn/prefer-string-starts-ends-with, unicorn/no-new-array, e18e/prefer-timer-args, antfu/top-level-function, perfectionist/sort-exports, import/first, regexp/use-ignore-case, regexp/prefer-w, regexp/prefer-d, regexp/optimal-quantifier-concatenation; unfixable layout style/max-statements-per-line, style/no-tabs, style/no-mixed-spaces-and-tabs, style/no-trailing-spaces, style/operator-linebreak; Flue-style rules no-console, ts/no-use-before-define, node/prefer-global/process, antfu/no-top-level-await, no-fallthrough, no-unmodified-loop-condition, no-new, prefer-const, ts/no-this-alias, unused-imports/no-unused-vars, e18e/prefer-url-canparse, ts/method-signature-style, jsdoc/check-param-names, regexp/no-super-linear-backtracking, regexp/no-unused-capturing-group.
+- [x] (2026-10-17 19:00 KST) T003 Type-check the packages under the repository's TypeScript
+  Evidence: `bun run check` → exit 0 (15/15 tasks, all five packages included; repeated runs stable); `bun run build` → exit 0; `CI=true bun run test` → exit 0 (20/20); `bun run lint` → exit 0 (10/10) with no generated blueprints.ts, exit 1 right after a build (see Surprises)
+  Commit: 273749c. Edits are config or type-level only: `check:types` renamed `check` (5 package.json); agent tsconfig `include` src and types; agent-vite and cli tsconfig `exclude` dist; provider-diagnostics.ts and telemetry/projection.ts type assertions.
 
 ## Decision Log
 
@@ -182,3 +185,5 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   each split history under its prefix (filter-branch) and merging, the counts are 492/27/364/267/55.
 - Observation: the lint rules switched off in T004 flag code worth a look in a later track: seven `regexp/no-super-linear-backtracking` hits (skill-frontmatter.ts:29, cli blueprint-index.ts:52, docs-pages.ts:48 and :108), `ts/no-this-alias` in session.ts, and `no-unmodified-loop-condition` in agent-coordinator.ts. None looked like a defect, so none was changed.
   Evidence: `bunx eslint` on the pre-autofix tree listed them with the rules on.
+- Observation: After `bun run build`, `bun run lint` fails on the gitignored generated `packages/cli/src/generated/blueprints.ts` (7 style errors: member-delimiter, semi).
+  Evidence: `bun run lint` → @flue/cli:lint 7 errors; with `src/generated` moved away → 10/10 tasks pass. Not caused by T003; needs an ESLint ignore for generated files (T004 follow-up).
