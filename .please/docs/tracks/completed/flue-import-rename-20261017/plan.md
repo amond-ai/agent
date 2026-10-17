@@ -182,6 +182,8 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Evidence: `git grep -niE "@flue/|\bflue\b|FLUE_|flueframework"` over packages/*/README.md, NOTICE and packages/*/NOTICE → only the README attribution lines and NOTICE lines 6-7; `bunx eslint` on the five READMEs → 0 errors; commit a465740 (cherry-picked from the worktree's d289fad). Each package also gets a NOTICE and a LICENSE copy, with NOTICE in `files`, matching packages/core.
 - [x] (2026-10-17 20:46 KST) T011 Update README, ARCHITECTURE and tech-stack for the imported packages
   Evidence: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → no matches; `bunx eslint README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → exit 0; commit 129c7fb (cherry-picked from the worktree's 67f2326). The lead wrote the T010 and T011 entries from the executors' sink records, which the merge script could not apply.
+- [x] (2026-10-18 01:35 KST) Review-stage commits (SHA: `5b0b523`, `2012d1d`, `50f38ab`, `dd929ca`, `a933810`)
+
 ## Decision Log
 
 - 2026-10-17: the spec's first draft named a Cloudflare integration suite that does not exist in
@@ -235,3 +237,29 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - Decision: T004 ran before T003.
   Rationale: the pre-commit hook lints staged files, so T003's type-level edits needed the imported packages lint-clean first.
   Date/Author: 2026-10-17 / lead
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+- Flue's runtime, Vite plugin, CLI, SDK and React packages imported under `packages/` with their history (PR #24, merged with a merge commit so `git log -- packages/<pkg>` shows Flue's commits).
+- The packages renamed to `@amond-ai/agent`, `@amond-ai/agent-vite`, `amond`, `@amond-ai/agent-sdk` and `@amond-ai/agent-react` (0.1.0), moved onto this repo's Bun, turbo, ESLint and release-please toolchain; the old `amond` CLI package retired (PR #25).
+- `amond docs`, `amond add` and `amond update` report that no content is bundled and make no network request; Flue's default registry removed; `amond init` scaffolds point at `amond docs read` and this repository; NOTICE files, rewritten package READMEs and updated root docs (PR #27).
+- T012 (`.git-blame-ignore-revs`) is still open: it needs #24 and #25's SHAs on `main`.
+
+### What Went Well
+- Rewriting each split history under its prefix before merging kept per-package `git log` usable (Surprises & Discoveries).
+- Running the built binary in `no-content.test.ts`, across both a missing and an unreachable registry, caught a real regression during review: a bare `amond update` failed on missing arguments before reaching the guard.
+- The rejected-findings ledger kept the review loops from re-litigating by-design decisions.
+
+### What Could Improve
+- External review engines reworded recurring findings, which slipped past the ledger's file+title key; verdicts had to be reused by hand.
+- greptile was not installed, so both review loops ended `needs_human_read` instead of `no_issues`.
+- One turbo test run failed and its log was lost to a session interruption; reruns passed, and the cause is unknown.
+- Issue #20's done criteria named `amond build` though the spec chose `vite build`; the criteria should have been corrected when the spec was written.
+
+### Tech Debt Created
+- See `known-issues.md`: `docs.ts:86` message hides broken installs; CLI tests depend on a built `dist/` and run under Bun via `process.execPath`.
+- Lint rules switched off in T004 (`regexp/no-super-linear-backtracking`, `ts/no-this-alias`, `no-unmodified-loop-condition`) need a look.
+- Registry source is only the internal `AMOND_REGISTRY_URL`; track 2 decides the real registry and bundled content.
+- `docs-pages.ts` is a candidate to move to `apps/docs` in track 2.
+- No test asserts `amond --help` (SC-5 partial).
