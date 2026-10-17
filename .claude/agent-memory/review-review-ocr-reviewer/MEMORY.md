@@ -1,0 +1,1 @@
+- [ocr scoping in amond repo](ocr_scoping_amond_repo.md) — `*.md`/`*.test.ts` auto-excluded; use `bunx turbo run test --filter=<pkg> --force` (Vitest), not `bun test`; `bunx turbo run check --filter=<pkg> --force` and `bunx turbo run lint --filter=<pkg> --force` verify findings quickly.

@@ -1,0 +1,16 @@
+{
+  "extraKnownMarketplaces": {
+    "pleaseai": {
+      "source": {
+        "source": "github",
+        "repo": "pleaseai/claude-code-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "vitest@pleaseai": true,
+    "tsdown@pleaseai": true,
+    "turborepo@pleaseai": true,
+    "memory-management@passionfactory": true
+  }
+}
