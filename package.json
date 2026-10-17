@@ -46,6 +46,7 @@
     "@amond-ai/sandbox": "0.1.0",
     "@amond-ai/harness-transport": "0.1.0",
     "@pleaseai/eslint-config": "^0.0.4",
+    "@types/node": "^26.5.1",
     "@vitest/coverage-istanbul": "^4.1.10",
     "bun-types": "^1.4.2",
     "eslint": "^10.7.0",

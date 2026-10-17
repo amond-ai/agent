@@ -1,7 +1,30 @@
 {
-	"extends": "../../tsconfig.base.json",
-	"compilerOptions": {
-		"lib": ["ESNext", "DOM"]
-	},
-	"include": ["src", "test/**/*.test-d.ts"]
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": true,
+    "composite": false,
+    "target": "ES2022",
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "allowArbitraryExtensions": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "noUncheckedIndexedAccess": true,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "sourceMap": false,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "preserveWatchOutput": true
+  },
+  "include": [
+    "src",
+    "test/**/*.test-d.ts"
+  ]
 }
