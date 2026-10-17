@@ -1,0 +1,19 @@
+.please/docs/tracks/active/flue-import-rename-20261017/plan.md
+  s_4bb86ebd636f39::t_1525481abaccc7 83,87,90,93,99,102,105,111,114,117,120,123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fdc8d9b53cfcf0c768aa113ced15a5daf0bd88f2",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
