@@ -23,7 +23,7 @@
   "scripts": {
     "prebuild": "bun scripts/generate-blueprint-index.ts",
     "build": "tsdown && mv dist/flue.mjs dist/flue.js",
-    "check:types": "tsc --noEmit",
+    "check": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "bun --bun vitest run --passWithNoTests"

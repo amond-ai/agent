@@ -79,7 +79,7 @@ export function attachProviderResponseDiagnostics(
   diagnostics.push({
     type: PROVIDER_RESPONSE_DIAGNOSTIC,
     timestamp: Date.now(),
-    details: pickAllowlisted(details),
+    details: pickAllowlisted(details) as AssistantMessageDiagnostic['details'],
   } satisfies AssistantMessageDiagnostic)
 }
 

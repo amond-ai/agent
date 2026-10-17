@@ -21,5 +21,6 @@
     "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": true,
     "preserveWatchOutput": true
-  }
+  },
+  "include": ["src", "types"]
 }

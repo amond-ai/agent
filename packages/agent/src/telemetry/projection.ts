@@ -81,9 +81,9 @@ export function toolDefinitions(tools: LlmTool[] | undefined): GenAIContent | un
   }))
 }
 
-function parts(content: string | Array<Record<string, unknown>>): unknown[] {
+function parts(content: string | object[]): unknown[] {
   if (typeof content === 'string') { return [{ type: 'text', content }] }
-  return content.flatMap<unknown>((part) => {
+  return (content as Array<Record<string, unknown>>).flatMap<unknown>((part) => {
     if (part.type === 'text') { return [{ type: 'text', content: part.text }] }
     if (part.type === 'thinking') { return [{ type: 'reasoning', content: part.thinking }] }
     if (part.type === 'toolCall') {
@@ -93,7 +93,8 @@ function parts(content: string | Array<Record<string, unknown>>): unknown[] {
   })
 }
 
-function toolResponseValue(content: Array<Record<string, unknown>>): unknown {
+function toolResponseValue(contentParts: object[]): unknown {
+  const content = contentParts as Array<Record<string, unknown>>
   if (content.length === 1 && content[0]?.type === 'text') { return content[0].text }
   return content.flatMap(part => (part.type === 'text' ? [part.text] : []))
 }

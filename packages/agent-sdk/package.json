@@ -23,7 +23,7 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "check:types": "tsc --noEmit",
+    "check": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "bun --bun vitest run --passWithNoTests"
