@@ -8,6 +8,8 @@ export default pleaseai({
     '**/node_modules',
     '**/coverage',
     'vendor/**',
+    // Written by the CLI's prebuild from blueprints/ and gitignored.
+    'packages/cli/src/generated/**',
   ],
 }, {
   rules: sharedRules,
