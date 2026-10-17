@@ -14,8 +14,8 @@ Gemini Code Assist, and cubic. Gemini skips drafts (`include_drafts: false` in
 `/github:mark-pr-ready`, not while the branch is still changing. They are Apps, not workflows,
 so `.github/workflows/` does not show them.
 
-**How to apply:** Open with `--draft` and end the report with the `/github:mark-pr-ready`
-guidance line. If `docs/knowledge/workflow.md` or `.please/config.yml` change the policy, follow
-them over this note. The repo template is `.github/PULL_REQUEST_TEMPLATE.md` (Summary / Related
+**How to apply:** Unless the user passes `--ready`, open with `--draft` and end the report with the
+`/github:mark-pr-ready` guidance line. If `docs/knowledge/workflow.md` or `.please/config.yml`
+change the policy, follow them over this note. The repo template is `.github/PULL_REQUEST_TEMPLATE.md` (Summary / Related
 issue / Checklist): fill the checklist boxes rather than leaving them unticked, and verify the
 claims first.

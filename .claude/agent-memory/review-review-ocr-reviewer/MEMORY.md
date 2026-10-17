@@ -1,1 +1,1 @@
-- [ocr scoping in amond repo](ocr_scoping_amond_repo.md) — no `.please/config.yml`; `*.md`/`*.test.ts` auto-excluded; `bun test`/`turbo run check|lint --force` verify findings fast.
+- [ocr scoping in amond repo](ocr_scoping_amond_repo.md) — `*.md`/`*.test.ts` auto-excluded; use `bunx turbo run test --filter=<pkg> --force` (Vitest), not `bun test`; `turbo run check|lint --force` verifies findings quickly.

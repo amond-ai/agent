@@ -7,9 +7,9 @@ metadata:
 
 In this repo (turbo + bun workspace, packages/{amond,core,durable,...}), `ocr delegate preview`
 excludes `*.md` files (`unsupported_ext`) and every `*.test.ts` file (`default_path`) from the
-reviewable set by default. Only non-test `.ts` source files are reviewable. No `.please/config.yml`
-exists in this repo, so `REVIEW_OCR_DEFAULT_FLAGS` is always empty here — `setup-env.sh --print`
-only exports `REVIEW_PLUGIN_ROOT`.
+reviewable set by default. Only non-test `.ts` source files are reviewable. A `.please/config.yml`
+exists in this repo; its current `review` section leaves OCR defaults unset, but re-check it before
+assuming `REVIEW_OCR_DEFAULT_FLAGS` is empty; use `setup-env.sh --print` to verify the exports.
 
 **How to apply:** when scoping a review here, expect roughly half the changed files (README.md,
 `*.test.ts`) to show up struck through in the preview as excluded — that's expected, not a gap.
