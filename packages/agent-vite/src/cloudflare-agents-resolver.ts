@@ -13,29 +13,29 @@
  * own install, re-entering Vite's resolver so the active environment's
  * conditions still pick the entry.
  */
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { Plugin } from 'vite';
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { Plugin } from 'vite'
 
 interface CloudflareAgentsResolverState {
-	readonly target: 'node' | 'cloudflare';
-	readonly root: string;
+  readonly target: 'node' | 'cloudflare'
+  readonly root: string
 }
 
 export function cloudflareAgentsResolverPlugin(state: CloudflareAgentsResolverState): Plugin {
-	return {
-		name: 'flue-cloudflare-agents-resolver',
-		async resolveId(source, _importer, options) {
-			if (state.target !== 'cloudflare') return null;
-			if (source !== 'agents' && !source.startsWith('agents/')) return null;
-			if (!state.root || projectReachesAgents(state.root)) return null;
-			return this.resolve(source, path.join(getPackageDir(), '__flue_agents_resolve__.mjs'), {
-				...options,
-				skipSelf: true,
-			});
-		},
-	};
+  return {
+    name: 'flue-cloudflare-agents-resolver',
+    async resolveId(source, _importer, options) {
+      if (state.target !== 'cloudflare') { return null }
+      if (source !== 'agents' && !source.startsWith('agents/')) { return null }
+      if (!state.root || projectReachesAgents(state.root)) { return null }
+      return this.resolve(source, path.join(getPackageDir(), '__flue_agents_resolve__.mjs'), {
+        ...options,
+        skipSelf: true,
+      })
+    },
+  }
 }
 
 /**
@@ -47,15 +47,15 @@ export function cloudflareAgentsResolverPlugin(state: CloudflareAgentsResolverSt
  * optimization on its normal path.
  */
 function projectReachesAgents(root: string): boolean {
-	let dir = path.resolve(root);
-	while (true) {
-		if (fs.existsSync(path.join(dir, 'node_modules', 'agents', 'package.json'))) return true;
-		const parent = path.dirname(dir);
-		if (parent === dir) return false;
-		dir = parent;
-	}
+  let dir = path.resolve(root)
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'node_modules', 'agents', 'package.json'))) { return true }
+    const parent = path.dirname(dir)
+    if (parent === dir) { return false }
+    dir = parent
+  }
 }
 
 function getPackageDir(): string {
-	return path.dirname(fileURLToPath(import.meta.url));
+  return path.dirname(fileURLToPath(import.meta.url))
 }

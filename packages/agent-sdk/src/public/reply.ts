@@ -16,19 +16,19 @@
  * so a reply read over HTTP and one read in-process agree byte for byte.
  */
 
-import type { FlueConversationMessage, FlueConversationSettlement } from './conversation.ts';
+import type { FlueConversationMessage, FlueConversationSettlement } from './conversation.ts'
 
 /** The reply a settled submission produced, read from the conversation. */
 export interface AgentSubmissionReply {
-	/** Final assistant text produced by the submission ('' when none). */
-	text: string;
-	/**
-	 * Named client data parts (`useDataWriter`) on the reply message, keyed
-	 * by part name, each in emit order.
-	 */
-	data: Record<string, unknown[]>;
-	/** Agent-authored response metadata (`useResponseStart`/`useResponseFinish`), when present. */
-	metadata?: Record<string, unknown>;
+  /** Final assistant text produced by the submission ('' when none). */
+  text: string
+  /**
+   * Named client data parts (`useDataWriter`) on the reply message, keyed
+   * by part name, each in emit order.
+   */
+  data: Record<string, unknown[]>
+  /** Agent-authored response metadata (`useResponseStart`/`useResponseFinish`), when present. */
+  metadata?: Record<string, unknown>
 }
 
 /**
@@ -49,53 +49,53 @@ export interface AgentSubmissionReply {
  * older history, never the conversation a reply is read from.
  */
 export function readSubmissionReply(
-	conversation: {
-		messages: FlueConversationMessage[];
-		settlements: FlueConversationSettlement[];
-		before?: string | null;
-	},
-	submissionId: string,
+  conversation: {
+    messages: FlueConversationMessage[]
+    settlements: FlueConversationSettlement[]
+    before?: string | null
+  },
+  submissionId: string,
 ): AgentSubmissionReply {
-	const assistantMessages = conversation.messages.filter((message) => message.role === 'assistant');
-	const own = assistantMessages.filter((message) => message.submissionId === submissionId);
-	let reply = own.at(-1);
-	if (!reply) {
-		const settlement = conversation.settlements?.find(
-			(entry) => entry.submissionId === submissionId,
-		);
-		reply =
-			settlement?.answeredBySubmissionId !== undefined
-				? assistantMessages
-						.filter((message) => message.submissionId === settlement.answeredBySubmissionId)
-						.at(-1)
-				: isCompleteHead(conversation)
-					? assistantMessages.at(-1)
-					: undefined;
-	}
-	if (!reply) return { text: '', data: {} };
+  const assistantMessages = conversation.messages.filter(message => message.role === 'assistant')
+  const own = assistantMessages.filter(message => message.submissionId === submissionId)
+  let reply = own.at(-1)
+  if (!reply) {
+    const settlement = conversation.settlements?.find(
+      entry => entry.submissionId === submissionId,
+    )
+    reply =
+      settlement?.answeredBySubmissionId !== undefined
+        ? assistantMessages
+            .filter(message => message.submissionId === settlement.answeredBySubmissionId)
+            .at(-1)
+        : isCompleteHead(conversation)
+          ? assistantMessages.at(-1)
+          : undefined
+  }
+  if (!reply) { return { text: '', data: {} } }
 
-	const text = reply.parts
-		.filter(
-			(part): part is Extract<(typeof reply.parts)[number], { type: 'text' }> =>
-				part.type === 'text' && typeof part.text === 'string',
-		)
-		.map((part) => part.text)
-		.join('\n\n');
+  const text = reply.parts
+    .filter(
+      (part): part is Extract<(typeof reply.parts)[number], { type: 'text' }> =>
+        part.type === 'text' && typeof part.text === 'string',
+    )
+    .map(part => part.text)
+    .join('\n\n')
 
-	const data: Record<string, unknown[]> = {};
-	for (const part of reply.parts) {
-		if (!part.type.startsWith('data-')) continue;
-		const name = part.type.slice('data-'.length);
-		const values = data[name] ?? [];
-		values.push((part as { data: unknown }).data);
-		data[name] = values;
-	}
+  const data: Record<string, unknown[]> = {}
+  for (const part of reply.parts) {
+    if (!part.type.startsWith('data-')) { continue }
+    const name = part.type.slice('data-'.length)
+    const values = data[name] ?? []
+    values.push((part as { data: unknown }).data)
+    data[name] = values
+  }
 
-	return {
-		text,
-		data,
-		...(reply.metadata !== undefined ? { metadata: reply.metadata } : {}),
-	};
+  return {
+    text,
+    data,
+    ...(reply.metadata !== undefined ? { metadata: reply.metadata } : {}),
+  }
 }
 
 /**
@@ -104,6 +104,6 @@ export function readSubmissionReply(
  * reaches the start (`before` absent on an unbounded read, `null` on a
  * bounded one that covers everything).
  */
-function isCompleteHead(conversation: { settlements?: unknown; before?: unknown }): boolean {
-	return Array.isArray(conversation.settlements) && typeof conversation.before !== 'string';
+function isCompleteHead(conversation: { settlements?: unknown, before?: unknown }): boolean {
+  return Array.isArray(conversation.settlements) && typeof conversation.before !== 'string'
 }

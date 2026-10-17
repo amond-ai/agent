@@ -10,21 +10,21 @@
  * configured one — including an explicit empty value for `betas: []`.
  */
 export function prepareAnthropicBindingRequest(
-	namespace: 'messages' | 'beta',
-	params: Record<string, unknown>,
-	headers: Record<string, string>,
-): { body: Record<string, unknown>; extraHeaders: Record<string, string> } {
-	if (namespace === 'messages') return { body: params, extraHeaders: { ...headers } };
+  namespace: 'messages' | 'beta',
+  params: Record<string, unknown>,
+  headers: Record<string, string>,
+): { body: Record<string, unknown>, extraHeaders: Record<string, string> } {
+  if (namespace === 'messages') { return { body: params, extraHeaders: { ...headers } } }
 
-	const { betas, ...body } = params;
-	const extraHeaders = { ...headers };
-	if (betas !== undefined && betas !== null) {
-		// pi derives `betas` from any configured `anthropic-beta` header, so the
-		// per-request value wins (the SDK's precedence), in whatever casing.
-		for (const name of Object.keys(extraHeaders)) {
-			if (name.toLowerCase() === 'anthropic-beta') delete extraHeaders[name];
-		}
-		extraHeaders['anthropic-beta'] = String(betas);
-	}
-	return { body, extraHeaders };
+  const { betas, ...body } = params
+  const extraHeaders = { ...headers }
+  if (betas !== undefined && betas !== null) {
+    // pi derives `betas` from any configured `anthropic-beta` header, so the
+    // per-request value wins (the SDK's precedence), in whatever casing.
+    for (const name of Object.keys(extraHeaders)) {
+      if (name.toLowerCase() === 'anthropic-beta') { delete extraHeaders[name] }
+    }
+    extraHeaders['anthropic-beta'] = String(betas)
+  }
+  return { body, extraHeaders }
 }

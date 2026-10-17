@@ -1,4 +1,4 @@
-import type { LlmTurnPurpose, ModelRequestInfo } from './types.ts';
+import type { LlmTurnPurpose, ModelRequestInfo } from './types.ts'
 
 /**
  * Telemetry fields describing whether a request uses a compacted conversation
@@ -6,8 +6,8 @@ import type { LlmTurnPurpose, ModelRequestInfo } from './types.ts';
  * carry the semantic-convention attribute; summarization calls do not.
  */
 export function modelContextCompactionFields(
-	purpose: LlmTurnPurpose,
-	contextCompacted: boolean,
+  purpose: LlmTurnPurpose,
+  contextCompacted: boolean,
 ): Pick<ModelRequestInfo, 'contextCompacted'> {
-	return purpose === 'agent' && contextCompacted ? { contextCompacted: true } : {};
+  return purpose === 'agent' && contextCompacted ? { contextCompacted: true } : {}
 }

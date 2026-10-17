@@ -1,5 +1,5 @@
-import type { SandboxFactory } from '../types.ts';
-import { requireRenderFrame } from './frame.ts';
+import type { SandboxFactory } from '../types.ts'
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Attach the environment this agent instance runs in: the sandbox adapter's
@@ -43,48 +43,48 @@ import { requireRenderFrame } from './frame.ts';
  * environment. Like the factory, it is read once when a submission starts.
  */
 export interface UseSandboxOptions {
-	/** Working directory inside the initialized environment. */
-	cwd?: string;
+  /** Working directory inside the initialized environment. */
+  cwd?: string
 }
 
 export function useSandbox(sandbox: SandboxFactory, options: UseSandboxOptions = {}): void {
-	const frame = requireRenderFrame('useSandbox');
-	if (frame.kind === 'subagent') {
-		throw new Error(
-			"[flue] useSandbox() is not available in a subagent render. Delegates share the parent agent's environment (scope work with the task call's cwd instead).",
-		);
-	}
-	if (
-		!sandbox ||
-		typeof sandbox !== 'object' ||
-		(typeof (sandbox as Partial<SandboxFactory>).createSandbox !== 'function' &&
-			// @deprecated Factories predating the createSandbox rename are still
-			// valid; remove together with SandboxFactory.createSessionEnv.
-			typeof (sandbox as Partial<SandboxFactory>).createSessionEnv !== 'function')
-	) {
-		throw new Error(
-			'[flue] useSandbox() requires a sandbox factory (an object with createSandbox()), like the value local() returns.',
-		);
-	}
-	if (sandbox.tools !== undefined && typeof sandbox.tools !== 'function') {
-		throw new Error('[flue] useSandbox() sandbox `tools` must be a function when present.');
-	}
-	if (frame.sandbox !== undefined) {
-		throw new Error(
-			'[flue] useSandbox() was called twice in one render. An agent has one environment — attach it once, in the agent body or a single custom hook.',
-		);
-	}
-	if (options === null || typeof options !== 'object' || Array.isArray(options)) {
-		throw new Error('[flue] useSandbox() options must be an object.');
-	}
-	for (const key of Object.keys(options)) {
-		if (key !== 'cwd') {
-			throw new Error(`[flue] useSandbox() options received unknown field "${key}".`);
-		}
-	}
-	if (options.cwd !== undefined && (typeof options.cwd !== 'string' || options.cwd.length === 0)) {
-		throw new Error('[flue] useSandbox() options.cwd must be a non-empty string.');
-	}
-	frame.sandbox = sandbox;
-	if (options.cwd !== undefined) frame.cwd = options.cwd;
+  const frame = requireRenderFrame('useSandbox')
+  if (frame.kind === 'subagent') {
+    throw new Error(
+      '[flue] useSandbox() is not available in a subagent render. Delegates share the parent agent\'s environment (scope work with the task call\'s cwd instead).',
+    )
+  }
+  if (
+    !sandbox ||
+    typeof sandbox !== 'object' ||
+    (typeof (sandbox as Partial<SandboxFactory>).createSandbox !== 'function' &&
+    // @deprecated Factories predating the createSandbox rename are still
+    // valid; remove together with SandboxFactory.createSessionEnv.
+      typeof (sandbox as Partial<SandboxFactory>).createSessionEnv !== 'function')
+  ) {
+    throw new Error(
+      '[flue] useSandbox() requires a sandbox factory (an object with createSandbox()), like the value local() returns.',
+    )
+  }
+  if (sandbox.tools !== undefined && typeof sandbox.tools !== 'function') {
+    throw new Error('[flue] useSandbox() sandbox `tools` must be a function when present.')
+  }
+  if (frame.sandbox !== undefined) {
+    throw new Error(
+      '[flue] useSandbox() was called twice in one render. An agent has one environment — attach it once, in the agent body or a single custom hook.',
+    )
+  }
+  if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('[flue] useSandbox() options must be an object.')
+  }
+  for (const key of Object.keys(options)) {
+    if (key !== 'cwd') {
+      throw new Error(`[flue] useSandbox() options received unknown field "${key}".`)
+    }
+  }
+  if (options.cwd !== undefined && (typeof options.cwd !== 'string' || options.cwd.length === 0)) {
+    throw new Error('[flue] useSandbox() options.cwd must be a non-empty string.')
+  }
+  frame.sandbox = sandbox
+  if (options.cwd !== undefined) { frame.cwd = options.cwd }
 }

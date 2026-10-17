@@ -13,21 +13,21 @@ Requires React 18 or later. For examples, see the [React guide](https://fluefram
 A hook observes one agent conversation, addressed by URL: wherever the application's `app.ts` mounts the agent's routes (`app.route('/agents/triage', createAgentRouter(Triage))`) plus a caller-chosen conversation id. Starting a new conversation is rendering the hook with a fresh id appended to the mount URL.
 
 ```tsx
-import { useFlueAgent } from '@flue/react';
+import { useFlueAgent } from '@flue/react'
 
 function Chat({ conversationId }: { conversationId: string }) {
-  const agent = useFlueAgent({ url: `/api/agents/triage/${conversationId}` });
+  const agent = useFlueAgent({ url: `/api/agents/triage/${conversationId}` })
   // agent.messages, agent.status, agent.sendMessage(...)
 }
 ```
 
 ```ts
-function useFlueAgent(options?: UseFlueAgentOptions): UseFlueAgentResult;
+function useFlueAgent(options?: UseFlueAgentOptions): UseFlueAgentResult
 
 interface UseFlueAgentOptions {
-  url?: string;
-  client?: FlueClient;
-  live?: 'sse' | 'long-poll';
+  url?: string
+  client?: FlueClient
+  live?: 'sse' | 'long-poll'
 }
 ```
 
@@ -39,22 +39,22 @@ interface UseFlueAgentOptions {
 
 ```ts
 interface UseFlueAgentResult {
-  messages: FlueConversationMessage[];
-  status: AgentStatus;
-  historyReady: boolean;
-  error: Error | undefined;
-  failedSends: FailedSend[];
-  settlements: FlueConversationSettlement[];
-  sendMessage(message: string, options?: SendMessageOptions): Promise<AgentSendResult>;
-  refresh(): void;
+  messages: FlueConversationMessage[]
+  status: AgentStatus
+  historyReady: boolean
+  error: Error | undefined
+  failedSends: FailedSend[]
+  settlements: FlueConversationSettlement[]
+  sendMessage(message: string, options?: SendMessageOptions): Promise<AgentSendResult>
+  refresh(): void
 }
 
 /** Every option `client.send()` accepts except `message` (see below), plus `images`. */
 type SendMessageOptions = Omit<AgentPromptOptions, 'message'> & {
-  images?: DeliveredAttachment[];
-};
+  images?: DeliveredAttachment[]
+}
 
-type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error';
+type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error'
 ```
 
 | Status       | Meaning                                                                                                                                                                                                               |

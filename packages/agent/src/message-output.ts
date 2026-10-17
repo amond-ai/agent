@@ -1,6 +1,6 @@
-import * as v from 'valibot';
-import { RESERVED_SIGNAL_TYPES } from './conversation-records.ts';
-import type { FlueHarness, FlueLogger, PromptUsage } from './types.ts';
+import * as v from 'valibot'
+import { RESERVED_SIGNAL_TYPES } from './conversation-records.ts'
+import type { FlueHarness, FlueLogger, PromptUsage } from './types.ts'
 
 /**
  * The output channels behind the client-facing hooks. Data parts
@@ -19,8 +19,8 @@ import type { FlueHarness, FlueLogger, PromptUsage } from './types.ts';
  * never a stale render capture.
  */
 export interface ResponseStartContext {
-	readonly metadata: Record<string, unknown>;
-	readonly log: FlueLogger;
+  readonly metadata: Record<string, unknown>
+  readonly log: FlueLogger
 }
 
 /**
@@ -30,14 +30,14 @@ export interface ResponseStartContext {
  * final aggregates.
  */
 export interface ResponseFinishContext {
-	readonly metadata: Record<string, unknown>;
-	readonly response: {
-		/** The response's aggregate usage across all turns and re-attempts. */
-		readonly usage: PromptUsage;
-		/** Every tool call the response made, from the durable record log. */
-		readonly toolCalls: readonly AgentResponseToolCall[];
-	};
-	readonly log: FlueLogger;
+  readonly metadata: Record<string, unknown>
+  readonly response: {
+    /** The response's aggregate usage across all turns and re-attempts. */
+    readonly usage: PromptUsage
+    /** Every tool call the response made, from the durable record log. */
+    readonly toolCalls: readonly AgentResponseToolCall[]
+  }
+  readonly log: FlueLogger
 }
 
 /**
@@ -46,16 +46,16 @@ export interface ResponseFinishContext {
  * observers — a returned promise throws.
  */
 // biome-ignore lint/suspicious/noConfusingVoidType: a boundary callback may observe without attaching metadata — a bare no-return body is legal, which `| undefined` alone would reject.
-export type ResponseMetadataCallback<TCtx> = (ctx: TCtx) => Record<string, unknown> | void;
+export type ResponseMetadataCallback<TCtx> = (ctx: TCtx) => Record<string, unknown> | void
 
 /** One `useResponseStart` declaration; identity is the declaration index. */
 export interface ResponseStartDeclaration {
-	run: ResponseMetadataCallback<ResponseStartContext>;
+  run: ResponseMetadataCallback<ResponseStartContext>
 }
 
 /** One `useResponseFinish` declaration; identity is the declaration index. */
 export interface ResponseFinishDeclaration {
-	run: ResponseMetadataCallback<ResponseFinishContext>;
+  run: ResponseMetadataCallback<ResponseFinishContext>
 }
 
 /**
@@ -67,10 +67,10 @@ export interface ResponseFinishDeclaration {
  * submission of its own).
  */
 export interface AgentSignalAppend {
-	type: string;
-	body: string;
-	attributes?: Record<string, string>;
-	tagName?: string;
+  type: string
+  body: string
+  attributes?: Record<string, string>
+  tagName?: string
 }
 
 /**
@@ -80,66 +80,66 @@ export interface AgentSignalAppend {
  * message is real new input and belongs on `useDispatchMessage()`.
  */
 export interface AgentAppendMessage extends AgentSignalAppend {
-	kind: 'signal';
+  kind: 'signal'
 }
 
 const AppendMessageSchema = v.strictObject(
-	{
-		kind: v.literal('signal', 'message "kind" must be "signal"'),
-		type: v.pipe(v.string(), v.nonEmpty('signal "type" must not be empty')),
-		body: v.string('signal "body" must be a string'),
-		attributes: v.optional(v.record(v.string(), v.string())),
-		// The tag name is rendered unescaped as the signal's XML envelope in
-		// model context, so it must be a valid XML name — anything looser would
-		// let a caller-controlled value inject markup that the body/attribute
-		// escaping exists to prevent. Same rule as delivered signal messages.
-		tagName: v.optional(
-			v.pipe(
-				v.string(),
-				v.regex(
-					/^[A-Za-z_][A-Za-z0-9_.-]*$/,
-					'signal "tagName" must be a valid XML tag name ' +
-						'(letters, digits, "_", "-", "."; must not start with a digit, "-", or ".")',
-				),
-			),
-		),
-	},
-	(issue) =>
-		issue.expected === 'never' ? `received unknown signal field ${issue.received}` : issue.message,
-);
+  {
+    kind: v.literal('signal', 'message "kind" must be "signal"'),
+    type: v.pipe(v.string(), v.nonEmpty('signal "type" must not be empty')),
+    body: v.string('signal "body" must be a string'),
+    attributes: v.optional(v.record(v.string(), v.string())),
+    // The tag name is rendered unescaped as the signal's XML envelope in
+    // model context, so it must be a valid XML name — anything looser would
+    // let a caller-controlled value inject markup that the body/attribute
+    // escaping exists to prevent. Same rule as delivered signal messages.
+    tagName: v.optional(
+      v.pipe(
+        v.string(),
+        v.regex(
+          /^[A-Za-z_][A-Za-z0-9_.-]*$/,
+          'signal "tagName" must be a valid XML tag name ' +
+          '(letters, digits, "_", "-", "."; must not start with a digit, "-", or ".")',
+        ),
+      ),
+    ),
+  },
+  issue =>
+    issue.expected === 'never' ? `received unknown signal field ${issue.received}` : issue.message,
+)
 
 /** Validate one `ctx.append` argument; throws with field-level detail. */
 export function assertAppendMessage(message: unknown): AgentSignalAppend {
-	if (
-		typeof message === 'object' &&
-		message !== null &&
-		(message as { kind?: unknown }).kind === 'user'
-	) {
-		throw new Error(
-			'[flue] append() only appends kind: "signal" messages into the running response. A kind: "user" message is real new input — send it with the dispatcher from useDispatchMessage() instead.',
-		);
-	}
-	const parsed = v.safeParse(AppendMessageSchema, message);
-	if (!parsed.success) {
-		throw new Error(
-			`[flue] append() message is invalid: ${parsed.issues.map((issue) => issue.message).join('; ')}.`,
-		);
-	}
-	// Reserved types are what lets the runtime treat a reserved-type record as
-	// framework-authored (recovery classification, the `useDelivery()` resume
-	// filter) — an agent-authored one would corrupt those readers.
-	if (RESERVED_SIGNAL_TYPES.has(parsed.output.type)) {
-		throw new Error(
-			`[flue] append() signal type "${parsed.output.type}" is framework-reserved vocabulary (the runtime's own narration and recovery signals) — use an application-specific type.`,
-		);
-	}
-	const { type, body, attributes, tagName } = parsed.output;
-	return {
-		type,
-		body,
-		...(attributes ? { attributes } : {}),
-		...(tagName ? { tagName } : {}),
-	};
+  if (
+    typeof message === 'object' &&
+    message !== null &&
+    (message as { kind?: unknown }).kind === 'user'
+  ) {
+    throw new Error(
+      '[flue] append() only appends kind: "signal" messages into the running response. A kind: "user" message is real new input — send it with the dispatcher from useDispatchMessage() instead.',
+    )
+  }
+  const parsed = v.safeParse(AppendMessageSchema, message)
+  if (!parsed.success) {
+    throw new Error(
+      `[flue] append() message is invalid: ${parsed.issues.map(issue => issue.message).join('; ')}.`,
+    )
+  }
+  // Reserved types are what lets the runtime treat a reserved-type record as
+  // framework-authored (recovery classification, the `useDelivery()` resume
+  // filter) — an agent-authored one would corrupt those readers.
+  if (RESERVED_SIGNAL_TYPES.has(parsed.output.type)) {
+    throw new Error(
+      `[flue] append() signal type "${parsed.output.type}" is framework-reserved vocabulary (the runtime's own narration and recovery signals) — use an application-specific type.`,
+    )
+  }
+  const { type, body, attributes, tagName } = parsed.output
+  return {
+    type,
+    body,
+    ...(attributes ? { attributes } : {}),
+    ...(tagName ? { tagName } : {}),
+  }
 }
 
 /**
@@ -157,18 +157,18 @@ export function assertAppendMessage(message: unknown): AgentSignalAppend {
  * Prefer dispatching; reach for `append` only when a delivery is wrong.
  */
 export interface AgentStartContext {
-	readonly append: (message: AgentAppendMessage) => void;
-	readonly harness: FlueHarness;
-	readonly log: FlueLogger;
-	readonly signal: AbortSignal;
+  readonly append: (message: AgentAppendMessage) => void
+  readonly harness: FlueHarness
+  readonly log: FlueLogger
+  readonly signal: AbortSignal
 }
 
 /** One tool call the current response has made, from the durable record log. */
 export interface AgentResponseToolCall {
-	/** The tool's name as the model called it. */
-	tool: string;
-	/** Whether the call's recorded outcome was an error. */
-	isError: boolean;
+  /** The tool's name as the model called it. */
+  tool: string
+  /** Whether the call's recorded outcome was an error. */
+  isError: boolean
 }
 
 /**
@@ -188,24 +188,24 @@ export interface AgentResponseToolCall {
  * input, dispatch instead.
  */
 export interface AgentFinishContext {
-	readonly response: {
-		readonly toolCalls: readonly AgentResponseToolCall[];
-		readonly usage: PromptUsage;
-	};
-	readonly append: (message: AgentAppendMessage) => void;
-	readonly harness: FlueHarness;
-	readonly log: FlueLogger;
-	readonly signal: AbortSignal;
+  readonly response: {
+    readonly toolCalls: readonly AgentResponseToolCall[]
+    readonly usage: PromptUsage
+  }
+  readonly append: (message: AgentAppendMessage) => void
+  readonly harness: FlueHarness
+  readonly log: FlueLogger
+  readonly signal: AbortSignal
 }
 
 /** One `useAgentStart` declaration; identity is the declaration index. */
 export interface AgentStartDeclaration {
-	run: (ctx: AgentStartContext) => void | Promise<void>;
+  run: (ctx: AgentStartContext) => void | Promise<void>
 }
 
 /** One `useAgentFinish` declaration; identity is the declaration index. */
 export interface AgentFinishDeclaration {
-	run: (ctx: AgentFinishContext) => void | Promise<void>;
+  run: (ctx: AgentFinishContext) => void | Promise<void>
 }
 
 /**
@@ -218,38 +218,38 @@ export interface AgentFinishDeclaration {
  * session constructs `ctx.append` directly when it runs the callbacks.)
  */
 export interface AgentOutputChannel {
-	/** `useResponseStart` declarations from the latest render, in call order. */
-	responseStarts: ResponseStartDeclaration[];
-	/** `useResponseFinish` declarations from the latest render, in call order. */
-	responseFinishes: ResponseFinishDeclaration[];
-	/** `useAgentStart` declarations from the latest render, in call order. */
-	agentStarts: AgentStartDeclaration[];
-	/** `useAgentFinish` declarations from the latest render, in call order. */
-	agentFinishes: AgentFinishDeclaration[];
-	/** Wire the session-side sink data writes flow into. */
-	connect(sink: (name: string, data: unknown) => void): void;
-	writeMessageData(name: string, data: unknown): void;
+  /** `useResponseStart` declarations from the latest render, in call order. */
+  responseStarts: ResponseStartDeclaration[]
+  /** `useResponseFinish` declarations from the latest render, in call order. */
+  responseFinishes: ResponseFinishDeclaration[]
+  /** `useAgentStart` declarations from the latest render, in call order. */
+  agentStarts: AgentStartDeclaration[]
+  /** `useAgentFinish` declarations from the latest render, in call order. */
+  agentFinishes: AgentFinishDeclaration[]
+  /** Wire the session-side sink data writes flow into. */
+  connect(sink: (name: string, data: unknown) => void): void
+  writeMessageData(name: string, data: unknown): void
 }
 
 export function createAgentOutputChannel(): AgentOutputChannel {
-	let sink: ((name: string, data: unknown) => void) | undefined;
-	return {
-		responseStarts: [],
-		responseFinishes: [],
-		agentStarts: [],
-		agentFinishes: [],
-		connect(next) {
-			sink = next;
-		},
-		writeMessageData(name, data) {
-			if (!sink) {
-				throw new Error(
-					`[flue] Message data "${name}" has no durable runtime behind this render, so writes are unavailable.`,
-				);
-			}
-			sink(name, data);
-		},
-	};
+  let sink: ((name: string, data: unknown) => void) | undefined
+  return {
+    responseStarts: [],
+    responseFinishes: [],
+    agentStarts: [],
+    agentFinishes: [],
+    connect(next) {
+      sink = next
+    },
+    writeMessageData(name, data) {
+      if (!sink) {
+        throw new Error(
+          `[flue] Message data "${name}" has no durable runtime behind this render, so writes are unavailable.`,
+        )
+      }
+      sink(name, data)
+    },
+  }
 }
 
 /**
@@ -266,47 +266,48 @@ export function createAgentOutputChannel(): AgentOutputChannel {
  * same failure: boundary hooks are synchronous observers.
  */
 export function runResponseMetadataHooks<TCtx>(
-	hookName: 'useResponseStart' | 'useResponseFinish',
-	declarations: readonly { run: ResponseMetadataCallback<TCtx> }[],
-	createContext: (metadata: Record<string, unknown>, index: number) => TCtx,
-	initialMetadata: Record<string, unknown>,
+  hookName: 'useResponseStart' | 'useResponseFinish',
+  declarations: readonly { run: ResponseMetadataCallback<TCtx> }[],
+  createContext: (metadata: Record<string, unknown>, index: number) => TCtx,
+  initialMetadata: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
-	let current = initialMetadata;
-	let contributed: Record<string, unknown> | undefined;
-	for (const [index, declaration] of declarations.entries()) {
-		let result: ReturnType<ResponseMetadataCallback<TCtx>>;
-		try {
-			result = declaration.run(createContext(current, index));
-		} catch (error) {
-			throw new Error(
-				`[flue] A ${hookName} callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
-				{ cause: error },
-			);
-		}
-		if (result === undefined || result === null) continue;
-		if (typeof result !== 'object') {
-			throw new Error(
-				`[flue] A ${hookName} callback must return a plain object of metadata (or nothing) — got ${typeof result}.`,
-			);
-		}
-		if (isThenable(result)) {
-			throw new Error(
-				`[flue] A ${hookName} callback (hook #${index} in declaration order) returned a promise. Response boundary hooks are synchronous observers of the response envelope — return the metadata object directly. Move async work into useAgentStart/useAgentFinish (awaited lifecycle hooks) or tools.`,
-			);
-		}
-		if (Array.isArray(result)) {
-			throw new Error(
-				`[flue] A ${hookName} callback must return a plain object of metadata (or nothing) — got an array.`,
-			);
-		}
-		current = deepMergeMetadata(current, result);
-		contributed = deepMergeMetadata(contributed ?? {}, result);
-	}
-	return contributed && Object.keys(contributed).length > 0 ? contributed : undefined;
+  let current = initialMetadata
+  let contributed: Record<string, unknown> | undefined
+  for (const [index, declaration] of declarations.entries()) {
+    let result: ReturnType<ResponseMetadataCallback<TCtx>>
+    try {
+      result = declaration.run(createContext(current, index))
+    }
+    catch (error) {
+      throw new Error(
+        `[flue] A ${hookName} callback (hook #${index} in declaration order) threw: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      )
+    }
+    if (result === undefined || result === null) { continue }
+    if (typeof result !== 'object') {
+      throw new Error(
+        `[flue] A ${hookName} callback must return a plain object of metadata (or nothing) — got ${typeof result}.`,
+      )
+    }
+    if (isThenable(result)) {
+      throw new Error(
+        `[flue] A ${hookName} callback (hook #${index} in declaration order) returned a promise. Response boundary hooks are synchronous observers of the response envelope — return the metadata object directly. Move async work into useAgentStart/useAgentFinish (awaited lifecycle hooks) or tools.`,
+      )
+    }
+    if (Array.isArray(result)) {
+      throw new Error(
+        `[flue] A ${hookName} callback must return a plain object of metadata (or nothing) — got an array.`,
+      )
+    }
+    current = deepMergeMetadata(current, result)
+    contributed = deepMergeMetadata(contributed ?? {}, result)
+  }
+  return contributed && Object.keys(contributed).length > 0 ? contributed : undefined
 }
 
 function isThenable(value: object): boolean {
-	return 'then' in value && typeof (value as { then: unknown }).then === 'function';
+  return 'then' in value && typeof (value as { then: unknown }).then === 'function'
 }
 
 /**
@@ -316,22 +317,22 @@ function isThenable(value: object): boolean {
  * relies on this for cheap cloning).
  */
 export function deepMergeMetadata(
-	base: Record<string, unknown>,
-	next: Record<string, unknown>,
+  base: Record<string, unknown>,
+  next: Record<string, unknown>,
 ): Record<string, unknown> {
-	const merged: Record<string, unknown> = { ...base };
-	for (const [key, value] of Object.entries(next)) {
-		if (value === undefined) continue;
-		if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-		const current = merged[key];
-		merged[key] =
-			isPlainObject(current) && isPlainObject(value) ? deepMergeMetadata(current, value) : value;
-	}
-	return merged;
+  const merged: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(next)) {
+    if (value === undefined) { continue }
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') { continue }
+    const current = merged[key]
+    merged[key] =
+      isPlainObject(current) && isPlainObject(value) ? deepMergeMetadata(current, value) : value
+  }
+  return merged
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-	if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-	const proto = Object.getPrototypeOf(value);
-	return proto === Object.prototype || proto === null;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) { return false }
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
 }

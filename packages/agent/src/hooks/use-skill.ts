@@ -1,6 +1,6 @@
-import { assertSkillDefinition } from '../skill-definition.ts';
-import type { Skill } from '../types.ts';
-import { requireRenderFrame } from './frame.ts';
+import { assertSkillDefinition } from '../skill-definition.ts'
+import type { Skill } from '../types.ts'
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Mount a skill in the agent's catalog. Skills are progressive disclosure:
@@ -30,19 +30,19 @@ import { requireRenderFrame } from './frame.ts';
  * activate it. Duplicate names across the render fail fast.
  */
 export function useSkill(skill: Skill): void {
-	const frame = requireRenderFrame('useSkill');
-	if (!skill || typeof skill !== 'object' || Array.isArray(skill)) {
-		throw new Error(
-			'[flue] useSkill() requires a skill: a SKILL.md import or a skill definition (from `defineSkill(...)` or written inline).',
-		);
-	}
-	if (!('__flueSkillReference' in skill)) {
-		assertSkillDefinition(skill, 'useSkill()');
-	}
-	if (frame.skills.some((mounted) => mounted.name === skill.name)) {
-		throw new Error(
-			`[flue] useSkill() mounted the skill name "${skill.name}" twice in one render. Each skill mounts once; share it from a single custom hook.`,
-		);
-	}
-	frame.skills.push(skill);
+  const frame = requireRenderFrame('useSkill')
+  if (!skill || typeof skill !== 'object' || Array.isArray(skill)) {
+    throw new Error(
+      '[flue] useSkill() requires a skill: a SKILL.md import or a skill definition (from `defineSkill(...)` or written inline).',
+    )
+  }
+  if (!('__flueSkillReference' in skill)) {
+    assertSkillDefinition(skill, 'useSkill()')
+  }
+  if (frame.skills.some(mounted => mounted.name === skill.name)) {
+    throw new Error(
+      `[flue] useSkill() mounted the skill name "${skill.name}" twice in one render. Each skill mounts once; share it from a single custom hook.`,
+    )
+  }
+  frame.skills.push(skill)
 }

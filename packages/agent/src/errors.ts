@@ -98,8 +98,8 @@
  * The structured-constructor pattern below is what prevents that drift.
  */
 
-import { extractTraceCarrier } from './execution-interceptor.ts';
-import { generateErrorRef } from './runtime/ids.ts';
+import { extractTraceCarrier } from './execution-interceptor.ts'
+import { generateErrorRef } from './runtime/ids.ts'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -112,60 +112,60 @@ import { generateErrorRef } from './runtime/ids.ts';
  * to `export` if/when a real cross-file caller appears.
  */
 function formatList<T>(items: readonly T[], fallback = '(none)'): string {
-	if (items.length === 0) return fallback;
-	return items.map((item) => `"${String(item)}"`).join(', ');
+  if (items.length === 0) { return fallback }
+  return items.map(item => `"${String(item)}"`).join(', ')
 }
 
 // ─── Base classes ───────────────────────────────────────────────────────────
 
 interface FlueErrorOptions {
-	/**
-	 * Stable, machine-readable identifier (snake_case). Set once per subclass.
-	 * Callers don't pass this — the subclass constructor does.
-	 */
-	type: string;
-	/**
-	 * One-sentence summary of what went wrong. Caller-safe — always rendered
-	 * on the wire.
-	 */
-	message: string;
-	/**
-	 * Caller-audience longer-form explanation. Always rendered on the wire.
-	 *
-	 * Must be safe to expose to any HTTP client, including third-party or
-	 * hostile callers. Do NOT include sibling enumeration, filesystem paths,
-	 * framework-internal mechanics, or source-code fix instructions — those
-	 * belong in `dev`.
-	 *
-	 * Required: pass `''` only when there's genuinely nothing more to say to
-	 * the caller. The required-but-possibly-empty shape is intentional — it
-	 * forces a deliberate decision rather than a thoughtless omission.
-	 */
-	details: string;
-	/**
-	 * Developer-audience longer-form explanation. Rendered on the wire ONLY
-	 * when the generated runtime is configured for local development.
-	 *
-	 * Use this for everything that helps the developer running the service
-	 * but shouldn't reach a public caller: available alternatives, filesystem
-	 * paths, framework guidance, source-code fix instructions, configuration
-	 * hints.
-	 *
-	 * Required: pass `''` only when there's genuinely nothing dev-specific
-	 * to add (e.g. a malformed-JSON error has nothing to say to the dev that
-	 * isn't already in `details`).
-	 */
-	dev: string;
-	/**
-	 * Optional structured machine-readable data. Use only when downstream
-	 * tooling genuinely benefits — most errors should leave this unset.
-	 */
-	meta?: Record<string, unknown>;
-	/**
-	 * The underlying error, when wrapping. Logged server-side; never sent
-	 * over the wire.
-	 */
-	cause?: unknown;
+  /**
+   * Stable, machine-readable identifier (snake_case). Set once per subclass.
+   * Callers don't pass this — the subclass constructor does.
+   */
+  type: string
+  /**
+   * One-sentence summary of what went wrong. Caller-safe — always rendered
+   * on the wire.
+   */
+  message: string
+  /**
+   * Caller-audience longer-form explanation. Always rendered on the wire.
+   *
+   * Must be safe to expose to any HTTP client, including third-party or
+   * hostile callers. Do NOT include sibling enumeration, filesystem paths,
+   * framework-internal mechanics, or source-code fix instructions — those
+   * belong in `dev`.
+   *
+   * Required: pass `''` only when there's genuinely nothing more to say to
+   * the caller. The required-but-possibly-empty shape is intentional — it
+   * forces a deliberate decision rather than a thoughtless omission.
+   */
+  details: string
+  /**
+   * Developer-audience longer-form explanation. Rendered on the wire ONLY
+   * when the generated runtime is configured for local development.
+   *
+   * Use this for everything that helps the developer running the service
+   * but shouldn't reach a public caller: available alternatives, filesystem
+   * paths, framework guidance, source-code fix instructions, configuration
+   * hints.
+   *
+   * Required: pass `''` only when there's genuinely nothing dev-specific
+   * to add (e.g. a malformed-JSON error has nothing to say to the dev that
+   * isn't already in `details`).
+   */
+  dev: string
+  /**
+   * Optional structured machine-readable data. Use only when downstream
+   * tooling genuinely benefits — most errors should leave this unset.
+   */
+  meta?: Record<string, unknown>
+  /**
+   * The underlying error, when wrapping. Logged server-side; never sent
+   * over the wire.
+   */
+  cause?: unknown
 }
 
 /**
@@ -179,28 +179,28 @@ interface FlueErrorOptions {
  * the stable `type` field. Message strings are not API.
  */
 export class FlueError extends Error {
-	readonly type: string;
-	readonly details: string;
-	readonly dev: string;
-	readonly meta: Record<string, unknown> | undefined;
-	override readonly cause: unknown;
+  readonly type: string
+  readonly details: string
+  readonly dev: string
+  readonly meta: Record<string, unknown> | undefined
+  override readonly cause: unknown
 
-	constructor(options: FlueErrorOptions) {
-		super(options.message);
-		this.name = 'FlueError';
-		this.type = options.type;
-		this.details = options.details;
-		this.dev = options.dev;
-		this.meta = options.meta;
-		this.cause = options.cause;
-	}
+  constructor(options: FlueErrorOptions) {
+    super(options.message)
+    this.name = 'FlueError'
+    this.type = options.type
+    this.details = options.details
+    this.dev = options.dev
+    this.meta = options.meta
+    this.cause = options.cause
+  }
 }
 
 interface FlueHttpErrorOptions extends FlueErrorOptions {
-	/** HTTP status code (4xx or 5xx). */
-	status: number;
-	/** Additional response headers (e.g. `Allow` for 405). */
-	headers?: Record<string, string>;
+  /** HTTP status code (4xx or 5xx). */
+  status: number
+  /** Additional response headers (e.g. `Allow` for 405). */
+  headers?: Record<string, string>
 }
 
 /**
@@ -209,124 +209,125 @@ interface FlueHttpErrorOptions extends FlueErrorOptions {
  * have to think about HTTP semantics.
  */
 class FlueHttpError extends FlueError {
-	readonly status: number;
-	readonly headers: Record<string, string> | undefined;
+  readonly status: number
+  readonly headers: Record<string, string> | undefined
 
-	constructor(options: FlueHttpErrorOptions) {
-		super(options);
-		this.name = 'FlueHttpError';
-		this.status = options.status;
-		this.headers = options.headers;
-	}
+  constructor(options: FlueHttpErrorOptions) {
+    super(options)
+    this.name = 'FlueHttpError'
+    this.status = options.status
+    this.headers = options.headers
+  }
 }
 
 // ─── HTTP-layer error vocabulary ────────────────────────────────────────────
 
 export class RuntimeUnavailableError extends FlueHttpError {
-	constructor({ state, dev = '' }: { state: 'loading' | 'draining' | 'failed'; dev?: string }) {
-		super({
-			type: 'runtime_unavailable',
-			message: 'The local runtime is temporarily unavailable.',
-			details: 'Retry after the runtime finishes reloading.',
-			// Local dev servers pass the underlying load failure here, so the
-			// requester sees WHY the runtime is unavailable, not just that it is.
-			dev,
-			status: 503,
-			headers: { 'Retry-After': '1' },
-			meta: { state },
-		});
-	}
+  constructor({ state, dev = '' }: { state: 'loading' | 'draining' | 'failed', dev?: string }) {
+    super({
+      type: 'runtime_unavailable',
+      message: 'The local runtime is temporarily unavailable.',
+      details: 'Retry after the runtime finishes reloading.',
+      // Local dev servers pass the underlying load failure here, so the
+      // requester sees WHY the runtime is unavailable, not just that it is.
+      dev,
+      status: 503,
+      headers: { 'Retry-After': '1' },
+      meta: { state },
+    })
+  }
 }
 
 export class MethodNotAllowedError extends FlueHttpError {
-	constructor({ method, allowed }: { method: string; allowed: readonly string[] }) {
-		super({
-			type: 'method_not_allowed',
-			message: `HTTP method ${method} is not allowed on this endpoint.`,
-			details: `This endpoint accepts ${formatList(allowed)} only.`,
-			dev: '',
-			status: 405,
-			headers: { Allow: allowed.join(', ') },
-		});
-	}
+  constructor({ method, allowed }: { method: string, allowed: readonly string[] }) {
+    super({
+      type: 'method_not_allowed',
+      message: `HTTP method ${method} is not allowed on this endpoint.`,
+      details: `This endpoint accepts ${formatList(allowed)} only.`,
+      dev: '',
+      status: 405,
+      headers: { Allow: allowed.join(', ') },
+    })
+  }
 }
 
 class UnsupportedMediaTypeError extends FlueHttpError {
-	constructor({ received }: { received: string | null }) {
-		const detailLines: string[] = [];
-		if (received) {
-			detailLines.push(`Received Content-Type: "${received}".`);
-		} else {
-			detailLines.push(`No Content-Type header was sent.`);
-		}
-		detailLines.push(
-			`Send the request body as JSON with the header "Content-Type: application/json", ` +
-				`or omit the body entirely (and the Content-Type header) if the request doesn't have a payload.`,
-		);
-		super({
-			type: 'unsupported_media_type',
-			message: `Request body must be sent as application/json.`,
-			details: detailLines.join('\n'),
-			dev: '',
-			status: 415,
-		});
-	}
+  constructor({ received }: { received: string | null }) {
+    const detailLines: string[] = []
+    if (received) {
+      detailLines.push(`Received Content-Type: "${received}".`)
+    }
+    else {
+      detailLines.push(`No Content-Type header was sent.`)
+    }
+    detailLines.push(
+      `Send the request body as JSON with the header "Content-Type: application/json", ` +
+      `or omit the body entirely (and the Content-Type header) if the request doesn't have a payload.`,
+    )
+    super({
+      type: 'unsupported_media_type',
+      message: `Request body must be sent as application/json.`,
+      details: detailLines.join('\n'),
+      dev: '',
+      status: 415,
+    })
+  }
 }
 
 class InvalidJsonError extends FlueHttpError {
-	constructor({ parseError }: { parseError: string }) {
-		super({
-			type: 'invalid_json',
-			message: `Request body is not valid JSON.`,
-			// `parseError` here describes the caller's own input (e.g. "Expected
-			// property name at position 1") and is safe to expose. It's about
-			// what the caller sent, not about server internals.
-			details:
+  constructor({ parseError }: { parseError: string }) {
+    super({
+      type: 'invalid_json',
+      message: `Request body is not valid JSON.`,
+      // `parseError` here describes the caller's own input (e.g. "Expected
+      // property name at position 1") and is safe to expose. It's about
+      // what the caller sent, not about server internals.
+      details:
 				`The JSON parser reported: ${parseError}\n` +
 				`Verify the body is well-formed JSON, or omit the body entirely if the request doesn't have a payload.`,
-			dev: '',
-			status: 400,
-		});
-	}
+      dev: '',
+      status: 400,
+    })
+  }
 }
 
 export class RouteNotFoundError extends FlueHttpError {
-	constructor({ method, path }: { method: string; path: string }) {
-		super({
-			type: 'route_not_found',
-			message: `No route matches ${method} ${path}.`,
-			// Thrown for any unmatched path, so the guidance stays generic and
-			// we do NOT enumerate registered routes.
-			details: `Verify the request method and path are correct.`,
-			dev: '',
-			status: 404,
-		});
-	}
+  constructor({ method, path }: { method: string, path: string }) {
+    super({
+      type: 'route_not_found',
+      message: `No route matches ${method} ${path}.`,
+      // Thrown for any unmatched path, so the guidance stays generic and
+      // we do NOT enumerate registered routes.
+      details: `Verify the request method and path are correct.`,
+      dev: '',
+      status: 404,
+    })
+  }
 }
 
 export class StreamNotFoundError extends FlueHttpError {
-	constructor({ path }: { path: string }) {
-		super({
-			type: 'stream_not_found',
-			message: `Event stream "${path}" was not found.`,
-			details: 'Streams are created when their agent instance receives its first prompt.',
-			dev: '',
-			status: 404,
-		});
-	}
+  constructor({ path }: { path: string }) {
+    super({
+      type: 'stream_not_found',
+      message: `Event stream "${path}" was not found.`,
+      details: 'Streams are created when their agent instance receives its first prompt.',
+      dev: '',
+      status: 404,
+    })
+  }
 }
 
 export class AttachmentNotFoundError extends FlueHttpError {
-	constructor({ attachmentId }: { attachmentId: string }) {
-		super({
-			type: 'attachment_not_found',
-			message: `Attachment "${attachmentId}" was not found.`,
-			details:
+  constructor({ attachmentId }: { attachmentId: string }) {
+    super({
+      type: 'attachment_not_found',
+      message: `Attachment "${attachmentId}" was not found.`,
+      details:
 				'The attachment id may be incorrect, or it belongs to a conversation other than the default one.',
-			dev: '',
-			status: 404,
-		});
-	}
+      dev: '',
+      status: 404,
+    })
+  }
 }
 
 /**
@@ -342,19 +343,19 @@ export class AttachmentNotFoundError extends FlueHttpError {
  * (`ConversationStreamStoreError`) remains the internal invariant guard.
  */
 export class StreamOffsetGoneError extends FlueHttpError {
-	constructor({ path, offset, nextOffset }: { path: string; offset: string; nextOffset: string }) {
-		super({
-			type: 'stream_offset_gone',
-			message: `Stream offset "${offset}" is beyond the current head of "${path}".`,
-			details:
+  constructor({ path, offset, nextOffset }: { path: string, offset: string, nextOffset: string }) {
+    super({
+      type: 'stream_offset_gone',
+      message: `Stream offset "${offset}" is beyond the current head of "${path}".`,
+      details:
 				'The stream is shorter than the requested resume offset — it was likely reset since the offset was checkpointed. Re-read the conversation history and resume from its offset.',
-			dev: '',
-			status: 416,
-			// Machine-readable resume context: the offset the caller asked for
-			// and the stream's current head offset.
-			meta: { offset, nextOffset },
-		});
-	}
+      dev: '',
+      status: 416,
+      // Machine-readable resume context: the offset the caller asked for
+      // and the stream's current head offset.
+      meta: { offset, nextOffset },
+    })
+  }
 }
 
 /**
@@ -365,31 +366,31 @@ export class StreamOffsetGoneError extends FlueHttpError {
  * Clients recover by re-reading the newest window without a cursor.
  */
 export class HistoryCursorNotFoundError extends FlueHttpError {
-	constructor({ cursor }: { cursor: string }) {
-		super({
-			type: 'history_cursor_not_found',
-			message: 'History cursor does not identify a message in this conversation.',
-			details:
+  constructor({ cursor }: { cursor: string }) {
+    super({
+      type: 'history_cursor_not_found',
+      message: 'History cursor does not identify a message in this conversation.',
+      details:
 				'The cursor belongs to an earlier generation of this conversation stream, or the message it points at is gone — the stream was likely reset since the cursor was issued. Re-read the newest history window without a cursor.',
-			dev: '',
-			status: 410,
-			meta: { cursor },
-		});
-	}
+      dev: '',
+      status: 410,
+      meta: { cursor },
+    })
+  }
 }
 
 export class InvalidRequestError extends FlueHttpError {
-	constructor({ reason }: { reason: string }) {
-		super({
-			type: 'invalid_request',
-			message: `Request is malformed.`,
-			// `reason` is provided by the caller's own input (URL shape,
-			// segment validation, etc.) and is caller-safe by construction.
-			details: reason,
-			dev: '',
-			status: 400,
-		});
-	}
+  constructor({ reason }: { reason: string }) {
+    super({
+      type: 'invalid_request',
+      message: `Request is malformed.`,
+      // `reason` is provided by the caller's own input (URL shape,
+      // segment validation, etc.) and is caller-safe by construction.
+      details: reason,
+      dev: '',
+      status: 400,
+    })
+  }
 }
 
 /**
@@ -401,19 +402,19 @@ export class InvalidRequestError extends FlueHttpError {
  * never contacted has nothing to settle.
  */
 export class AgentInstanceNotFoundError extends FlueHttpError {
-	constructor({ id }: { id: string }) {
-		super({
-			type: 'agent_instance_not_found',
-			message: `Agent instance "${id}" was not found.`,
-			// One message for absent-instance and uid-mismatch: to a caller
-			// holding a uid condition, "the incarnation you know" not existing
-			// is the same outcome either way.
-			details:
+  constructor({ id }: { id: string }) {
+    super({
+      type: 'agent_instance_not_found',
+      message: `Agent instance "${id}" was not found.`,
+      // One message for absent-instance and uid-mismatch: to a caller
+      // holding a uid condition, "the incarnation you know" not existing
+      // is the same outcome either way.
+      details:
 				'No instance with this id and uid exists. The id may be wrong, or the instance was re-created and this uid names its previous incarnation. Send without a uid to deliver unconditionally.',
-			dev: '',
-			status: 404,
-		});
-	}
+      dev: '',
+      status: 404,
+    })
+  }
 }
 
 /**
@@ -424,22 +425,22 @@ export class AgentInstanceNotFoundError extends FlueHttpError {
  * can continue the existing instance without a separate lookup.
  */
 export class AgentInstanceExistsError extends FlueHttpError {
-	constructor({ id, uid }: { id: string; uid: string }) {
-		super({
-			type: 'agent_instance_exists',
-			message: `Agent instance "${id}" already exists.`,
-			details: `Continue it with uid "${uid}", or pick a fresh id to create.`,
-			dev: '',
-			status: 409,
-			// HTTP callers read the existing incarnation's uid from
-			// `error.meta.uid` — the details prose is not machine-readable.
-			meta: { uid },
-		});
-		this.uid = uid;
-	}
+  constructor({ id, uid }: { id: string, uid: string }) {
+    super({
+      type: 'agent_instance_exists',
+      message: `Agent instance "${id}" already exists.`,
+      details: `Continue it with uid "${uid}", or pick a fresh id to create.`,
+      dev: '',
+      status: 409,
+      // HTTP callers read the existing incarnation's uid from
+      // `error.meta.uid` — the details prose is not machine-readable.
+      meta: { uid },
+    })
+    this.uid = uid
+  }
 
-	/** The existing instance's uid. */
-	readonly uid: string;
+  /** The existing instance's uid. */
+  readonly uid: string
 }
 
 /**
@@ -451,131 +452,131 @@ export class AgentInstanceExistsError extends FlueHttpError {
  * submission the key already belongs to.
  */
 export class SubmissionConflictError extends FlueHttpError {
-	constructor({ submissionId }: { submissionId: string }) {
-		super({
-			type: 'submission_conflict',
-			message: 'This idempotency key already names a different submission.',
-			details:
+  constructor({ submissionId }: { submissionId: string }) {
+    super({
+      type: 'submission_conflict',
+      message: 'This idempotency key already names a different submission.',
+      details:
 				'The key names the delivery, not the outcome: retry the identical payload to converge ' +
 				'on the existing submission, or use a fresh key to deliver something new.',
-			dev: '',
-			status: 409,
-			// HTTP callers read the existing submission's id from
-			// `error.meta.submissionId` — the details prose is not machine-readable.
-			meta: { submissionId },
-		});
-		this.submissionId = submissionId;
-	}
+      dev: '',
+      status: 409,
+      // HTTP callers read the existing submission's id from
+      // `error.meta.submissionId` — the details prose is not machine-readable.
+      meta: { submissionId },
+    })
+    this.submissionId = submissionId
+  }
 
-	/** The existing submission's id (the one the key derives). */
-	readonly submissionId: string;
+  /** The existing submission's id (the one the key derives). */
+  readonly submissionId: string
 }
 
 // ─── Persistence error vocabulary ───────────────────────────────────────────
 
 export class ConversationRecordInvariantError extends FlueError {
-	constructor({
-		recordId,
-		recordType,
-		reason,
-	}: {
-		recordId: string;
-		recordType: string;
-		reason: string;
-	}) {
-		super({
-			type: 'conversation_record_invariant',
-			message: 'A canonical conversation record violates the conversation stream contract.',
-			details: 'The persisted conversation cannot be reduced safely.',
-			dev: reason,
-			meta: { recordId, recordType, reason },
-		});
-		this.name = 'ConversationRecordInvariantError';
-	}
+  constructor({
+    recordId,
+    recordType,
+    reason,
+  }: {
+    recordId: string
+    recordType: string
+    reason: string
+  }) {
+    super({
+      type: 'conversation_record_invariant',
+      message: 'A canonical conversation record violates the conversation stream contract.',
+      details: 'The persisted conversation cannot be reduced safely.',
+      dev: reason,
+      meta: { recordId, recordType, reason },
+    })
+    this.name = 'ConversationRecordInvariantError'
+  }
 }
 
 export class ConversationStreamStoreError extends FlueError {
-	constructor({ operation, path, reason }: { operation: string; path: string; reason: string }) {
-		super({
-			type: 'conversation_stream_store_failure',
-			message: 'The canonical conversation stream operation could not be completed.',
-			details: 'The conversation stream remains unchanged when the operation was rejected.',
-			dev: reason,
-			meta: { operation, path, reason },
-		});
-		this.name = 'ConversationStreamStoreError';
-	}
+  constructor({ operation, path, reason }: { operation: string, path: string, reason: string }) {
+    super({
+      type: 'conversation_stream_store_failure',
+      message: 'The canonical conversation stream operation could not be completed.',
+      details: 'The conversation stream remains unchanged when the operation was rejected.',
+      dev: reason,
+      meta: { operation, path, reason },
+    })
+    this.name = 'ConversationStreamStoreError'
+  }
 }
 
 export class AttachmentConflictError extends FlueError {
-	constructor({ path, attachmentId }: { path: string; attachmentId: string }) {
-		super({
-			type: 'attachment_conflict',
-			message: 'The attachment identity conflicts with persisted attachment data.',
-			details: 'Use a new attachment identity or retry with the exact original attachment.',
-			dev: `Attachment "${attachmentId}" in canonical stream "${path}" was reused with different content, metadata, or ownership.`,
-			meta: { path, attachmentId },
-		});
-		this.name = 'AttachmentConflictError';
-	}
+  constructor({ path, attachmentId }: { path: string, attachmentId: string }) {
+    super({
+      type: 'attachment_conflict',
+      message: 'The attachment identity conflicts with persisted attachment data.',
+      details: 'Use a new attachment identity or retry with the exact original attachment.',
+      dev: `Attachment "${attachmentId}" in canonical stream "${path}" was reused with different content, metadata, or ownership.`,
+      meta: { path, attachmentId },
+    })
+    this.name = 'AttachmentConflictError'
+  }
 }
 
 export class AttachmentIntegrityError extends FlueError {
-	constructor({
-		attachmentId,
-		reason,
-	}: {
-		attachmentId: string;
-		reason: 'size' | 'digest' | 'chunks';
-	}) {
-		super({
-			type: 'attachment_integrity',
-			message: 'The attachment bytes failed integrity verification.',
-			details: 'The attachment cannot be used safely.',
-			dev: `Attachment "${attachmentId}" has a ${reason} mismatch.`,
-			meta: { attachmentId, reason },
-		});
-		this.name = 'AttachmentIntegrityError';
-	}
+  constructor({
+    attachmentId,
+    reason,
+  }: {
+    attachmentId: string
+    reason: 'size' | 'digest' | 'chunks'
+  }) {
+    super({
+      type: 'attachment_integrity',
+      message: 'The attachment bytes failed integrity verification.',
+      details: 'The attachment cannot be used safely.',
+      dev: `Attachment "${attachmentId}" has a ${reason} mismatch.`,
+      meta: { attachmentId, reason },
+    })
+    this.name = 'AttachmentIntegrityError'
+  }
 }
 
 export class PersistedFormatVersionError extends FlueError {
-	constructor({
-		storedVersion,
-		supportedVersion,
-	}: {
-		storedVersion: string;
-		supportedVersion: number;
-	}) {
-		const numeric = /^[0-9]+$/.test(storedVersion) ? Number(storedVersion) : undefined;
-		const newer = numeric !== undefined && numeric > supportedVersion;
-		super({
-			type: 'persisted_format_version_unsupported',
-			message: newer
-				? `This database was created by a newer Flue version (format version ${storedVersion}; this runtime supports version ${supportedVersion}).`
-				: `This database records an unrecognized format version ("${storedVersion}"; this runtime supports version ${supportedVersion}).`,
-			details: 'The persisted data cannot be read safely by this runtime.',
-			dev: newer
-				? `Upgrade Flue to a version that supports format version ${storedVersion}, or point the runtime at a different database.`
-				: `The "format_version" row in the flue_meta table is not a version this runtime recognizes. ` +
-					`Restore the database, or point the runtime at a different one.`,
-			meta: { storedVersion, supportedVersion },
-		});
-	}
+  constructor({
+    storedVersion,
+    supportedVersion,
+  }: {
+    storedVersion: string
+    supportedVersion: number
+  }) {
+    const numeric = /^[0-9]+$/.test(storedVersion) ? Number(storedVersion) : undefined
+    const newer = numeric !== undefined && numeric > supportedVersion
+    super({
+      type: 'persisted_format_version_unsupported',
+      message: newer
+        ? `This database was created by a newer Flue version (format version ${storedVersion}; this runtime supports version ${supportedVersion}).`
+        : `This database records an unrecognized format version ("${storedVersion}"; this runtime supports version ${supportedVersion}).`,
+      details: 'The persisted data cannot be read safely by this runtime.',
+      dev: newer
+        ? `Upgrade Flue to a version that supports format version ${storedVersion}, or point the runtime at a different database.`
+        : `The "format_version" row in the flue_meta table is not a version this runtime recognizes. ` +
+          `Restore the database, or point the runtime at a different one.`,
+      meta: { storedVersion, supportedVersion },
+    })
+  }
 }
 
 // ─── Sandbox error vocabulary ───────────────────────────────────────────────
 
 export class InstrumentationAlreadyInstalledError extends FlueError {
-	constructor() {
-		super({
-			type: 'instrumentation_already_installed',
-			message: 'An instrumentation owner of this kind is already installed.',
-			details: 'Dispose the active instrumentation before installing its replacement.',
-			dev: '',
-		});
-		this.name = 'InstrumentationAlreadyInstalledError';
-	}
+  constructor() {
+    super({
+      type: 'instrumentation_already_installed',
+      message: 'An instrumentation owner of this kind is already installed.',
+      details: 'Dispose the active instrumentation before installing its replacement.',
+      dev: '',
+    })
+    this.name = 'InstrumentationAlreadyInstalledError'
+  }
 }
 
 /**
@@ -592,42 +593,42 @@ export class InstrumentationAlreadyInstalledError extends FlueError {
  * misreport it.
  */
 export class SandboxDiedError extends FlueError {
-	constructor({ operation, reason }: { operation: string; reason: 'stopped' | 'probe_silent' }) {
-		super({
-			type: 'sandbox_died',
-			message:
+  constructor({ operation, reason }: { operation: string, reason: 'stopped' | 'probe_silent' }) {
+    super({
+      type: 'sandbox_died',
+      message:
 				reason === 'stopped'
-					? `Sandbox ${operation} failed: the sandbox stopped while the call was in flight.`
-					: `Sandbox ${operation} failed: the sandbox state probe went unanswered while the call was in flight, so the sandbox is presumed dead.`,
-			details: 'The sandbox is no longer running; the interrupted call did not complete.',
-			dev:
+				  ? `Sandbox ${operation} failed: the sandbox stopped while the call was in flight.`
+				  : `Sandbox ${operation} failed: the sandbox state probe went unanswered while the call was in flight, so the sandbox is presumed dead.`,
+      details: 'The sandbox is no longer running; the interrupted call did not complete.',
+      dev:
 				'The sandbox may have been destroyed, evicted, or crashed (e.g. out of memory). ' +
 				'Only calls that were in flight when the sandbox died fail this way; whether a ' +
 				'subsequent call reaches a fresh environment is provider-specific.',
-			meta: { operation, reason },
-		});
-		this.name = 'SandboxDiedError';
-	}
+      meta: { operation, reason },
+    })
+    this.name = 'SandboxDiedError'
+  }
 }
 
 export class SandboxOperationUnsupportedError extends FlueError {
-	constructor({
-		operation,
-		provider,
-		options,
-	}: {
-		operation: string;
-		provider: string;
-		options: readonly string[];
-	}) {
-		super({
-			type: 'sandbox_operation_unsupported',
-			message: `${provider} does not support ${operation} with ${formatList(options)}.`,
-			details: 'The requested operation was rejected before the filesystem was modified.',
-			dev: 'Use an adapter that implements these options exactly, or issue an operation supported by this provider.',
-			meta: { operation, provider, options: [...options] },
-		});
-	}
+  constructor({
+    operation,
+    provider,
+    options,
+  }: {
+    operation: string
+    provider: string
+    options: readonly string[]
+  }) {
+    super({
+      type: 'sandbox_operation_unsupported',
+      message: `${provider} does not support ${operation} with ${formatList(options)}.`,
+      details: 'The requested operation was rejected before the filesystem was modified.',
+      dev: 'Use an adapter that implements these options exactly, or issue an operation supported by this provider.',
+      meta: { operation, provider, options: [...options] },
+    })
+  }
 }
 
 // ─── Session error vocabulary ───────────────────────────────────────────────
@@ -644,67 +645,67 @@ export class SandboxOperationUnsupportedError extends FlueError {
 // standard `AbortError` (`DOMException`); see `abort.ts`.
 
 export class SessionNotFoundError extends FlueError {
-	constructor({ session, harness }: { session: string; harness: string }) {
-		super({
-			type: 'session_not_found',
-			message: `Session "${session}" does not exist in harness "${harness}".`,
-			details: 'Verify the session name is correct, or create the session first.',
-			dev: 'Internal session lookup found no conversation for this name. The public harness operations get-or-create the default session and cannot hit this.',
-		});
-	}
+  constructor({ session, harness }: { session: string, harness: string }) {
+    super({
+      type: 'session_not_found',
+      message: `Session "${session}" does not exist in harness "${harness}".`,
+      details: 'Verify the session name is correct, or create the session first.',
+      dev: 'Internal session lookup found no conversation for this name. The public harness operations get-or-create the default session and cannot hit this.',
+    })
+  }
 }
 
 export class SessionBusyError extends FlueError {
-	constructor({ session, activeOperation }: { session: string; activeOperation: string }) {
-		super({
-			type: 'session_busy',
-			message: `Session "${session}" is busy running ${activeOperation}.`,
-			details: 'Wait for the active operation to finish before starting another operation.',
-			dev: 'Sessions run one operation at a time. Start another session for parallel conversation branches.',
-		});
-	}
+  constructor({ session, activeOperation }: { session: string, activeOperation: string }) {
+    super({
+      type: 'session_busy',
+      message: `Session "${session}" is busy running ${activeOperation}.`,
+      details: 'Wait for the active operation to finish before starting another operation.',
+      dev: 'Sessions run one operation at a time. Start another session for parallel conversation branches.',
+    })
+  }
 }
 
 export class SkillDefinitionValidationError extends FlueError {
-	constructor({ issues }: { issues: readonly ValidationIssue[] }) {
-		super({
-			type: 'skill_definition_validation',
-			message: 'Skill definition is invalid.',
-			details: 'Correct the invalid skill fields and try again.',
-			dev: 'Pass a valid Agent Skills definition to defineSkill().',
-			meta: { issues },
-		});
-		this.name = 'SkillDefinitionValidationError';
-	}
+  constructor({ issues }: { issues: readonly ValidationIssue[] }) {
+    super({
+      type: 'skill_definition_validation',
+      message: 'Skill definition is invalid.',
+      details: 'Correct the invalid skill fields and try again.',
+      dev: 'Pass a valid Agent Skills definition to defineSkill().',
+      meta: { issues },
+    })
+    this.name = 'SkillDefinitionValidationError'
+  }
 }
 
 export class SkillNotRegisteredError extends FlueError {
-	constructor({
-		skill,
-		available,
-		skillsDir,
-	}: {
-		skill: string;
-		available: readonly string[];
-		/** Workspace skill directory; absent when the agent has no sandbox. */
-		skillsDir?: string;
-	}) {
-		super({
-			type: 'skill_not_registered',
-			message: `Skill "${skill}" is not registered.`,
-			details: 'Verify the skill name is correct.',
-			dev:
-				`Available skills: ${formatList(available)}.\n` +
-				(skillsDir !== undefined
-					? `Skills are discovered at init() time from ${skillsDir}/<name>/SKILL.md inside the ` +
-						`session's sandbox. If you expected "${skill}" to be there, make sure the SKILL.md file ` +
-						`exists at that path before calling init().\n`
-					: `This agent has no sandbox, so no workspace skills were discovered — only declared ` +
-						`skills are available.\n`) +
-				`Packaged skills can be imported from SKILL.md and passed ` +
+  constructor({
+    skill,
+    available,
+    skillsDir,
+  }: {
+    skill: string
+    available: readonly string[]
+    /** Workspace skill directory; absent when the agent has no sandbox. */
+    skillsDir?: string
+  }) {
+    super({
+      type: 'skill_not_registered',
+      message: `Skill "${skill}" is not registered.`,
+      details: 'Verify the skill name is correct.',
+      dev:
+				`Available skills: ${formatList(available)}.\n${ 
+				  skillsDir !== undefined
+				    ? `Skills are discovered at init() time from ${skillsDir}/<name>/SKILL.md inside the ` +
+				    `session's sandbox. If you expected "${skill}" to be there, make sure the SKILL.md file ` +
+				    `exists at that path before calling init().\n`
+				    : `This agent has no sandbox, so no workspace skills were discovered — only declared ` +
+				      `skills are available.\n` 
+				}Packaged skills can be imported from SKILL.md and passed ` +
 				`directly to session.skill(skillReference).`,
-		});
-	}
+    })
+  }
 }
 
 /**
@@ -714,7 +715,7 @@ export class SkillNotRegisteredError extends FlueError {
  * `isAssistantContextOverflow` (compaction.ts) matches it against this same
  * constant. Keep writer and reader on this one definition.
  */
-export const WORKERS_AI_OVERFLOW_MARKER = '(request_too_large)';
+export const WORKERS_AI_OVERFLOW_MARKER = '(request_too_large)'
 
 /**
  * Marker stamped into a model error message by a throw site that can PROVE
@@ -728,54 +729,54 @@ export const WORKERS_AI_OVERFLOW_MARKER = '(request_too_large)';
  * site verifies the interruption; "we don't know what happened" is not
  * retryable.
  */
-export const RETRYABLE_INTERRUPTION_MARKER = '(retryable_interruption)';
+export const RETRYABLE_INTERRUPTION_MARKER = '(retryable_interruption)'
 
 export class CloudflareAIBindingError extends FlueError {
-	constructor({
-		message,
-		status,
-		statusText,
-		body,
-	}: {
-		message?: string;
-		status?: number;
-		statusText?: string;
-		body?: string;
-	}) {
-		const statusLabel =
-			status === undefined ? undefined : `${status}${statusText ? ` ${statusText}` : ''}`;
-		// The provider body and the 413 marker ride in the MESSAGE, not just
-		// `details`: only the message reaches the assistant `errorMessage`
-		// that overflow classification reads, so a 413/overflow body kept out
-		// of it would leave context-overflow recovery (compaction + retry)
-		// unable to fire.
-		const boundedBody = body ? truncateProviderBody(body) : undefined;
-		const overflowMarker = status === 413 ? ` ${WORKERS_AI_OVERFLOW_MARKER}` : '';
-		super({
-			type: 'cloudflare_ai_binding_error',
-			message:
+  constructor({
+    message,
+    status,
+    statusText,
+    body,
+  }: {
+    message?: string
+    status?: number
+    statusText?: string
+    body?: string
+  }) {
+    const statusLabel =
+      status === undefined ? undefined : `${status}${statusText ? ` ${statusText}` : ''}`
+    // The provider body and the 413 marker ride in the MESSAGE, not just
+    // `details`: only the message reaches the assistant `errorMessage`
+    // that overflow classification reads, so a 413/overflow body kept out
+    // of it would leave context-overflow recovery (compaction + retry)
+    // unable to fire.
+    const boundedBody = body ? truncateProviderBody(body) : undefined
+    const overflowMarker = status === 413 ? ` ${WORKERS_AI_OVERFLOW_MARKER}` : ''
+    super({
+      type: 'cloudflare_ai_binding_error',
+      message:
 				message ??
 				`Cloudflare AI binding request failed${statusLabel ? ` with ${statusLabel}` : ''}${overflowMarker}${
-					boundedBody ? `: ${boundedBody}` : '.'
+				  boundedBody ? `: ${boundedBody}` : '.'
 				}`,
-			details: body ? `Provider response: ${body}` : '',
-			dev: '',
-			meta: {
-				...(status !== undefined ? { status } : {}),
-				...(statusText ? { statusText } : {}),
-				// Structured "conversation outgrew the provider limit" signal:
-				// lets telemetry separate expected, self-healing overflow from a
-				// real binding outage without parsing the message.
-				...(status === 413 ? { reason: 'request_too_large' } : {}),
-			},
-		});
-	}
+      details: body ? `Provider response: ${body}` : '',
+      dev: '',
+      meta: {
+        ...(status !== undefined ? { status } : {}),
+        ...(statusText ? { statusText } : {}),
+        // Structured "conversation outgrew the provider limit" signal:
+        // lets telemetry separate expected, self-healing overflow from a
+        // real binding outage without parsing the message.
+        ...(status === 413 ? { reason: 'request_too_large' } : {}),
+      },
+    })
+  }
 }
 
 /** Bound a provider response body for embedding in an error message. */
 function truncateProviderBody(body: string): string {
-	const MAX = 2000;
-	return body.length <= MAX ? body : `${body.slice(0, MAX)}… [truncated]`;
+  const MAX = 2000
+  return body.length <= MAX ? body : `${body.slice(0, MAX)}… [truncated]`
 }
 
 /**
@@ -786,19 +787,19 @@ function truncateProviderBody(body: string): string {
  * undiagnosable from telemetry.
  */
 export function serializeEventError(error: unknown): unknown {
-	if (error instanceof FlueError) {
-		return {
-			name: error.name,
-			message: error.message,
-			type: error.type,
-			...(error.details ? { details: error.details } : {}),
-			...(error.meta ? { meta: error.meta } : {}),
-		};
-	}
-	if (error instanceof Error) {
-		return { name: error.name, message: error.message };
-	}
-	return error;
+  if (error instanceof FlueError) {
+    return {
+      name: error.name,
+      message: error.message,
+      type: error.type,
+      ...(error.details ? { details: error.details } : {}),
+      ...(error.meta ? { meta: error.meta } : {}),
+    }
+  }
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message }
+  }
+  return error
 }
 
 /**
@@ -809,11 +810,11 @@ export function serializeEventError(error: unknown): unknown {
  * event fields).
  */
 export function normalizeLogAttributes(
-	attributes: Record<string, unknown> | undefined,
+  attributes: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-	if (!attributes) return undefined;
-	if (!(attributes.error instanceof Error)) return attributes;
-	return { ...attributes, error: serializeEventError(attributes.error) };
+  if (!attributes) { return undefined }
+  if (!(attributes.error instanceof Error)) { return attributes }
+  return { ...attributes, error: serializeEventError(attributes.error) }
 }
 
 /**
@@ -826,114 +827,114 @@ export function normalizeLogAttributes(
  * parsing the rendered message.
  */
 export function classifyError(error: unknown): {
-	type: string;
-	name?: string;
-	code?: string;
-	message?: string;
-	meta?: Record<string, unknown>;
-	stack?: string;
+  type: string
+  name?: string
+  code?: string
+  message?: string
+  meta?: Record<string, unknown>
+  stack?: string
 } {
-	const stackOf = (value: unknown): { stack?: string } =>
-		value instanceof Error && typeof value.stack === 'string' && value.stack.length > 0
-			? { stack: value.stack }
-			: {};
-	if (error instanceof DOMException && error.name === 'AbortError') {
-		return { type: 'AbortError', name: error.name, message: error.message, ...stackOf(error) };
-	}
-	if (error instanceof FlueError) {
-		return {
-			type: error.type,
-			name: error.name,
-			message: error.message,
-			...(error.meta ? { meta: error.meta } : {}),
-			...stackOf(error),
-		};
-	}
-	if (error && typeof error === 'object') {
-		const value = error as { name?: unknown; code?: unknown; type?: unknown; message?: unknown };
-		const name = typeof value.name === 'string' ? value.name : undefined;
-		const code = typeof value.code === 'string' ? value.code : undefined;
-		const type = typeof value.type === 'string' ? value.type : (code ?? name ?? '_OTHER');
-		return {
-			type,
-			...(name === undefined ? {} : { name }),
-			...(code === undefined ? {} : { code }),
-			...(typeof value.message === 'string' ? { message: value.message } : {}),
-			...stackOf(error),
-		};
-	}
-	if (typeof error === 'string') return { type: '_OTHER', message: error };
-	return { type: '_OTHER' };
+  const stackOf = (value: unknown): { stack?: string } =>
+    value instanceof Error && typeof value.stack === 'string' && value.stack.length > 0
+      ? { stack: value.stack }
+      : {}
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return { type: 'AbortError', name: error.name, message: error.message, ...stackOf(error) }
+  }
+  if (error instanceof FlueError) {
+    return {
+      type: error.type,
+      name: error.name,
+      message: error.message,
+      ...(error.meta ? { meta: error.meta } : {}),
+      ...stackOf(error),
+    }
+  }
+  if (error && typeof error === 'object') {
+    const value = error as { name?: unknown, code?: unknown, type?: unknown, message?: unknown }
+    const name = typeof value.name === 'string' ? value.name : undefined
+    const code = typeof value.code === 'string' ? value.code : undefined
+    const type = typeof value.type === 'string' ? value.type : (code ?? name ?? '_OTHER')
+    return {
+      type,
+      ...(name === undefined ? {} : { name }),
+      ...(code === undefined ? {} : { code }),
+      ...(typeof value.message === 'string' ? { message: value.message } : {}),
+      ...stackOf(error),
+    }
+  }
+  if (typeof error === 'string') { return { type: '_OTHER', message: error } }
+  return { type: '_OTHER' }
 }
 
 export class DelegationDepthExceededError extends FlueError {
-	constructor({ maxDepth }: { maxDepth: number }) {
-		super({
-			type: 'delegation_depth_exceeded',
-			message: `Maximum delegation depth (${maxDepth}) exceeded.`,
-			details: 'The chain of delegated tasks is too deep.',
-			dev: 'Each nested task() or harness-tool delegation adds one level. Restructure the agents to delegate less deeply.',
-		});
-	}
+  constructor({ maxDepth }: { maxDepth: number }) {
+    super({
+      type: 'delegation_depth_exceeded',
+      message: `Maximum delegation depth (${maxDepth}) exceeded.`,
+      details: 'The chain of delegated tasks is too deep.',
+      dev: 'Each nested task() or harness-tool delegation adds one level. Restructure the agents to delegate less deeply.',
+    })
+  }
 }
 
 export class SubagentNotDeclaredError extends FlueError {
-	constructor({ subagent, available }: { subagent: string; available: readonly string[] }) {
-		super({
-			type: 'subagent_not_declared',
-			message: `Subagent "${subagent}" is not declared.`,
-			details: 'Verify the subagent name is correct.',
-			dev:
+  constructor({ subagent, available }: { subagent: string, available: readonly string[] }) {
+    super({
+      type: 'subagent_not_declared',
+      message: `Subagent "${subagent}" is not declared.`,
+      details: 'Verify the subagent name is correct.',
+      dev:
 				`Available subagents: ${formatList(available)}.\n` +
-				"Declare subagents in the agent definition's `subagents` array.",
-		});
-	}
+				'Declare subagents in the agent definition\'s `subagents` array.',
+    })
+  }
 }
 
 export class AttachmentNotAvailableError extends FlueError {
-	constructor({ attachmentId }: { attachmentId: string }) {
-		super({
-			type: 'attachment_not_available',
-			message: `Attachment "${attachmentId}" is not available in this session.`,
-			details: 'The delegated task can only receive attachments visible in its calling session.',
-			dev: 'Pass an attachment ID from the current conversation attachment manifest.',
-			meta: { attachmentId },
-		});
-	}
+  constructor({ attachmentId }: { attachmentId: string }) {
+    super({
+      type: 'attachment_not_available',
+      message: `Attachment "${attachmentId}" is not available in this session.`,
+      details: 'The delegated task can only receive attachments visible in its calling session.',
+      dev: 'Pass an attachment ID from the current conversation attachment manifest.',
+      meta: { attachmentId },
+    })
+  }
 }
 
 export class ToolNameConflictError extends FlueError {
-	constructor({
-		name,
-		conflict,
-		source,
-		reserved,
-	}: {
-		name: string;
-		conflict: 'reserved' | 'duplicate';
-		source: 'builtin' | 'adapter' | 'framework' | 'custom' | 'result';
-		reserved?: readonly string[];
-	}) {
-		const dev =
-			source === 'adapter'
-				? conflict === 'reserved'
-					? `The sandbox adapter's tools() returned "${name}", which the framework appends ` +
-						'automatically when appropriate; remove it from the adapter.'
-					: `The sandbox adapter's tools() returned the name "${name}" more than once; ` +
-						'sandbox adapter tool names must be unique.'
-				: conflict === 'reserved'
-					? `Framework-reserved tool names: ${formatList(reserved ?? [])}. Rename the custom tool.`
-					: 'Rename one of the conflicting custom tools.';
-		super({
-			type: 'tool_name_conflict',
-			message:
+  constructor({
+    name,
+    conflict,
+    source,
+    reserved,
+  }: {
+    name: string
+    conflict: 'reserved' | 'duplicate'
+    source: 'builtin' | 'adapter' | 'framework' | 'custom' | 'result'
+    reserved?: readonly string[]
+  }) {
+    const dev =
+      source === 'adapter'
+        ? conflict === 'reserved'
+          ? `The sandbox adapter's tools() returned "${name}", which the framework appends ` +
+          'automatically when appropriate; remove it from the adapter.'
+          : `The sandbox adapter's tools() returned the name "${name}" more than once; ` +
+            'sandbox adapter tool names must be unique.'
+        : conflict === 'reserved'
+          ? `Framework-reserved tool names: ${formatList(reserved ?? [])}. Rename the custom tool.`
+          : 'Rename one of the conflicting custom tools.'
+    super({
+      type: 'tool_name_conflict',
+      message:
 				conflict === 'reserved'
-					? `Tool name "${name}" is reserved by the framework.`
-					: `Duplicate tool name "${name}".`,
-			details: 'Tool names must be unique and must not use framework-reserved names.',
-			dev,
-		});
-	}
+				  ? `Tool name "${name}" is reserved by the framework.`
+				  : `Duplicate tool name "${name}".`,
+      details: 'Tool names must be unique and must not use framework-reserved names.',
+      dev,
+    })
+  }
 }
 
 /**
@@ -942,59 +943,59 @@ export class ToolNameConflictError extends FlueError {
  * keys leading to the failing value.
  */
 export interface ValidationIssue {
-	readonly message: string;
-	readonly path?: readonly PropertyKey[];
+  readonly message: string
+  readonly path?: readonly PropertyKey[]
 }
 
-export type ToolValidationIssue = ValidationIssue;
+export type ToolValidationIssue = ValidationIssue
 
 export class ToolInputValidationError extends FlueError {
-	constructor({ tool, issues }: { tool: string; issues: readonly ToolValidationIssue[] }) {
-		const summary = issues
-			.map((issue) =>
-				issue.path && issue.path.length > 0
-					? `${issue.message} (at ${issue.path.map(String).join('.')})`
-					: issue.message,
-			)
-			.join('; ');
-		super({
-			type: 'tool_input_validation',
-			message:
+  constructor({ tool, issues }: { tool: string, issues: readonly ToolValidationIssue[] }) {
+    const summary = issues
+      .map(issue =>
+        issue.path && issue.path.length > 0
+          ? `${issue.message} (at ${issue.path.map(String).join('.')})`
+          : issue.message,
+      )
+      .join('; ')
+    super({
+      type: 'tool_input_validation',
+      message:
 				`Arguments for tool "${tool}" do not match the required schema: ${summary}. ` +
 				'Call the tool again with corrected arguments.',
-			details: '',
-			dev: '',
-			meta: { tool, issues },
-		});
-		this.name = 'ToolInputValidationError';
-	}
+      details: '',
+      dev: '',
+      meta: { tool, issues },
+    })
+    this.name = 'ToolInputValidationError'
+  }
 }
 
 export class ToolOutputValidationError extends FlueError {
-	constructor({ tool, issues }: { tool: string; issues: readonly ToolValidationIssue[] }) {
-		super({
-			type: 'tool_output_validation',
-			message: `Tool "${tool}" output does not match the required schema.`,
-			details: '',
-			dev: '',
-			meta: { tool, issues },
-		});
-		this.name = 'ToolOutputValidationError';
-	}
+  constructor({ tool, issues }: { tool: string, issues: readonly ToolValidationIssue[] }) {
+    super({
+      type: 'tool_output_validation',
+      message: `Tool "${tool}" output does not match the required schema.`,
+      details: '',
+      dev: '',
+      meta: { tool, issues },
+    })
+    this.name = 'ToolOutputValidationError'
+  }
 }
 
 export class ToolOutputSerializationError extends FlueError {
-	constructor({ tool, cause }: { tool: string; cause?: unknown }) {
-		super({
-			type: 'tool_output_serialization',
-			message: `Tool "${tool}" output is not JSON-serializable.`,
-			details: '',
-			dev: 'Return a JSON-serializable value, or undefined when the Tool has no output schema.',
-			meta: { tool },
-			cause,
-		});
-		this.name = 'ToolOutputSerializationError';
-	}
+  constructor({ tool, cause }: { tool: string, cause?: unknown }) {
+    super({
+      type: 'tool_output_serialization',
+      message: `Tool "${tool}" output is not JSON-serializable.`,
+      details: '',
+      dev: 'Return a JSON-serializable value, or undefined when the Tool has no output schema.',
+      meta: { tool },
+      cause,
+    })
+    this.name = 'ToolOutputSerializationError'
+  }
 }
 
 /**
@@ -1006,15 +1007,15 @@ export class ToolOutputSerializationError extends FlueError {
  * classify and title from the underlying failure without parsing the prose.
  */
 export class OperationFailedError extends FlueError {
-	constructor({ operation, reason }: { operation: string; reason: string }) {
-		super({
-			type: 'operation_failed',
-			message: `${operation} failed: ${reason}`,
-			details: '',
-			dev: '',
-			meta: { operation, reason },
-		});
-	}
+  constructor({ operation, reason }: { operation: string, reason: string }) {
+    super({
+      type: 'operation_failed',
+      message: `${operation} failed: ${reason}`,
+      details: '',
+      dev: '',
+      meta: { operation, reason },
+    })
+  }
 }
 
 /**
@@ -1030,29 +1031,29 @@ export class OperationFailedError extends FlueError {
  * settle as an error.)
  */
 export class SubmissionInterruptedError extends FlueError {
-	constructor(input: {
-		phase: 'retry_exhausted_before_input';
-		attemptCount: number;
-		maxAttempts: number;
-	}) {
-		super({
-			type: 'submission_interrupted',
-			message:
+  constructor(input: {
+    phase: 'retry_exhausted_before_input'
+    attemptCount: number
+    maxAttempts: number
+  }) {
+    super({
+      type: 'submission_interrupted',
+      message:
 				'Submission was repeatedly interrupted before input application and exhausted its retry budget.',
-			details:
+      details:
 				'Every processing attempt was interrupted before the submission input was applied to the session. ' +
 				'The input was never processed and no model call was started.',
-			dev:
+      dev:
 				'Repeated pre-input interruptions usually mean the process kept restarting or crashing while the ' +
-				"submission waited to start. Each claim consumes one attempt from the agent definition's " +
+				'submission waited to start. Each claim consumes one attempt from the agent definition\'s ' +
 				'`durability.maxAttempts` budget.',
-			meta: {
-				phase: input.phase,
-				attemptCount: input.attemptCount,
-				maxAttempts: input.maxAttempts,
-			},
-		});
-	}
+      meta: {
+        phase: input.phase,
+        attemptCount: input.attemptCount,
+        maxAttempts: input.maxAttempts,
+      },
+    })
+  }
 }
 
 /**
@@ -1064,41 +1065,41 @@ export class SubmissionInterruptedError extends FlueError {
  * outcome in the conversation and was never assumed complete or retried.
  */
 export class SubmissionRetryExhaustedError extends FlueError {
-	constructor({
-		attemptCount,
-		maxAttempts,
-		interruptedTools,
-	}: {
-		attemptCount: number;
-		maxAttempts: number;
-		interruptedTools?: ReadonlyArray<{ readonly name: string; readonly id: string }>;
-	}) {
-		super({
-			type: 'submission_retry_exhausted',
-			message: `Submission exceeded maximum recovery attempts (${attemptCount}/${maxAttempts}).`,
-			details:
+  constructor({
+    attemptCount,
+    maxAttempts,
+    interruptedTools,
+  }: {
+    attemptCount: number
+    maxAttempts: number
+    interruptedTools?: ReadonlyArray<{ readonly name: string, readonly id: string }>
+  }) {
+    super({
+      type: 'submission_retry_exhausted',
+      message: `Submission exceeded maximum recovery attempts (${attemptCount}/${maxAttempts}).`,
+      details:
 				'Recovery re-attempted the interrupted submission until its attempt budget ran out without a ' +
 				'completed response.',
-			dev: "The budget is configured via the agent definition's `durability.maxAttempts`.",
-			meta: {
-				attemptCount,
-				maxAttempts,
-				...(interruptedTools ? { interruptedTools } : {}),
-			},
-		});
-	}
+      dev: 'The budget is configured via the agent definition\'s `durability.maxAttempts`.',
+      meta: {
+        attemptCount,
+        maxAttempts,
+        ...(interruptedTools ? { interruptedTools } : {}),
+      },
+    })
+  }
 }
 
 /** A durable submission exceeded its configured processing timeout. */
 export class SubmissionTimeoutError extends FlueError {
-	constructor() {
-		super({
-			type: 'submission_timeout',
-			message: 'Submission exceeded the configured timeout.',
-			details: 'The operation ran longer than the configured durability timeout.',
-			dev: "The timeout is configured in milliseconds via the agent definition's `durability.timeoutMs`.",
-		});
-	}
+  constructor() {
+    super({
+      type: 'submission_timeout',
+      message: 'Submission exceeded the configured timeout.',
+      details: 'The operation ran longer than the configured durability timeout.',
+      dev: 'The timeout is configured in milliseconds via the agent definition\'s `durability.timeoutMs`.',
+    })
+  }
 }
 
 /**
@@ -1113,14 +1114,14 @@ export class SubmissionTimeoutError extends FlueError {
  * direct submissions, a `submission_settled` record with `outcome: 'aborted'`.
  */
 export class SubmissionAbortedError extends FlueError {
-	constructor() {
-		super({
-			type: 'submission_aborted',
-			message: 'Submission was aborted.',
-			details: 'The operation was stopped before it produced a completed response.',
-			dev: '',
-		});
-	}
+  constructor() {
+    super({
+      type: 'submission_aborted',
+      message: 'Submission was aborted.',
+      details: 'The operation was stopped before it produced a completed response.',
+      dev: '',
+    })
+  }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1158,7 +1159,7 @@ export class SubmissionAbortedError extends FlueError {
  */
 
 function isFlueError(value: unknown): value is FlueError {
-	return value instanceof FlueError;
+  return value instanceof FlueError
 }
 
 /**
@@ -1166,7 +1167,7 @@ function isFlueError(value: unknown): value is FlueError {
  * formatting and message flattening walk the full `cause` chain — bounded so
  * a pathological (or cyclic) chain can never wedge the renderer.
  */
-const CAUSE_CHAIN_DEPTH_LIMIT = 8;
+const CAUSE_CHAIN_DEPTH_LIMIT = 8
 
 /**
  * Flatten an error's message chain into a single string:
@@ -1177,40 +1178,42 @@ const CAUSE_CHAIN_DEPTH_LIMIT = 8;
  * message is the only way the far side ever sees it.
  */
 export function describeErrorChain(err: unknown): string {
-	return describeChainLevel(err, 1, new Set([err]));
+  return describeChainLevel(err, 1, new Set([err]))
 }
 
 function describeChainLevel(err: unknown, depth: number, seen: Set<unknown>): string {
-	const message = err instanceof Error ? err.message : String(err);
-	if (!(err instanceof Error) || err.cause === undefined) return message;
-	if (depth >= CAUSE_CHAIN_DEPTH_LIMIT || seen.has(err.cause)) return message;
-	seen.add(err.cause);
-	return `${message} (caused by: ${describeChainLevel(err.cause, depth + 1, seen)})`;
+  const message = err instanceof Error ? err.message : String(err)
+  if (!(err instanceof Error) || err.cause === undefined) { return message }
+  if (depth >= CAUSE_CHAIN_DEPTH_LIMIT || seen.has(err.cause)) { return message }
+  seen.add(err.cause)
+  return `${message} (caused by: ${describeChainLevel(err.cause, depth + 1, seen)})`
 }
 
 function formatForLog(prefix: string, err: unknown): string {
-	const lines: string[] = [];
-	if (isFlueError(err)) {
-		// Server-side logs always show every audience's prose. Mode gating
-		// only applies to the wire envelope.
-		lines.push(`${prefix} [${err.type}] ${err.message}`);
-		if (err.details) {
-			for (const line of err.details.split('\n')) {
-				lines.push(`  ${line}`);
-			}
-		}
-		if (err.dev) {
-			for (const line of err.dev.split('\n')) {
-				lines.push(`  ${line}`);
-			}
-		}
-	} else if (err instanceof Error) {
-		lines.push(`${prefix} ${err.stack ?? err.message}`);
-	} else {
-		return `${prefix} ${String(err)}`;
-	}
-	appendCauseChain(lines, err, '  ', 1, new Set([err]));
-	return lines.join('\n');
+  const lines: string[] = []
+  if (isFlueError(err)) {
+    // Server-side logs always show every audience's prose. Mode gating
+    // only applies to the wire envelope.
+    lines.push(`${prefix} [${err.type}] ${err.message}`)
+    if (err.details) {
+      for (const line of err.details.split('\n')) {
+        lines.push(`  ${line}`)
+      }
+    }
+    if (err.dev) {
+      for (const line of err.dev.split('\n')) {
+        lines.push(`  ${line}`)
+      }
+    }
+  }
+  else if (err instanceof Error) {
+    lines.push(`${prefix} ${err.stack ?? err.message}`)
+  }
+  else {
+    return `${prefix} ${String(err)}`
+  }
+  appendCauseChain(lines, err, '  ', 1, new Set([err]))
+  return lines.join('\n')
 }
 
 /**
@@ -1219,33 +1222,33 @@ function formatForLog(prefix: string, err: unknown): string {
  * an indented `caused by: <stack ?? message>` block.
  */
 function appendCauseChain(
-	lines: string[],
-	err: unknown,
-	indent: string,
-	depth: number,
-	seen: Set<unknown>,
+  lines: string[],
+  err: unknown,
+  indent: string,
+  depth: number,
+  seen: Set<unknown>,
 ): void {
-	if (!(err instanceof Error)) return;
-	const nested: unknown[] = err instanceof AggregateError ? [...err.errors] : [];
-	if (err.cause !== undefined) nested.push(err.cause);
-	for (const cause of nested) {
-		if (seen.has(cause)) {
-			lines.push(`${indent}caused by: [circular]`);
-			continue;
-		}
-		if (depth >= CAUSE_CHAIN_DEPTH_LIMIT) {
-			lines.push(`${indent}caused by: [depth limit reached]`);
-			return;
-		}
-		seen.add(cause);
-		const described = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
-		const [first = '', ...rest] = described.split('\n');
-		lines.push(`${indent}caused by: ${first}`);
-		for (const line of rest) {
-			lines.push(`${indent}${line}`);
-		}
-		appendCauseChain(lines, cause, `${indent}  `, depth + 1, seen);
-	}
+  if (!(err instanceof Error)) { return }
+  const nested: unknown[] = err instanceof AggregateError ? [...err.errors] : []
+  if (err.cause !== undefined) { nested.push(err.cause) }
+  for (const cause of nested) {
+    if (seen.has(cause)) {
+      lines.push(`${indent}caused by: [circular]`)
+      continue
+    }
+    if (depth >= CAUSE_CHAIN_DEPTH_LIMIT) {
+      lines.push(`${indent}caused by: [depth limit reached]`)
+      return
+    }
+    seen.add(cause)
+    const described = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)
+    const [first = '', ...rest] = described.split('\n')
+    lines.push(`${indent}caused by: ${first}`)
+    for (const line of rest) {
+      lines.push(`${indent}${line}`)
+    }
+    appendCauseChain(lines, cause, `${indent}  `, depth + 1, seen)
+  }
 }
 
 /**
@@ -1256,46 +1259,47 @@ function appendCauseChain(
  * message-only, and alarm-driven wakes have no HTTP render at all).
  */
 export function formatErrorForLog(err: unknown): string {
-	return formatForLog('[flue]', err);
+  return formatForLog('[flue]', err)
 }
 
 const flueLog = {
-	error(err: unknown, render?: { ref?: string; traceparent?: string }): void {
-		// The renderer is the last line of defense and must never throw:
-		// chain walking reads `cause` getters on foreign errors, so the
-		// formatted path is guarded with a raw-console fallback.
-		try {
-			const prefix = render?.ref ? `[flue] [${render.ref}]` : '[flue]';
-			const lines = [formatForLog(prefix, err)];
-			if (render?.traceparent) lines.push(`  traceparent: ${render.traceparent}`);
-			console.error(lines.join('\n'));
-		} catch {
-			console.error('[flue]', err);
-		}
-	},
-};
-
-interface WireEnvelope {
-	error: {
-		type: string;
-		message: string;
-		details: string;
-		dev?: string;
-		meta?: Record<string, unknown>;
-		/**
-		 * Correlation ref (`err_…`), present exactly when the renderer wrote a
-		 * server-side log line carrying the same value ("ref iff logged").
-		 * Also mirrored on the `flue-error-ref` response header so body-less
-		 * responses (HEAD) and body-swallowing intermediaries keep it.
-		 */
-		ref?: string;
-	};
+  error(err: unknown, render?: { ref?: string, traceparent?: string }): void {
+    // The renderer is the last line of defense and must never throw:
+    // chain walking reads `cause` getters on foreign errors, so the
+    // formatted path is guarded with a raw-console fallback.
+    try {
+      const prefix = render?.ref ? `[flue] [${render.ref}]` : '[flue]'
+      const lines = [formatForLog(prefix, err)]
+      if (render?.traceparent) { lines.push(`  traceparent: ${render.traceparent}`) }
+      console.error(lines.join('\n'))
+    }
+    catch {
+      console.error('[flue]', err)
+    }
+  },
 }
 
-let devMode = false;
+interface WireEnvelope {
+  error: {
+    type: string
+    message: string
+    details: string
+    dev?: string
+    meta?: Record<string, unknown>
+    /**
+     * Correlation ref (`err_…`), present exactly when the renderer wrote a
+     * server-side log line carrying the same value ("ref iff logged").
+     * Also mirrored on the `flue-error-ref` response header so body-less
+     * responses (HEAD) and body-swallowing intermediaries keep it.
+     */
+    ref?: string
+  }
+}
+
+let devMode = false
 
 export function configureErrorRendering(options: { devMode: boolean }): void {
-	devMode = options.devMode;
+  devMode = options.devMode
 }
 
 /**
@@ -1305,40 +1309,40 @@ export function configureErrorRendering(options: { devMode: boolean }): void {
  * that persisted.
  */
 export function isDevMode(): boolean {
-	return devMode;
+  return devMode
 }
 
 function envelope(err: FlueError, ref?: string): WireEnvelope {
-	const out: WireEnvelope = {
-		error: {
-			type: err.type,
-			message: err.message,
-			details: err.details,
-		},
-	};
-	// `dev` is included only when the server is in dev mode AND the error
-	// class actually populated it. Some errors (MethodNotAllowedError,
-	// InvalidJsonError, …) intentionally set `dev: ''` because everything
-	// useful is already in `details` — those render the same in dev and
-	// prod. So `dev`'s presence on the wire is NOT a reliable mode signal;
-	// it just means "this error has dev-only guidance to share."
-	if (devMode && err.dev) out.error.dev = err.dev;
-	if (err.meta) out.error.meta = err.meta;
-	if (ref) out.error.ref = ref;
-	return out;
+  const out: WireEnvelope = {
+    error: {
+      type: err.type,
+      message: err.message,
+      details: err.details,
+    },
+  }
+  // `dev` is included only when the server is in dev mode AND the error
+  // class actually populated it. Some errors (MethodNotAllowedError,
+  // InvalidJsonError, …) intentionally set `dev: ''` because everything
+  // useful is already in `details` — those render the same in dev and
+  // prod. So `dev`'s presence on the wire is NOT a reliable mode signal;
+  // it just means "this error has dev-only guidance to share."
+  if (devMode && err.dev) { out.error.dev = err.dev }
+  if (err.meta) { out.error.meta = err.meta }
+  if (ref) { out.error.ref = ref }
+  return out
 }
 
 /** Per-response factory: each render gets its own envelope to carry its ref. */
 function genericInternalEnvelope(ref: string | undefined): WireEnvelope {
-	const out: WireEnvelope = {
-		error: {
-			type: 'internal_error',
-			message: 'An internal error occurred.',
-			details: 'The server encountered an unexpected error while handling this request.',
-		},
-	};
-	if (ref) out.error.ref = ref;
-	return out;
+  const out: WireEnvelope = {
+    error: {
+      type: 'internal_error',
+      message: 'An internal error occurred.',
+      details: 'The server encountered an unexpected error while handling this request.',
+    },
+  }
+  if (ref) { out.error.ref = ref }
+  return out
 }
 
 /**
@@ -1351,20 +1355,22 @@ function genericInternalEnvelope(ref: string | undefined): WireEnvelope {
  * either degrades the log line, never the response.
  */
 function logRenderedError(err: unknown, request: Request | undefined): string | undefined {
-	let ref: string | undefined;
-	try {
-		ref = generateErrorRef();
-	} catch {
-		// Keep rendering; the error still logs, just uncorrelated.
-	}
-	let traceparent: string | undefined;
-	try {
-		traceparent = request ? extractTraceCarrier(request.headers)?.traceparent : undefined;
-	} catch {
-		// Keep rendering; foreign Request/Headers shapes must not break the render.
-	}
-	flueLog.error(err, { ref, traceparent });
-	return ref;
+  let ref: string | undefined
+  try {
+    ref = generateErrorRef()
+  }
+  catch {
+    // Keep rendering; the error still logs, just uncorrelated.
+  }
+  let traceparent: string | undefined
+  try {
+    traceparent = request ? extractTraceCarrier(request.headers)?.traceparent : undefined
+  }
+  catch {
+    // Keep rendering; foreign Request/Headers shapes must not break the render.
+  }
+  flueLog.error(err, { ref, traceparent })
+  return ref
 }
 
 /**
@@ -1376,36 +1382,36 @@ function logRenderedError(err: unknown, request: Request | undefined): string | 
  * exact server-side log line; unlogged caller-mistake renders stay ref-free.
  */
 export function toHttpResponse(err: unknown, options?: { request?: Request }): Response {
-	// Browser security headers (DS protocol §12.7) — set on every error
-	// response so stream-endpoint errors thrown before the protocol layer
-	// (e.g. run lookups) still carry them.
-	const baseHeaders: Record<string, string> = {
-		'content-type': 'application/json',
-		'x-content-type-options': 'nosniff',
-		'cross-origin-resource-policy': 'cross-origin',
-	};
-	if (isFlueError(err)) {
-		const isHttp = err instanceof FlueHttpError;
-		const status = isHttp ? err.status : 500;
-		const headers = { ...baseHeaders };
-		if (isHttp && err.headers) {
-			Object.assign(headers, err.headers);
-		}
-		// Log non-HTTP FlueErrors that bubbled up to the HTTP layer — they
-		// weren't constructed with HTTP semantics in mind, so it's worth
-		// surfacing them in logs even though we render their message.
-		const ref = isHttp ? undefined : logRenderedError(err, options?.request);
-		if (ref) headers['flue-error-ref'] = ref;
-		return new Response(JSON.stringify(envelope(err, ref)), { status, headers });
-	}
-	// Non-FlueError: log everything, leak nothing beyond the correlation ref.
-	const ref = logRenderedError(err, options?.request);
-	const headers = { ...baseHeaders };
-	if (ref) headers['flue-error-ref'] = ref;
-	return new Response(JSON.stringify(genericInternalEnvelope(ref)), {
-		status: 500,
-		headers,
-	});
+  // Browser security headers (DS protocol §12.7) — set on every error
+  // response so stream-endpoint errors thrown before the protocol layer
+  // (e.g. run lookups) still carry them.
+  const baseHeaders: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-content-type-options': 'nosniff',
+    'cross-origin-resource-policy': 'cross-origin',
+  }
+  if (isFlueError(err)) {
+    const isHttp = err instanceof FlueHttpError
+    const status = isHttp ? err.status : 500
+    const headers = { ...baseHeaders }
+    if (isHttp && err.headers) {
+      Object.assign(headers, err.headers)
+    }
+    // Log non-HTTP FlueErrors that bubbled up to the HTTP layer — they
+    // weren't constructed with HTTP semantics in mind, so it's worth
+    // surfacing them in logs even though we render their message.
+    const ref = isHttp ? undefined : logRenderedError(err, options?.request)
+    if (ref) { headers['flue-error-ref'] = ref }
+    return new Response(JSON.stringify(envelope(err, ref)), { status, headers })
+  }
+  // Non-FlueError: log everything, leak nothing beyond the correlation ref.
+  const ref = logRenderedError(err, options?.request)
+  const headers = { ...baseHeaders }
+  if (ref) { headers['flue-error-ref'] = ref }
+  return new Response(JSON.stringify(genericInternalEnvelope(ref)), {
+    status: 500,
+    headers,
+  })
 }
 
 // These are HTTP-layer helpers that throw the concrete error subclasses defined
@@ -1420,32 +1426,34 @@ export function toHttpResponse(err: unknown, options?: { request?: Request }): R
  * present but unparseable.
  */
 export async function parseJsonBody(request: Request): Promise<unknown> {
-	const contentLengthHeader = request.headers.get('content-length');
-	const contentLength = contentLengthHeader === null ? null : Number(contentLengthHeader);
-	const contentType = request.headers.get('content-type');
-	const looksEmpty = contentLength === 0 || (contentLengthHeader === null && contentType === null);
-	if (looksEmpty) return undefined;
+  const contentLengthHeader = request.headers.get('content-length')
+  const contentLength = contentLengthHeader === null ? null : Number(contentLengthHeader)
+  const contentType = request.headers.get('content-type')
+  const looksEmpty = contentLength === 0 || (contentLengthHeader === null && contentType === null)
+  if (looksEmpty) { return undefined }
 
-	if (!contentType?.toLowerCase().includes('application/json')) {
-		throw new UnsupportedMediaTypeError({ received: contentType });
-	}
+  if (!contentType?.toLowerCase().includes('application/json')) {
+    throw new UnsupportedMediaTypeError({ received: contentType })
+  }
 
-	let text: string;
-	try {
-		text = await request.clone().text();
-	} catch (err) {
-		throw new InvalidJsonError({
-			parseError: err instanceof Error ? err.message : String(err),
-		});
-	}
+  let text: string
+  try {
+    text = await request.clone().text()
+  }
+  catch (err) {
+    throw new InvalidJsonError({
+      parseError: err instanceof Error ? err.message : String(err),
+    })
+  }
 
-	if (text.trim() === '') return undefined;
+  if (text.trim() === '') { return undefined }
 
-	try {
-		return JSON.parse(text);
-	} catch (err) {
-		throw new InvalidJsonError({
-			parseError: err instanceof Error ? err.message : String(err),
-		});
-	}
+  try {
+    return JSON.parse(text)
+  }
+  catch (err) {
+    throw new InvalidJsonError({
+      parseError: err instanceof Error ? err.message : String(err),
+    })
+  }
 }

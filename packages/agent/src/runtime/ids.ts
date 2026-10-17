@@ -1,19 +1,19 @@
-import { ulid } from 'ulidx';
+import { ulid } from 'ulidx'
 
 export function generateSessionAffinityKey(): string {
-	return `aff_${ulid()}`;
+  return `aff_${ulid()}`
 }
 
 function generateConversationId(): string {
-	return `conv_${ulid()}`;
+  return `conv_${ulid()}`
 }
 
 export function generateOperationId(): string {
-	return `op_${ulid()}`;
+  return `op_${ulid()}`
 }
 
 export function generateTurnId(): string {
-	return `turn_${ulid()}`;
+  return `turn_${ulid()}`
 }
 
 /**
@@ -23,7 +23,7 @@ export function generateTurnId(): string {
  * send condition.
  */
 export function generateInstanceUid(): string {
-	return `inst_${ulid()}`;
+  return `inst_${ulid()}`
 }
 
 /**
@@ -32,40 +32,40 @@ export function generateInstanceUid(): string {
  * (normally caller-chosen, e.g. `daily-2026-07-08`), not the incarnation.
  */
 export function generateInstanceId(): string {
-	return `instance_${ulid()}`;
+  return `instance_${ulid()}`
 }
 
 export function generateRecordId(): string {
-	return `record_${ulid()}`;
+  return `record_${ulid()}`
 }
 
 /** A fresh conversation identity for a `conversation_created` record. */
 export function createConversationIdentity(): {
-	conversationId: string;
-	affinityKey: string;
-	createdAt: string;
+  conversationId: string
+  affinityKey: string
+  createdAt: string
 } {
-	return {
-		conversationId: generateConversationId(),
-		affinityKey: generateSessionAffinityKey(),
-		createdAt: new Date().toISOString(),
-	};
+  return {
+    conversationId: generateConversationId(),
+    affinityKey: generateSessionAffinityKey(),
+    createdAt: new Date().toISOString(),
+  }
 }
 
 export function generateEntryId(): string {
-	return `entry_${ulid()}`;
+  return `entry_${ulid()}`
 }
 
 export function generateBlockId(): string {
-	return `block_${ulid()}`;
+  return `block_${ulid()}`
 }
 
 export function generateTaskId(): string {
-	return `task_${ulid()}`;
+  return `task_${ulid()}`
 }
 
 export function generateInvocationId(): string {
-	return `inv_${ulid()}`;
+  return `inv_${ulid()}`
 }
 
 /**
@@ -74,7 +74,7 @@ export function generateInvocationId(): string {
  * ids; the values are opaque, so both prefixes remain valid identifiers.
  */
 export function generateSubmissionId(): string {
-	return `sub_${ulid()}`;
+  return `sub_${ulid()}`
 }
 
 /**
@@ -94,16 +94,16 @@ export function generateSubmissionId(): string {
  * row-kind conflict, never a silent duplicate turn.
  */
 export async function deriveKeyedSubmissionId(
-	agent: string,
-	id: string,
-	idempotencyKey: string,
+  agent: string,
+  id: string,
+  idempotencyKey: string,
 ): Promise<string> {
-	const preimage = `flue-submission-key\n${agent}\n${id}\n${idempotencyKey}`;
-	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(preimage));
-	const hex = [...new Uint8Array(digest)]
-		.map((byte) => byte.toString(16).padStart(2, '0'))
-		.join('');
-	return `sub_ik_${hex.slice(0, 32)}`;
+  const preimage = `flue-submission-key\n${agent}\n${id}\n${idempotencyKey}`
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(preimage))
+  const hex = [...new Uint8Array(digest)]
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+  return `sub_ik_${hex.slice(0, 32)}`
 }
 
 /**
@@ -114,11 +114,11 @@ export async function deriveKeyedSubmissionId(
  * nothing extra rides the dispatch wire or the persisted payload.
  */
 export function isKeyDerivedSubmissionId(submissionId: string): boolean {
-	return submissionId.startsWith('sub_ik_');
+  return submissionId.startsWith('sub_ik_')
 }
 
 export function generateAttemptId(): string {
-	return `attempt_${ulid()}`;
+  return `attempt_${ulid()}`
 }
 
 /**
@@ -129,7 +129,7 @@ export function generateAttemptId(): string {
  * so it always matches the call's emitted events.
  */
 export function generateToolCallId(): string {
-	return `call_${ulid()}`;
+  return `call_${ulid()}`
 }
 
 /**
@@ -140,15 +140,15 @@ export function generateToolCallId(): string {
  * ordering lets an operator bracket the log window from the ref alone.
  */
 export function generateErrorRef(): string {
-	return `err_${ulid()}`;
+  return `err_${ulid()}`
 }
 
 /** Per-process producer identity for conversation-stream ownership. */
 export function generateOwnerId(): string {
-	return `owner_${ulid()}`;
+  return `owner_${ulid()}`
 }
 
 /** Per-creation stream incarnation marker (adapters mint the same shape). */
 export function generateIncarnationId(): string {
-	return `inc_${ulid()}`;
+  return `inc_${ulid()}`
 }

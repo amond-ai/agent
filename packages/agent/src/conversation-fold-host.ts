@@ -1,11 +1,12 @@
-import { loadReducedConversationState } from './conversation-reader.ts';
+import { loadReducedConversationState } from './conversation-reader.ts'
 import {
-	type ReducedInstanceState,
-	reduceConversationRecords,
-	reduceConversationRecordsInPlace,
-} from './conversation-reducer.ts';
-import type { ConversationStreamStore } from './runtime/conversation-stream-store.ts';
-import { parseOffset } from './runtime/stream-offsets.ts';
+  reduceConversationRecords,
+  reduceConversationRecordsInPlace,
+  
+} from './conversation-reducer.ts'
+import type { ReducedInstanceState } from './conversation-reducer.ts'
+import type { ConversationStreamStore } from './runtime/conversation-stream-store.ts'
+import { parseOffset } from './runtime/stream-offsets.ts'
 
 /**
  * One resident reduced-state fold per (store, path), shared by every reader
@@ -31,112 +32,113 @@ import { parseOffset } from './runtime/stream-offsets.ts';
  * the cached fold.
  */
 export class ConversationFoldHost {
-	private state: ReducedInstanceState | undefined;
-	private incarnation: string | undefined;
-	private chain: Promise<unknown> = Promise.resolve();
-	private pins = 0;
+  private state: ReducedInstanceState | undefined
+  private incarnation: string | undefined
+  private chain: Promise<unknown> = Promise.resolve()
+  private pins = 0
 
-	constructor(
-		private readonly store: ConversationStreamStore,
-		readonly path: string,
-	) {}
+  constructor(
+    private readonly store: ConversationStreamStore,
+    readonly path: string,
+  ) {}
 
-	/**
-	 * The reduced state at the durable head. Calls are serialized so
-	 * concurrent readers share one advancement; the returned state is shared
-	 * and must not be mutated — fold forward with the cloning reducer
-	 * (`projectConversationRead` already does).
-	 */
-	getStateAtHead(): Promise<ReducedInstanceState> {
-		const operation = this.chain.then(() => this.advanceToHead());
-		this.chain = operation.then(
-			() => {},
-			() => {},
-		);
-		return operation;
-	}
+  /**
+   * The reduced state at the durable head. Calls are serialized so
+   * concurrent readers share one advancement; the returned state is shared
+   * and must not be mutated — fold forward with the cloning reducer
+   * (`projectConversationRead` already does).
+   */
+  getStateAtHead(): Promise<ReducedInstanceState> {
+    const operation = this.chain.then(() => this.advanceToHead())
+    this.chain = operation.then(
+      () => {},
+      () => {},
+    )
+    return operation
+  }
 
-	/**
-	 * Adopt a post-append state from the instance's writer. Keeps the host at
-	 * head without a store read and deduplicates residency: after an append,
-	 * the writer's memoized state and the host's cached state are the same
-	 * object. Ignored when the host already holds a strictly newer state.
-	 */
-	adoptState(state: ReducedInstanceState, incarnation: string): void {
-		if (this.incarnation !== incarnation) {
-			this.state = undefined;
-			this.incarnation = incarnation;
-		}
-		if (
-			!this.state ||
-			parseOffset(state.recordsThroughOffset) >= parseOffset(this.state.recordsThroughOffset)
-		) {
-			this.state = state;
-		}
-	}
+  /**
+   * Adopt a post-append state from the instance's writer. Keeps the host at
+   * head without a store read and deduplicates residency: after an append,
+   * the writer's memoized state and the host's cached state are the same
+   * object. Ignored when the host already holds a strictly newer state.
+   */
+  adoptState(state: ReducedInstanceState, incarnation: string): void {
+    if (this.incarnation !== incarnation) {
+      this.state = undefined
+      this.incarnation = incarnation
+    }
+    if (
+      !this.state ||
+      parseOffset(state.recordsThroughOffset) >= parseOffset(this.state.recordsThroughOffset)
+    ) {
+      this.state = state
+    }
+  }
 
-	/** Pinned hosts (live writers) are exempt from registry eviction. */
-	pin(): void {
-		this.pins += 1;
-	}
+  /** Pinned hosts (live writers) are exempt from registry eviction. */
+  pin(): void {
+    this.pins += 1
+  }
 
-	unpin(): void {
-		this.pins = Math.max(0, this.pins - 1);
-	}
+  unpin(): void {
+    this.pins = Math.max(0, this.pins - 1)
+  }
 
-	get pinned(): boolean {
-		return this.pins > 0;
-	}
+  get pinned(): boolean {
+    return this.pins > 0
+  }
 
-	private async advanceToHead(): Promise<ReducedInstanceState> {
-		const meta = await this.store.getMeta(this.path);
-		if (!meta) {
-			// Mirror the from-scratch loader on a missing stream: an empty state,
-			// not an error — callers detect absence via their own getMeta. Not
-			// cached: the stream may be created (or recreated) at any time.
-			this.state = undefined;
-			this.incarnation = undefined;
-			return loadReducedConversationState({ store: this.store, path: this.path });
-		}
-		if (this.incarnation !== meta.incarnation) {
-			this.state = undefined;
-			this.incarnation = meta.incarnation;
-		}
-		if (!this.state) {
-			this.state = await loadReducedConversationState({ store: this.store, path: this.path });
-			return this.state;
-		}
-		// Fold the suffix into a clone and swap on success. The first new batch
-		// pays the failure-atomicity clone (reduceConversationRecords); the rest
-		// of the window folds in place on that private clone. The base is
-		// snapshotted with the cursor: the writer may adopt a newer state while
-		// a read below awaits the store, and folding the window onto that
-		// adopted state would re-apply its own batch.
-		const base = this.state;
-		let next: ReducedInstanceState | undefined;
-		let offset = base.recordsThroughOffset;
-		while (true) {
-			const read = await this.store.read(this.path, { offset, limit: 1000 });
-			for (const batch of read.batches) {
-				if (next) {
-					reduceConversationRecordsInPlace(next, batch.records, batch.offset);
-				} else {
-					next = reduceConversationRecords(base, batch.records, batch.offset);
-				}
-				offset = batch.offset;
-			}
-			if (read.upToDate) break;
-		}
-		// The writer may have adopted a newer state while this advance awaited
-		// the store; keep whichever reflects more of the stream.
-		if (
-			next &&
-			parseOffset(next.recordsThroughOffset) > parseOffset(this.state.recordsThroughOffset)
-		) {
-			this.state = next;
-		}
-		return this.state;
-	}
+  private async advanceToHead(): Promise<ReducedInstanceState> {
+    const meta = await this.store.getMeta(this.path)
+    if (!meta) {
+      // Mirror the from-scratch loader on a missing stream: an empty state,
+      // not an error — callers detect absence via their own getMeta. Not
+      // cached: the stream may be created (or recreated) at any time.
+      this.state = undefined
+      this.incarnation = undefined
+      return loadReducedConversationState({ store: this.store, path: this.path })
+    }
+    if (this.incarnation !== meta.incarnation) {
+      this.state = undefined
+      this.incarnation = meta.incarnation
+    }
+    if (!this.state) {
+      this.state = await loadReducedConversationState({ store: this.store, path: this.path })
+      return this.state
+    }
+    // Fold the suffix into a clone and swap on success. The first new batch
+    // pays the failure-atomicity clone (reduceConversationRecords); the rest
+    // of the window folds in place on that private clone. The base is
+    // snapshotted with the cursor: the writer may adopt a newer state while
+    // a read below awaits the store, and folding the window onto that
+    // adopted state would re-apply its own batch.
+    const base = this.state
+    let next: ReducedInstanceState | undefined
+    let offset = base.recordsThroughOffset
+    while (true) {
+      const read = await this.store.read(this.path, { offset, limit: 1000 })
+      for (const batch of read.batches) {
+        if (next) {
+          reduceConversationRecordsInPlace(next, batch.records, batch.offset)
+        }
+        else {
+          next = reduceConversationRecords(base, batch.records, batch.offset)
+        }
+        offset = batch.offset
+      }
+      if (read.upToDate) { break }
+    }
+    // The writer may have adopted a newer state while this advance awaited
+    // the store; keep whichever reflects more of the stream.
+    if (
+      next &&
+      parseOffset(next.recordsThroughOffset) > parseOffset(this.state.recordsThroughOffset)
+    ) {
+      this.state = next
+    }
+    return this.state
+  }
 }
 
 /**
@@ -145,9 +147,9 @@ export class ConversationFoldHost {
  * the cap bounds read-only paths in many-instance processes. An evicted host
  * costs one from-scratch replay on the next read.
  */
-const MAX_IDLE_HOSTS = 64;
+const MAX_IDLE_HOSTS = 64
 
-const hostsByStore = new WeakMap<ConversationStreamStore, Map<string, ConversationFoldHost>>();
+const hostsByStore = new WeakMap<ConversationStreamStore, Map<string, ConversationFoldHost>>()
 
 /**
  * The shared fold host for one instance's conversation stream. Keyed by store
@@ -157,28 +159,28 @@ const hostsByStore = new WeakMap<ConversationStreamStore, Map<string, Conversati
  * writer.
  */
 export function getConversationFoldHost(
-	store: ConversationStreamStore,
-	path: string,
+  store: ConversationStreamStore,
+  path: string,
 ): ConversationFoldHost {
-	let hosts = hostsByStore.get(store);
-	if (!hosts) {
-		hosts = new Map();
-		hostsByStore.set(store, hosts);
-	}
-	const existing = hosts.get(path);
-	if (existing) {
-		hosts.delete(path);
-		hosts.set(path, existing);
-		return existing;
-	}
-	const host = new ConversationFoldHost(store, path);
-	hosts.set(path, host);
-	if (hosts.size > MAX_IDLE_HOSTS) {
-		for (const [key, candidate] of hosts) {
-			if (candidate.pinned || candidate === host) continue;
-			hosts.delete(key);
-			break;
-		}
-	}
-	return host;
+  let hosts = hostsByStore.get(store)
+  if (!hosts) {
+    hosts = new Map()
+    hostsByStore.set(store, hosts)
+  }
+  const existing = hosts.get(path)
+  if (existing) {
+    hosts.delete(path)
+    hosts.set(path, existing)
+    return existing
+  }
+  const host = new ConversationFoldHost(store, path)
+  hosts.set(path, host)
+  if (hosts.size > MAX_IDLE_HOSTS) {
+    for (const [key, candidate] of hosts) {
+      if (candidate.pinned || candidate === host) { continue }
+      hosts.delete(key)
+      break
+    }
+  }
+  return host
 }

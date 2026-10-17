@@ -25,60 +25,60 @@
  */
 
 import {
-	createReducedInstanceState,
-	REDUCED_STATE_FORMAT,
-	type ReducedConversationState,
-	type ReducedInstanceState,
-} from './conversation-reducer.ts';
+  createReducedInstanceState,
+  REDUCED_STATE_FORMAT,
+	
+} from './conversation-reducer.ts'
+import type { ReducedConversationState, ReducedInstanceState } from './conversation-reducer.ts'
 import type {
-	ConversationFoldCheckpoint,
-	ConversationStreamStore,
-} from './runtime/conversation-stream-store.ts';
-import { parseOffset } from './runtime/stream-offsets.ts';
+  ConversationFoldCheckpoint,
+  ConversationStreamStore,
+} from './runtime/conversation-stream-store.ts'
+import { parseOffset } from './runtime/stream-offsets.ts'
 
 /**
  * Appends between the writer's durable checkpoints. Low enough that a cold
  * load's suffix stays small next to the stream, high enough that the
  * once-per-interval O(state) encode disappears against the per-append work.
  */
-export const FOLD_CHECKPOINT_INTERVAL = 64;
+export const FOLD_CHECKPOINT_INTERVAL = 64
 
-type EncodedEntries = Array<[string, unknown]>;
+type EncodedEntries = Array<[string, unknown]>
 
 /** Serialize a reduced state to the checkpoint's canonical JSON `data`. */
 export function encodeReducedInstanceState(state: ReducedInstanceState): string {
-	return JSON.stringify({
-		...state,
-		conversationScopes: [...state.conversationScopes],
-		recordsById: [...state.recordsById],
-		state: [...state.state],
-		conversations: [...state.conversations].map(([conversationId, conversation]) => [
-			conversationId,
-			{
-				...conversation,
-				entries: [...conversation.entries].map(([entryId, entry]) => [
-					entryId,
-					entry.type === 'message' && entry.attachmentRefs
-						? { ...entry, attachmentRefs: [...entry.attachmentRefs] }
-						: entry,
-				]),
-				inProgressMessages: [...conversation.inProgressMessages].map(([messageId, message]) => [
-					messageId,
-					{
-						...message,
-						blocks: [...message.blocks],
-						blockIndexes: [...message.blockIndexes],
-					},
-				]),
-				toolOutcomes: [...conversation.toolOutcomes],
-				childConversations: [...conversation.childConversations],
-				responseMetadata: [...conversation.responseMetadata],
-				responseDataParts: [...conversation.responseDataParts],
-				lastAssistantEntryBySubmission: [...conversation.lastAssistantEntryBySubmission],
-				attemptScopedRecordIds: [...conversation.attemptScopedRecordIds],
-			},
-		]),
-	});
+  return JSON.stringify({
+    ...state,
+    conversationScopes: [...state.conversationScopes],
+    recordsById: [...state.recordsById],
+    state: [...state.state],
+    conversations: [...state.conversations].map(([conversationId, conversation]) => [
+      conversationId,
+      {
+        ...conversation,
+        entries: [...conversation.entries].map(([entryId, entry]) => [
+          entryId,
+          entry.type === 'message' && entry.attachmentRefs
+            ? { ...entry, attachmentRefs: [...entry.attachmentRefs] }
+            : entry,
+        ]),
+        inProgressMessages: [...conversation.inProgressMessages].map(([messageId, message]) => [
+          messageId,
+          {
+            ...message,
+            blocks: [...message.blocks],
+            blockIndexes: [...message.blockIndexes],
+          },
+        ]),
+        toolOutcomes: [...conversation.toolOutcomes],
+        childConversations: [...conversation.childConversations],
+        responseMetadata: [...conversation.responseMetadata],
+        responseDataParts: [...conversation.responseDataParts],
+        lastAssistantEntryBySubmission: [...conversation.lastAssistantEntryBySubmission],
+        attemptScopedRecordIds: [...conversation.attemptScopedRecordIds],
+      },
+    ]),
+  })
 }
 
 /**
@@ -86,84 +86,84 @@ export function encodeReducedInstanceState(state: ReducedInstanceState): string 
  * mismatch — callers treat every throw as "no checkpoint".
  */
 export function decodeReducedInstanceState(data: string): ReducedInstanceState {
-	const parsed = JSON.parse(data) as Record<string, unknown>;
-	const state = {
-		...parsed,
-		conversationScopes: decodeMap(parsed.conversationScopes),
-		recordsById: decodeMap(parsed.recordsById),
-		state: decodeMap(parsed.state),
-		conversations: new Map(
-			entriesOf(parsed.conversations).map(([conversationId, encoded]) => {
-				const conversation = encoded as Record<string, unknown>;
-				return [
-					conversationId,
-					{
-						...conversation,
-						entries: new Map(
-							entriesOf(conversation.entries).map(([entryId, entry]) => {
-								const value = entry as { type?: string; attachmentRefs?: unknown };
-								return [
-									entryId,
-									value.type === 'message' && value.attachmentRefs !== undefined
-										? { ...value, attachmentRefs: decodeMap(value.attachmentRefs) }
-										: value,
-								];
-							}),
-						),
-						inProgressMessages: new Map(
-							entriesOf(conversation.inProgressMessages).map(([messageId, encodedMessage]) => {
-								const message = encodedMessage as Record<string, unknown>;
-								return [
-									messageId,
-									{
-										...message,
-										blocks: decodeMap(message.blocks),
-										blockIndexes: new Set(arrayOf(message.blockIndexes)),
-									},
-								];
-							}),
-						),
-						toolOutcomes: decodeMap(conversation.toolOutcomes),
-						childConversations: decodeMap(conversation.childConversations),
-						responseMetadata: decodeMap(conversation.responseMetadata),
-						responseDataParts: decodeMap(conversation.responseDataParts),
-						lastAssistantEntryBySubmission: decodeMap(conversation.lastAssistantEntryBySubmission),
-						attemptScopedRecordIds: decodeMap(conversation.attemptScopedRecordIds),
-					} as unknown as ReducedConversationState,
-				];
-			}),
-		),
-	} as ReducedInstanceState;
-	if (typeof state.recordsThroughOffset !== 'string') {
-		throw new Error('[flue] Fold checkpoint state is missing its offset.');
-	}
-	return state;
+  const parsed = JSON.parse(data) as Record<string, unknown>
+  const state = {
+    ...parsed,
+    conversationScopes: decodeMap(parsed.conversationScopes),
+    recordsById: decodeMap(parsed.recordsById),
+    state: decodeMap(parsed.state),
+    conversations: new Map(
+      entriesOf(parsed.conversations).map(([conversationId, encoded]) => {
+        const conversation = encoded as Record<string, unknown>
+        return [
+          conversationId,
+          {
+            ...conversation,
+            entries: new Map(
+              entriesOf(conversation.entries).map(([entryId, entry]) => {
+                const value = entry as { type?: string, attachmentRefs?: unknown }
+                return [
+                  entryId,
+                  value.type === 'message' && value.attachmentRefs !== undefined
+                    ? { ...value, attachmentRefs: decodeMap(value.attachmentRefs) }
+                    : value,
+                ]
+              }),
+            ),
+            inProgressMessages: new Map(
+              entriesOf(conversation.inProgressMessages).map(([messageId, encodedMessage]) => {
+                const message = encodedMessage as Record<string, unknown>
+                return [
+                  messageId,
+                  {
+                    ...message,
+                    blocks: decodeMap(message.blocks),
+                    blockIndexes: new Set(arrayOf(message.blockIndexes)),
+                  },
+                ]
+              }),
+            ),
+            toolOutcomes: decodeMap(conversation.toolOutcomes),
+            childConversations: decodeMap(conversation.childConversations),
+            responseMetadata: decodeMap(conversation.responseMetadata),
+            responseDataParts: decodeMap(conversation.responseDataParts),
+            lastAssistantEntryBySubmission: decodeMap(conversation.lastAssistantEntryBySubmission),
+            attemptScopedRecordIds: decodeMap(conversation.attemptScopedRecordIds),
+          } as unknown as ReducedConversationState,
+        ]
+      }),
+    ),
+  } as ReducedInstanceState
+  if (typeof state.recordsThroughOffset !== 'string') {
+    throw new Error('[flue] Fold checkpoint state is missing its offset.')
+  }
+  return state
 }
 
 function entriesOf(value: unknown): EncodedEntries {
-	if (!Array.isArray(value) || value.some((entry) => !Array.isArray(entry) || entry.length !== 2)) {
-		throw new Error('[flue] Fold checkpoint state container is not an entry array.');
-	}
-	return value as EncodedEntries;
+  if (!Array.isArray(value) || value.some(entry => !Array.isArray(entry) || entry.length !== 2)) {
+    throw new Error('[flue] Fold checkpoint state container is not an entry array.')
+  }
+  return value as EncodedEntries
 }
 
 function arrayOf(value: unknown): unknown[] {
-	if (!Array.isArray(value)) {
-		throw new Error('[flue] Fold checkpoint state container is not an array.');
-	}
-	return value;
+  if (!Array.isArray(value)) {
+    throw new Error('[flue] Fold checkpoint state container is not an array.')
+  }
+  return value
 }
 
 function decodeMap<V = unknown>(value: unknown): Map<string, V> {
-	return new Map(entriesOf(value) as Array<[string, V]>);
+  return new Map(entriesOf(value) as Array<[string, V]>)
 }
 
-const warnedPaths = new Set<string>();
+const warnedPaths = new Set<string>()
 
 function warnFoldCheckpoint(path: string, message: string): void {
-	if (warnedPaths.has(path)) return;
-	warnedPaths.add(path);
-	console.warn(`[flue] Conversation fold checkpoint for "${path}" ${message}.`);
+  if (warnedPaths.has(path)) { return }
+  warnedPaths.add(path)
+  console.warn(`[flue] Conversation fold checkpoint for "${path}" ${message}.`)
 }
 
 /**
@@ -174,86 +174,88 @@ function warnFoldCheckpoint(path: string, message: string): void {
  * state's `recordsThroughOffset` says where to start.
  */
 export async function seedReducedConversationState(
-	store: ConversationStreamStore,
-	path: string,
-	atOrBefore?: string,
+  store: ConversationStreamStore,
+  path: string,
+  atOrBefore?: string,
 ): Promise<ReducedInstanceState> {
-	if (!store.getFoldCheckpoint) return createReducedInstanceState();
-	try {
-		const checkpoint = await store.getFoldCheckpoint(
-			path,
-			atOrBefore === undefined ? undefined : { atOrBefore },
-		);
-		if (!checkpoint) return createReducedInstanceState();
-		if (checkpoint.formatVersion !== REDUCED_STATE_FORMAT) {
-			warnFoldCheckpoint(
-				path,
-				`has format ${checkpoint.formatVersion}, runtime expects ${REDUCED_STATE_FORMAT} — folding from the origin instead`,
-			);
-			return createReducedInstanceState();
-		}
-		if (atOrBefore !== undefined && parseOffset(checkpoint.offset) > parseOffset(atOrBefore)) {
-			// Defensive against a store that ignored the bound.
-			return createReducedInstanceState();
-		}
-		const meta = await store.getMeta(path);
-		if (!meta || meta.incarnation !== checkpoint.incarnation) {
-			warnFoldCheckpoint(
-				path,
-				'was cut from another stream incarnation — folding from the origin instead',
-			);
-			return createReducedInstanceState();
-		}
-		if (parseOffset(checkpoint.offset) > parseOffset(meta.nextOffset)) {
-			// The frontier rule: a checkpoint is a lower bound on knowledge,
-			// never an authority on the head. Ahead-of-head means the log was
-			// truncated or restored from a backup — the checkpoint must not win.
-			warnFoldCheckpoint(path, 'is ahead of the stream head — folding from the origin instead');
-			return createReducedInstanceState();
-		}
-		const state = decodeReducedInstanceState(checkpoint.data);
-		if (state.recordsThroughOffset !== checkpoint.offset) {
-			warnFoldCheckpoint(
-				path,
-				'disagrees with its own recorded offset — folding from the origin instead',
-			);
-			return createReducedInstanceState();
-		}
-		return state;
-	} catch (error) {
-		warnFoldCheckpoint(
-			path,
-			`could not be read (${error instanceof Error ? error.message : String(error)}) — folding from the origin instead`,
-		);
-		return createReducedInstanceState();
-	}
+  if (!store.getFoldCheckpoint) { return createReducedInstanceState() }
+  try {
+    const checkpoint = await store.getFoldCheckpoint(
+      path,
+      atOrBefore === undefined ? undefined : { atOrBefore },
+    )
+    if (!checkpoint) { return createReducedInstanceState() }
+    if (checkpoint.formatVersion !== REDUCED_STATE_FORMAT) {
+      warnFoldCheckpoint(
+        path,
+        `has format ${checkpoint.formatVersion}, runtime expects ${REDUCED_STATE_FORMAT} — folding from the origin instead`,
+      )
+      return createReducedInstanceState()
+    }
+    if (atOrBefore !== undefined && parseOffset(checkpoint.offset) > parseOffset(atOrBefore)) {
+      // Defensive against a store that ignored the bound.
+      return createReducedInstanceState()
+    }
+    const meta = await store.getMeta(path)
+    if (!meta || meta.incarnation !== checkpoint.incarnation) {
+      warnFoldCheckpoint(
+        path,
+        'was cut from another stream incarnation — folding from the origin instead',
+      )
+      return createReducedInstanceState()
+    }
+    if (parseOffset(checkpoint.offset) > parseOffset(meta.nextOffset)) {
+      // The frontier rule: a checkpoint is a lower bound on knowledge,
+      // never an authority on the head. Ahead-of-head means the log was
+      // truncated or restored from a backup — the checkpoint must not win.
+      warnFoldCheckpoint(path, 'is ahead of the stream head — folding from the origin instead')
+      return createReducedInstanceState()
+    }
+    const state = decodeReducedInstanceState(checkpoint.data)
+    if (state.recordsThroughOffset !== checkpoint.offset) {
+      warnFoldCheckpoint(
+        path,
+        'disagrees with its own recorded offset — folding from the origin instead',
+      )
+      return createReducedInstanceState()
+    }
+    return state
+  }
+  catch (error) {
+    warnFoldCheckpoint(
+      path,
+      `could not be read (${error instanceof Error ? error.message : String(error)}) — folding from the origin instead`,
+    )
+    return createReducedInstanceState()
+  }
 }
 
 /** Encode and store one head checkpoint; failures warn once and never throw. */
 export function writeFoldCheckpoint(
-	store: ConversationStreamStore,
-	path: string,
-	state: ReducedInstanceState,
-	incarnation: string,
+  store: ConversationStreamStore,
+  path: string,
+  state: ReducedInstanceState,
+  incarnation: string,
 ): void {
-	if (!store.putFoldCheckpoint) return;
-	try {
-		const checkpoint: ConversationFoldCheckpoint = {
-			offset: state.recordsThroughOffset,
-			incarnation,
-			formatVersion: REDUCED_STATE_FORMAT,
-			data: encodeReducedInstanceState(state),
-		};
-		void store.putFoldCheckpoint(path, checkpoint).catch((error: unknown) => {
-			warnFoldCheckpoint(
-				path,
-				`could not be written (${error instanceof Error ? error.message : String(error)})`,
-			);
-		});
-	} catch (error) {
-		warnFoldCheckpoint(
-			path,
-			`could not be encoded (${error instanceof Error ? error.message : String(error)})`,
-		);
-	}
+  if (!store.putFoldCheckpoint) { return }
+  try {
+    const checkpoint: ConversationFoldCheckpoint = {
+      offset: state.recordsThroughOffset,
+      incarnation,
+      formatVersion: REDUCED_STATE_FORMAT,
+      data: encodeReducedInstanceState(state),
+    }
+    void store.putFoldCheckpoint(path, checkpoint).catch((error: unknown) => {
+      warnFoldCheckpoint(
+        path,
+        `could not be written (${error instanceof Error ? error.message : String(error)})`,
+      )
+    })
+  }
+  catch (error) {
+    warnFoldCheckpoint(
+      path,
+      `could not be encoded (${error instanceof Error ? error.message : String(error)})`,
+    )
+  }
 }

@@ -17,11 +17,11 @@
  * `server.mjs`. In dev, the resolver marks its resolutions `external` so the
  * SSR module runner imports the canonical files natively.
  */
-import * as fs from 'node:fs';
-import { createRequire } from 'node:module';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { Plugin } from 'vite';
+import * as fs from 'node:fs'
+import { createRequire } from 'node:module'
+import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { Plugin } from 'vite'
 
 /**
  * Externalize the user's direct deps (bare name + subpath wildcard) in the
@@ -29,32 +29,33 @@ import type { Plugin } from 'vite';
  * generated entry even when the user lists them.
  */
 export function getUserExternals(root: string): string[] {
-	const pkgPath = findPackageJson(root);
-	if (!pkgPath) return [];
+  const pkgPath = findPackageJson(root)
+  if (!pkgPath) { return [] }
 
-	try {
-		const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-		const bundledGeneratedEntryDependencies = new Set(['@flue/runtime', 'debug']);
-		const deps = Object.keys({
-			...pkg.dependencies,
-			...pkg.devDependencies,
-			...pkg.peerDependencies,
-		}).filter((name) => !bundledGeneratedEntryDependencies.has(name));
-		return deps.flatMap((name) => [name, `${name}/*`]);
-	} catch {
-		return [];
-	}
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+    const bundledGeneratedEntryDependencies = new Set(['@flue/runtime', 'debug'])
+    const deps = Object.keys({
+      ...pkg.dependencies,
+      ...pkg.devDependencies,
+      ...pkg.peerDependencies,
+    }).filter(name => !bundledGeneratedEntryDependencies.has(name))
+    return deps.flatMap(name => [name, `${name}/*`])
+  }
+  catch {
+    return []
+  }
 }
 
 function findPackageJson(startDir: string): string | undefined {
-	let dir = path.resolve(startDir);
-	while (true) {
-		const candidate = path.join(dir, 'package.json');
-		if (fs.existsSync(candidate)) return candidate;
-		const parent = path.dirname(dir);
-		if (parent === dir) return undefined;
-		dir = parent;
-	}
+  let dir = path.resolve(startDir)
+  while (true) {
+    const candidate = path.join(dir, 'package.json')
+    if (fs.existsSync(candidate)) { return candidate }
+    const parent = path.dirname(dir)
+    if (parent === dir) { return undefined }
+    dir = parent
+  }
 }
 
 /**
@@ -63,17 +64,17 @@ function findPackageJson(startDir: string): string | undefined {
  * known when `flue()` constructs its plugin array).
  */
 export interface DependencyResolverState {
-	/** Absolute project root; unset until the core plugin resolves config. */
-	root: string | undefined;
-	/** Mark resolutions external (dev SSR) instead of bundling them (build). */
-	external: boolean;
-	/**
-	 * Restrict resolution to these importers. `@flue/runtime`(/*),
-	 * `@hono/node-server`, and `debug` are always canonicalized regardless of
-	 * importer, because a second runtime instance anywhere in the graph breaks
-	 * the module-scoped registries.
-	 */
-	importers: readonly string[] | undefined;
+  /** Absolute project root; unset until the core plugin resolves config. */
+  root: string | undefined
+  /** Mark resolutions external (dev SSR) instead of bundling them (build). */
+  external: boolean
+  /**
+   * Restrict resolution to these importers. `@flue/runtime`(/*),
+   * `@hono/node-server`, and `debug` are always canonicalized regardless of
+   * importer, because a second runtime instance anywhere in the graph breaks
+   * the module-scoped registries.
+   */
+  importers: readonly string[] | undefined
 }
 
 /**
@@ -82,84 +83,83 @@ export interface DependencyResolverState {
  * CLI's `viteGeneratedEntryDependencyResolver`.
  */
 export function flueDependencyResolverPlugin(state: DependencyResolverState): Plugin {
-	let resolvers: NodeJS.Require[] | undefined;
-	let resolversRoot: string | undefined;
-	const getResolvers = (root: string): NodeJS.Require[] => {
-		if (!resolvers || resolversRoot !== root) {
-			resolversRoot = root;
-			resolvers = [...collectNodePaths(root)].map((nodePath) =>
-				createRequire(path.join(nodePath, '__flue_vite_resolve__.mjs')),
-			);
-		}
-		return resolvers;
-	};
-	return {
-		name: 'flue-generated-entry-dependency-resolver',
-		enforce: 'pre',
-		resolveId(source: string, importer?: string) {
-			const root = state.root;
-			if (!root) return null;
-			if (
-				state.importers &&
-				(!importer || !state.importers.includes(importer)) &&
-				source !== '@flue/runtime' &&
-				!source.startsWith('@flue/runtime/') &&
-				source !== '@hono/node-server' &&
-				source !== 'debug'
-			)
-				return null;
-			if (
-				source.startsWith('.') ||
-				source.startsWith('/') ||
-				source.startsWith('\0') ||
-				source.startsWith('virtual:') ||
-				source.startsWith('node:')
-			)
-				return null;
-			if (source === '@hono/node-server' && state.external) {
-				for (const nodePath of collectNodePaths(root)) {
-					const packageDir = path.join(nodePath, '@hono', 'node-server');
-					if (fs.existsSync(packageDir)) {
-						return { id: path.join(packageDir, 'dist', 'index.mjs'), external: true };
-					}
-				}
-			}
-			for (const resolve of getResolvers(root)) {
-				try {
-					const id = resolve.resolve(source);
-					return state.external ? { id, external: true } : id;
-				} catch {}
-			}
-			return null;
-		},
-	};
+  let resolvers: NodeJS.Require[] | undefined
+  let resolversRoot: string | undefined
+  const getResolvers = (root: string): NodeJS.Require[] => {
+    if (!resolvers || resolversRoot !== root) {
+      resolversRoot = root
+      resolvers = [...collectNodePaths(root)].map(nodePath =>
+        createRequire(path.join(nodePath, '__flue_vite_resolve__.mjs')),
+      )
+    }
+    return resolvers
+  }
+  return {
+    name: 'flue-generated-entry-dependency-resolver',
+    enforce: 'pre',
+    resolveId(source: string, importer?: string) {
+      const root = state.root
+      if (!root) { return null }
+      if (
+        state.importers &&
+        (!importer || !state.importers.includes(importer)) &&
+        source !== '@flue/runtime' &&
+        !source.startsWith('@flue/runtime/') &&
+        source !== '@hono/node-server' &&
+        source !== 'debug'
+      ) { return null }
+      if (
+        source.startsWith('.') ||
+        source.startsWith('/') ||
+        source.startsWith('\0') ||
+        source.startsWith('virtual:') ||
+        source.startsWith('node:')
+      ) { return null }
+      if (source === '@hono/node-server' && state.external) {
+        for (const nodePath of collectNodePaths(root)) {
+          const packageDir = path.join(nodePath, '@hono', 'node-server')
+          if (fs.existsSync(packageDir)) {
+            return { id: path.join(packageDir, 'dist', 'index.mjs'), external: true }
+          }
+        }
+      }
+      for (const resolve of getResolvers(root)) {
+        try {
+          const id = resolve.resolve(source)
+          return state.external ? { id, external: true } : id
+        }
+        catch {}
+      }
+      return null
+    },
+  }
 }
 
 function collectNodePaths(root: string): Set<string> {
-	const nodePathsSet = new Set<string>();
-	// Walk up from the project root (user's deps), this package's own location
-	// (so workspace-linked installs reach `@flue/vite`'s helpers), and
-	// `@flue/runtime`'s install location as resolved from the project. The
-	// latter is what surfaces the runtime deps (`@hono/node-server`, `hono`,
-	// `pi-ai`, etc.) that the generated `server.mjs` imports — `@flue/runtime`
-	// is the package that lists them, so the Vite build must be able to reach
-	// its `node_modules/` subtree.
-	const seeds = [root, getPackageDir()];
-	const runtimeDir = resolveRuntimeDir(root);
-	if (runtimeDir) seeds.push(runtimeDir);
-	for (const startDir of seeds) {
-		let dir = startDir;
-		while (dir !== path.dirname(dir)) {
-			const nm = path.join(dir, 'node_modules');
-			if (fs.existsSync(nm)) nodePathsSet.add(nm);
-			dir = path.dirname(dir);
-		}
-	}
-	return nodePathsSet;
+  const nodePathsSet = new Set<string>()
+  // Walk up from the project root (user's deps), this package's own location
+  // (so workspace-linked installs reach `@flue/vite`'s helpers), and
+  // `@flue/runtime`'s install location as resolved from the project. The
+  // latter is what surfaces the runtime deps (`@hono/node-server`, `hono`,
+  // `pi-ai`, etc.) that the generated `server.mjs` imports — `@flue/runtime`
+  // is the package that lists them, so the Vite build must be able to reach
+  // its `node_modules/` subtree.
+  const seeds = [root, getPackageDir()]
+  const runtimeDir = resolveRuntimeDir(root)
+  if (runtimeDir) { seeds.push(runtimeDir) }
+  for (const startDir of seeds) {
+    let dir = startDir
+    while (dir !== path.dirname(dir)) {
+      const nm = path.join(dir, 'node_modules')
+      if (fs.existsSync(nm)) { nodePathsSet.add(nm) }
+      dir = path.dirname(dir)
+    }
+  }
+  return nodePathsSet
 }
 
 function getPackageDir(): string {
-	return path.dirname(fileURLToPath(import.meta.url));
+  return path.dirname(fileURLToPath(import.meta.url))
 }
 
 /**
@@ -173,11 +173,11 @@ function getPackageDir(): string {
  * `@flue/runtime` installed yet.
  */
 function resolveRuntimeDir(root: string): string | undefined {
-	let dir = root;
-	while (dir !== path.dirname(dir)) {
-		const candidate = path.join(dir, 'node_modules', '@flue', 'runtime');
-		if (fs.existsSync(candidate)) return candidate;
-		dir = path.dirname(dir);
-	}
-	return undefined;
+  let dir = root
+  while (dir !== path.dirname(dir)) {
+    const candidate = path.join(dir, 'node_modules', '@flue', 'runtime')
+    if (fs.existsSync(candidate)) { return candidate }
+    dir = path.dirname(dir)
+  }
+  return undefined
 }

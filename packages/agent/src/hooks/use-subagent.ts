@@ -1,6 +1,6 @@
-import { assertThinkingLevel } from '../agent-tuning.ts';
-import type { SubagentDefinition } from '../types.ts';
-import { requireRenderFrame } from './frame.ts';
+import { assertThinkingLevel } from '../agent-tuning.ts'
+import type { SubagentDefinition } from '../types.ts'
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Validate a subagent definition. Shared between {@link defineSubagent}
@@ -8,33 +8,33 @@ import { requireRenderFrame } from './frame.ts';
  * can reach the mount site without passing through the helper.
  */
 function assertSubagentDefinition(
-	subagent: unknown,
-	source: string,
+  subagent: unknown,
+  source: string,
 ): asserts subagent is SubagentDefinition {
-	if (!subagent || typeof subagent !== 'object' || Array.isArray(subagent)) {
-		throw new Error(`[flue] ${source} requires an options object: { name, description, agent }.`);
-	}
-	const { name, description, agent, model, thinkingLevel } =
-		subagent as Partial<SubagentDefinition>;
-	if (typeof name !== 'string' || name.trim().length === 0) {
-		throw new Error(`[flue] ${source} name must be a non-empty string.`);
-	}
-	if (typeof description !== 'string' || description.trim().length === 0) {
-		throw new Error(
-			`[flue] ${source} "${name}" needs a non-empty description — it is the catalog line the model uses to decide when to delegate.`,
-		);
-	}
-	if (typeof agent !== 'function') {
-		throw new Error(
-			`[flue] ${source} "${name}" needs \`agent\`: the agent function that defines the delegate (rendered when the model delegates to it).`,
-		);
-	}
-	if (model !== undefined && (typeof model !== 'string' || model.trim().length === 0)) {
-		throw new Error(`[flue] ${source} "${name}" model must be a non-empty string.`);
-	}
-	// Same validation useModel() applies — a typo'd level must fail at
-	// authoring time, not deep inside the first delegated task run.
-	assertThinkingLevel(thinkingLevel, `${source} "${name}"`);
+  if (!subagent || typeof subagent !== 'object' || Array.isArray(subagent)) {
+    throw new Error(`[flue] ${source} requires an options object: { name, description, agent }.`)
+  }
+  const { name, description, agent, model, thinkingLevel } =
+    subagent as Partial<SubagentDefinition>
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error(`[flue] ${source} name must be a non-empty string.`)
+  }
+  if (typeof description !== 'string' || description.trim().length === 0) {
+    throw new Error(
+      `[flue] ${source} "${name}" needs a non-empty description — it is the catalog line the model uses to decide when to delegate.`,
+    )
+  }
+  if (typeof agent !== 'function') {
+    throw new Error(
+      `[flue] ${source} "${name}" needs \`agent\`: the agent function that defines the delegate (rendered when the model delegates to it).`,
+    )
+  }
+  if (model !== undefined && (typeof model !== 'string' || model.trim().length === 0)) {
+    throw new Error(`[flue] ${source} "${name}" model must be a non-empty string.`)
+  }
+  // Same validation useModel() applies — a typo'd level must fail at
+  // authoring time, not deep inside the first delegated task run.
+  assertThinkingLevel(thinkingLevel, `${source} "${name}"`)
 }
 
 /**
@@ -61,14 +61,14 @@ function assertSubagentDefinition(
  * `useSubagent({ ...issueClassifier, model: 'anthropic/claude-haiku-4-5' })`.
  */
 export function defineSubagent(definition: SubagentDefinition): SubagentDefinition {
-	assertSubagentDefinition(definition, 'defineSubagent()');
-	return Object.freeze({
-		name: definition.name,
-		description: definition.description,
-		agent: definition.agent,
-		...(definition.model !== undefined ? { model: definition.model } : {}),
-		...(definition.thinkingLevel !== undefined ? { thinkingLevel: definition.thinkingLevel } : {}),
-	});
+  assertSubagentDefinition(definition, 'defineSubagent()')
+  return Object.freeze({
+    name: definition.name,
+    description: definition.description,
+    agent: definition.agent,
+    ...(definition.model !== undefined ? { model: definition.model } : {}),
+    ...(definition.thinkingLevel !== undefined ? { thinkingLevel: definition.thinkingLevel } : {}),
+  })
 }
 
 /**
@@ -78,7 +78,7 @@ export function defineSubagent(definition: SubagentDefinition): SubagentDefiniti
  * own tools, and the parent's model — nothing else.
  */
 function FlueGeneralAgent(): undefined {
-	return undefined;
+  return undefined
 }
 
 /**
@@ -94,12 +94,12 @@ function FlueGeneralAgent(): undefined {
  * own delegates under your own names.
  */
 export const GeneralSubagent: SubagentDefinition = defineSubagent({
-	name: 'flue-general',
-	description:
+  name: 'flue-general',
+  description:
 		'General-purpose agent for independent research, file exploration, and parallel work. ' +
 		'Runs with a fresh context and the workspace tools; give it complete instructions in the prompt.',
-	agent: FlueGeneralAgent,
-});
+  agent: FlueGeneralAgent,
+})
 
 /**
  * Declare a delegate the model can hand focused work to via the framework's
@@ -136,19 +136,19 @@ export const GeneralSubagent: SubagentDefinition = defineSubagent({
  * environment). Duplicate delegate names in one render fail fast.
  */
 export function useSubagent(subagent: SubagentDefinition): void {
-	const frame = requireRenderFrame('useSubagent');
-	assertSubagentDefinition(subagent, 'useSubagent()');
-	const { name, description, agent, model, thinkingLevel } = subagent;
-	if (frame.subagents.some((declared) => declared.name === name)) {
-		throw new Error(
-			`[flue] useSubagent() declared the subagent name "${name}" twice in one render. Each delegate declares once; share it from a single custom hook.`,
-		);
-	}
-	frame.subagents.push({
-		name,
-		description,
-		agent,
-		...(model !== undefined ? { model } : {}),
-		...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
-	});
+  const frame = requireRenderFrame('useSubagent')
+  assertSubagentDefinition(subagent, 'useSubagent()')
+  const { name, description, agent, model, thinkingLevel } = subagent
+  if (frame.subagents.some(declared => declared.name === name)) {
+    throw new Error(
+      `[flue] useSubagent() declared the subagent name "${name}" twice in one render. Each delegate declares once; share it from a single custom hook.`,
+    )
+  }
+  frame.subagents.push({
+    name,
+    description,
+    agent,
+    ...(model !== undefined ? { model } : {}),
+    ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+  })
 }

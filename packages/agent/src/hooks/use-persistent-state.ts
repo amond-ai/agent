@@ -1,5 +1,6 @@
-import { type HookStateStore, isRendering, requireRenderFrame } from './frame.ts';
-import { normalizeJsonValue } from './json-value.ts';
+import { isRendering, requireRenderFrame } from './frame.ts'
+import type { HookStateStore } from './frame.ts'
+import { normalizeJsonValue } from './json-value.ts'
 
 /**
  * Durable agent state: an API over the record log of the agent instance.
@@ -52,66 +53,66 @@ import { normalizeJsonValue } from './json-value.ts';
  *   (e.g. a `usePersistentStateWithSchema(name, schema, defaultValue)` that parses
  *   reads and validates writes).
  */
-export function usePersistentState<T>(name: string, defaultValue: T): [T, StateSetter<T>];
+export function usePersistentState<T>(name: string, defaultValue: T): [T, StateSetter<T>]
 export function usePersistentState<T = unknown>(
-	name: string,
-): [T | undefined, StateSetter<T | undefined>];
+  name: string,
+): [T | undefined, StateSetter<T | undefined>]
 export function usePersistentState(
-	name: string,
-	defaultValue?: unknown,
+  name: string,
+  defaultValue?: unknown,
 ): [unknown, StateSetter<unknown>] {
-	const frame = requireRenderFrame('usePersistentState');
-	if (frame.kind === 'subagent') {
-		throw new Error(
-			'[flue] usePersistentState() is not available in a subagent render. Durable state is scoped to the agent instance; delegates run detached tasks with no state channel. Pass what the delegate needs through the task prompt instead.',
-		);
-	}
-	if (typeof name !== 'string' || name.length === 0) {
-		throw new Error(
-			'[flue] usePersistentState(name, defaultValue?) takes the state name as its first argument — a non-empty string.',
-		);
-	}
-	if (frame.stateNames.has(name)) {
-		throw new Error(
-			`[flue] Duplicate usePersistentState name "${name}" in one render. State names identify a value across renders and must be unique.`,
-		);
-	}
-	frame.stateNames.add(name);
+  const frame = requireRenderFrame('usePersistentState')
+  if (frame.kind === 'subagent') {
+    throw new Error(
+      '[flue] usePersistentState() is not available in a subagent render. Durable state is scoped to the agent instance; delegates run detached tasks with no state channel. Pass what the delegate needs through the task prompt instead.',
+    )
+  }
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error(
+      '[flue] usePersistentState(name, defaultValue?) takes the state name as its first argument — a non-empty string.',
+    )
+  }
+  if (frame.stateNames.has(name)) {
+    throw new Error(
+      `[flue] Duplicate usePersistentState name "${name}" in one render. State names identify a value across renders and must be unique.`,
+    )
+  }
+  frame.stateNames.add(name)
 
-	const store = frame.state?.store;
-	const persisted = readPersisted(name, frame.state?.snapshot, store);
-	const value = persisted ? persisted.value : defaultValue;
+  const store = frame.state?.store
+  const persisted = readPersisted(name, frame.state?.snapshot, store)
+  const value = persisted ? persisted.value : defaultValue
 
-	const setValue: StateSetter<unknown> = (next) => {
-		if (isRendering()) {
-			throw new Error(
-				`[flue] State "${name}" was written during render. Renders are pure reads of the record stream — write from tool run functions or other runtime callbacks, and use the default value for the initial value.`,
-			);
-		}
-		if (!store) {
-			throw new Error(
-				`[flue] State "${name}" has no durable runtime behind this render, so writes are unavailable.`,
-			);
-		}
-		// An updater's `previous` resolves through the buffer at call time —
-		// read-your-writes within the attempt — not the render snapshot the
-		// closure was born with. The boxed `current` keeps persisted null/false
-		// from falling back to the default.
-		if (typeof next === 'function') {
-			const current = store.current(name);
-			next = (next as (previous: unknown) => unknown)(current ? current.value : defaultValue);
-		}
-		store.write(name, normalizeStateValue(name, next));
-	};
-	return [value, setValue];
+  const setValue: StateSetter<unknown> = (next) => {
+    if (isRendering()) {
+      throw new Error(
+        `[flue] State "${name}" was written during render. Renders are pure reads of the record stream — write from tool run functions or other runtime callbacks, and use the default value for the initial value.`,
+      )
+    }
+    if (!store) {
+      throw new Error(
+        `[flue] State "${name}" has no durable runtime behind this render, so writes are unavailable.`,
+      )
+    }
+    // An updater's `previous` resolves through the buffer at call time —
+    // read-your-writes within the attempt — not the render snapshot the
+    // closure was born with. The boxed `current` keeps persisted null/false
+    // from falling back to the default.
+    if (typeof next === 'function') {
+      const current = store.current(name)
+      next = (next as (previous: unknown) => unknown)(current ? current.value : defaultValue)
+    }
+    store.write(name, normalizeStateValue(name, next))
+  }
+  return [value, setValue]
 }
 
-export type StateSetter<T> = (value: T | ((previous: T) => T)) => void;
+export type StateSetter<T> = (value: T | ((previous: T) => T)) => void
 
 /** One durable write, in call order, as drained by the session for appending. */
 export interface HookStateWrite {
-	name: string;
-	value: unknown;
+  name: string
+  value: unknown
 }
 
 /**
@@ -122,50 +123,50 @@ export interface HookStateWrite {
  * one record" holds no matter how often a setter is called.
  */
 export interface HookStateBuffer extends HookStateStore {
-	drain(): HookStateWrite[];
+  drain(): HookStateWrite[]
 }
 
 export function createHookStateBuffer(snapshot: ReadonlyMap<string, unknown>): HookStateBuffer {
-	const overlay = new Map<string, unknown>();
-	let pending: HookStateWrite[] = [];
-	const currentValue = (name: string): { value: unknown } | undefined => {
-		if (overlay.has(name)) return { value: overlay.get(name) };
-		if (snapshot.has(name)) return { value: snapshot.get(name) };
-		return undefined;
-	};
-	return {
-		current: currentValue,
-		write(name, value) {
-			const current = currentValue(name);
-			if (current && JSON.stringify(current.value) === JSON.stringify(value)) return;
-			pending.push({ name, value });
-			overlay.set(name, value);
-		},
-		drain() {
-			const drained = pending;
-			pending = [];
-			return drained;
-		},
-	};
+  const overlay = new Map<string, unknown>()
+  let pending: HookStateWrite[] = []
+  const currentValue = (name: string): { value: unknown } | undefined => {
+    if (overlay.has(name)) { return { value: overlay.get(name) } }
+    if (snapshot.has(name)) { return { value: snapshot.get(name) } }
+    return undefined
+  }
+  return {
+    current: currentValue,
+    write(name, value) {
+      const current = currentValue(name)
+      if (current && JSON.stringify(current.value) === JSON.stringify(value)) { return }
+      pending.push({ name, value })
+      overlay.set(name, value)
+    },
+    drain() {
+      const drained = pending
+      pending = []
+      return drained
+    },
+  }
 }
 
 function readPersisted(
-	name: string,
-	snapshot: ReadonlyMap<string, unknown> | undefined,
-	store: HookStateStore | undefined,
+  name: string,
+  snapshot: ReadonlyMap<string, unknown> | undefined,
+  store: HookStateStore | undefined,
 ): { value: unknown } | undefined {
-	// The store's view wins: it overlays writes made since the snapshot was
-	// taken (same submission), so a re-render would read its own writes.
-	const current = store?.current(name);
-	if (current) return current;
-	if (snapshot?.has(name)) return { value: snapshot.get(name) };
-	return undefined;
+  // The store's view wins: it overlays writes made since the snapshot was
+  // taken (same submission), so a re-render would read its own writes.
+  const current = store?.current(name)
+  if (current) { return current }
+  if (snapshot?.has(name)) { return { value: snapshot.get(name) } }
+  return undefined
 }
 
 function normalizeStateValue(name: string, value: unknown): unknown {
-	return normalizeJsonValue(value, {
-		label: 'State',
-		name,
-		undefinedMessage: `[flue] State "${name}" cannot be set to undefined. State values are JSON; there is no unset.`,
-	});
+  return normalizeJsonValue(value, {
+    label: 'State',
+    name,
+    undefinedMessage: `[flue] State "${name}" cannot be set to undefined. State values are JSON; there is no unset.`,
+  })
 }

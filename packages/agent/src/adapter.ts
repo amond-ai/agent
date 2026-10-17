@@ -30,115 +30,115 @@
 // ─── Store interfaces and vocabulary types ──────────────────────────────────
 
 export type {
-	AgentDispatchAdmission,
-	AgentSubmission,
-	AgentSubmissionStore,
-	PersistenceAdapter,
-	PersistenceStores,
-	SubmissionAttemptRef,
-	SubmissionClaimRef,
-	SubmissionDurability,
-	SubmissionSettlementObligation,
-} from './agent-execution-store.ts';
+  AgentDispatchAdmission,
+  AgentSubmission,
+  AgentSubmissionStore,
+  PersistenceAdapter,
+  PersistenceStores,
+  SubmissionAttemptRef,
+  SubmissionClaimRef,
+  SubmissionDurability,
+  SubmissionSettlementObligation,
+} from './agent-execution-store.ts'
 
 export {
-	DURABILITY_DEFAULT_MAX_ATTEMPTS,
-	DURABILITY_DEFAULT_TIMEOUT_MS,
-	LEASE_DURATION_MS,
-} from './agent-execution-store.ts';
+  DURABILITY_DEFAULT_MAX_ATTEMPTS,
+  DURABILITY_DEFAULT_TIMEOUT_MS,
+  LEASE_DURATION_MS,
+} from './agent-execution-store.ts'
 
 // ─── Submission input types ─────────────────────────────────────────────────
 
-export type { AgentSubmissionInput } from './runtime/agent-submissions.ts';
+export type { AgentSubmissionInput } from './runtime/agent-submissions.ts'
 
-export { createDispatchAgentSubmissionInput } from './runtime/agent-submissions.ts';
+export { createDispatchAgentSubmissionInput } from './runtime/agent-submissions.ts'
 
-export type { DispatchInput } from './runtime/dispatch-queue.ts';
+export type { DispatchInput } from './runtime/dispatch-queue.ts'
 
 // ─── Adapter helper functions ───────────────────────────────────────────────
 
 export type {
-	SubmissionAdmissionBackend,
-	SubmissionAdmissionRow,
-	SubmissionInsertRow,
-	SubmissionPayloadContext,
-} from './adapter-helpers.ts';
+  SubmissionAdmissionBackend,
+  SubmissionAdmissionRow,
+  SubmissionInsertRow,
+  SubmissionPayloadContext,
+} from './adapter-helpers.ts'
 export {
-	admitSubmissionWithBackend,
-	clampLimit,
-	isSubmissionPayload,
-	parseAcceptedAt,
-	SUBMISSION_HARNESS_NAME,
-	SUBMISSION_SESSION_NAME,
-} from './adapter-helpers.ts';
+  admitSubmissionWithBackend,
+  clampLimit,
+  isSubmissionPayload,
+  parseAcceptedAt,
+  SUBMISSION_HARNESS_NAME,
+  SUBMISSION_SESSION_NAME,
+} from './adapter-helpers.ts'
 
-export { createSessionStorageKey, parseSessionStorageKey } from './session-identity.ts';
+export { createSessionStorageKey, parseSessionStorageKey } from './session-identity.ts'
 
 // ─── Format versioning ──────────────────────────────────────────────────────
 
 export {
-	AttachmentConflictError,
-	AttachmentIntegrityError,
-	ConversationStreamStoreError,
-	PersistedFormatVersionError,
-} from './errors.ts';
-export { assertSupportedFlueFormatVersion, FLUE_FORMAT_VERSION } from './format-version.ts';
+  AttachmentConflictError,
+  AttachmentIntegrityError,
+  ConversationStreamStoreError,
+  PersistedFormatVersionError,
+} from './errors.ts'
+export { assertSupportedFlueFormatVersion, FLUE_FORMAT_VERSION } from './format-version.ts'
 
 // ─── Submission payload chunking ─────────────────────────────────────────────
 
-export type { SubmissionChunkRow, SubmissionChunkStore } from './persisted-image-placement.ts';
+export type { SubmissionChunkRow, SubmissionChunkStore } from './persisted-image-placement.ts'
 export {
-	hydratePersistedSubmissionAttachments,
-	matchesPersistedSubmissionAttachments,
-	prepareSubmissionAttachments,
-	sameSubmissionChunks,
-} from './persisted-image-placement.ts';
+  hydratePersistedSubmissionAttachments,
+  matchesPersistedSubmissionAttachments,
+  prepareSubmissionAttachments,
+  sameSubmissionChunks,
+} from './persisted-image-placement.ts'
 
 // ─── Canonical conversation stream store ────────────────────────────────────
 
 export type {
-	AttachmentRef,
-	ConversationRecord,
-	SubmissionSettledRecord,
-} from './conversation-records.ts';
+  AttachmentRef,
+  ConversationRecord,
+  SubmissionSettledRecord,
+} from './conversation-records.ts'
 export type {
-	AttachmentStore,
-	GetAttachmentInput,
-	PutAttachmentInput,
-	StoredAttachment,
-} from './runtime/attachment-store.ts';
+  AttachmentStore,
+  GetAttachmentInput,
+  PutAttachmentInput,
+  StoredAttachment,
+} from './runtime/attachment-store.ts'
 export {
-	attachmentBytesEqual,
-	copyAttachmentBytes,
-	createAttachmentRef,
-	InMemoryAttachmentStore,
-	sameAttachmentRef,
-	verifyAttachmentBytes,
-} from './runtime/attachment-store.ts';
+  attachmentBytesEqual,
+  copyAttachmentBytes,
+  createAttachmentRef,
+  InMemoryAttachmentStore,
+  sameAttachmentRef,
+  verifyAttachmentBytes,
+} from './runtime/attachment-store.ts'
 export type {
-	ConversationFoldCheckpoint,
-	ConversationProducerClaim,
-	ConversationStreamBatch,
-	ConversationStreamIdentity,
-	ConversationStreamMeta,
-	ConversationStreamReadResult,
-	ConversationStreamStore,
-} from './runtime/conversation-stream-store.ts';
+  ConversationFoldCheckpoint,
+  ConversationProducerClaim,
+  ConversationStreamBatch,
+  ConversationStreamIdentity,
+  ConversationStreamMeta,
+  ConversationStreamReadResult,
+  ConversationStreamStore,
+} from './runtime/conversation-stream-store.ts'
 export {
-	InMemoryConversationStreamStore,
-	StreamListenerRegistry,
-} from './runtime/conversation-stream-store.ts';
+  InMemoryConversationStreamStore,
+  StreamListenerRegistry,
+} from './runtime/conversation-stream-store.ts'
 export type {
-	SqlConversationDialect,
-	SqlConversationDialectTx,
-} from './runtime/sql-conversation-stream-store.ts';
-export { defineSqlConversationStreamStore } from './runtime/sql-conversation-stream-store.ts';
+  SqlConversationDialect,
+  SqlConversationDialectTx,
+} from './runtime/sql-conversation-stream-store.ts'
+export { defineSqlConversationStreamStore } from './runtime/sql-conversation-stream-store.ts'
 
 // ─── Stream offsets ─────────────────────────────────────────────────────────
 
 export {
-	DEFAULT_READ_LIMIT,
-	formatOffset,
-	MAX_READ_LIMIT,
-	parseOffset,
-} from './runtime/stream-offsets.ts';
+  DEFAULT_READ_LIMIT,
+  formatOffset,
+  MAX_READ_LIMIT,
+  parseOffset,
+} from './runtime/stream-offsets.ts'

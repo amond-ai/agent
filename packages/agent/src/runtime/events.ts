@@ -1,12 +1,13 @@
 /** Global, isolate-scoped subscription to live Flue runtime activity. */
 
-import { createObservation, type FlueObservationSubscriber } from '../observation.ts';
+import { createObservation } from '../observation.ts'
+import type { FlueObservationSubscriber } from '../observation.ts'
 import type {
-	FlueEvent,
-	FlueEventContext,
-	FlueEventInput,
-	FlueObservationDetail,
-} from '../types.ts';
+  FlueEvent,
+  FlueEventContext,
+  FlueEventInput,
+  FlueObservationDetail,
+} from '../types.ts'
 
 /**
  * Receives a decorated event and its originating context. Direct and
@@ -14,9 +15,9 @@ import type {
  * Subscriber failures are logged and do not halt dispatch or the originating
  * execution. Returned promises are observed for rejection but are not awaited.
  */
-export type FlueEventSubscriber = FlueObservationSubscriber;
+export type FlueEventSubscriber = FlueObservationSubscriber
 
-const subscribers = new Set<FlueObservationSubscriber>();
+const subscribers = new Set<FlueObservationSubscriber>()
 
 /**
  * Subscribe to live agent-interaction activity emitted in this isolate.
@@ -24,7 +25,7 @@ const subscribers = new Set<FlueObservationSubscriber>();
  * across processes or Cloudflare Durable Object isolates.
  *
  * Usage (typically at the top of `app.ts`):
-
+ 
  *
  *     import { observe } from '@flue/runtime';
  *
@@ -45,10 +46,10 @@ const subscribers = new Set<FlueObservationSubscriber>();
  * the callback rather than blocking emission.
  */
 export function observe(subscriber: FlueEventSubscriber): () => void {
-	subscribers.add(subscriber);
-	return () => {
-		subscribers.delete(subscriber);
-	};
+  subscribers.add(subscriber)
+  return () => {
+    subscribers.delete(subscriber)
+  }
 }
 
 /**
@@ -58,7 +59,7 @@ export function observe(subscriber: FlueEventSubscriber): () => void {
  * {@link drainGlobalEventDeliveries} — so a settlement emitted in an alarm
  * invocation's final moments isn't torn down mid-POST on Cloudflare.
  */
-const inFlightDeliveries = new Set<Promise<unknown>>();
+const inFlightDeliveries = new Set<Promise<unknown>>()
 
 /**
  * Internal: dispatch a single event to every registered subscriber.
@@ -66,20 +67,21 @@ const inFlightDeliveries = new Set<Promise<unknown>>();
  * subscribers have run.
  */
 export function dispatchGlobalEvent(
-	event: FlueEvent,
-	ctx: FlueEventContext,
-	detail?: FlueObservationDetail,
+  event: FlueEvent,
+  ctx: FlueEventContext,
+  detail?: FlueObservationDetail,
 ): void {
-	const observation = createObservation(event, detail);
-	for (const subscriber of [...subscribers]) {
-		try {
-			const delivery = Promise.resolve(subscriber(observation, ctx)).catch(reportSubscriberFailure);
-			inFlightDeliveries.add(delivery);
-			void delivery.finally(() => inFlightDeliveries.delete(delivery));
-		} catch (error) {
-			reportSubscriberFailure(error);
-		}
-	}
+  const observation = createObservation(event, detail)
+  for (const subscriber of [...subscribers]) {
+    try {
+      const delivery = Promise.resolve(subscriber(observation, ctx)).catch(reportSubscriberFailure)
+      inFlightDeliveries.add(delivery)
+      void delivery.finally(() => inFlightDeliveries.delete(delivery))
+    }
+    catch (error) {
+      reportSubscriberFailure(error)
+    }
+  }
 }
 
 /**
@@ -89,19 +91,19 @@ export function dispatchGlobalEvent(
  * nothing is pending.
  */
 export function drainGlobalEventDeliveries(): Promise<void> {
-	if (inFlightDeliveries.size === 0) return Promise.resolve();
-	return Promise.allSettled([...inFlightDeliveries]).then(() => undefined);
+  if (inFlightDeliveries.size === 0) { return Promise.resolve() }
+  return Promise.allSettled([...inFlightDeliveries]).then(() => undefined)
 }
 
 function reportSubscriberFailure(error: unknown): void {
-	console.error('[flue:observe] subscriber failed:', error);
+  console.error('[flue:observe] subscriber failed:', error)
 }
 
 /** Emit one live event onto the `observe()` stream from coordinator code. */
 export type CoordinatorEventEmitter = (
-	event: FlueEventInput,
-	detail?: FlueObservationDetail,
-) => void;
+  event: FlueEventInput,
+  detail?: FlueObservationDetail,
+) => void
 
 /**
  * Internal: a context-free event emitter for the submission coordinators —
@@ -119,41 +121,43 @@ export type CoordinatorEventEmitter = (
  * {@link dispatchGlobalEvent}; this guards the envelope stamping itself.)
  */
 export function createCoordinatorEventEmitter(scope: {
-	agentName?: string;
-	instanceId?: string;
-	env: Record<string, unknown>;
+  agentName?: string
+  instanceId?: string
+  env: Record<string, unknown>
 }): CoordinatorEventEmitter {
-	let eventIndex = 0;
-	const emit: CoordinatorEventEmitter = (event, detail) => {
-		try {
-			const decorated: FlueEvent = {
-				...event,
-				...(scope.instanceId === undefined ? {} : { instanceId: scope.instanceId }),
-				...(scope.agentName === undefined ? {} : { agentName: scope.agentName }),
-				v: 3,
-				eventIndex: eventIndex++,
-				timestamp: new Date().toISOString(),
-			};
-			dispatchGlobalEvent(decorated, ctx, detail);
-		} catch (error) {
-			try {
-				reportSubscriberFailure(error);
-			} catch {
-				// Nothing further to do — the emitter must never throw.
-			}
-		}
-	};
-	const log = (level: 'info' | 'warn' | 'error') => {
-		return (message: string, attributes?: Record<string, unknown>) => {
-			emit({ type: 'log', level, message, ...(attributes ? { attributes } : {}) });
-		};
-	};
-	const ctx: FlueEventContext = {
-		id: scope.instanceId ?? '',
-		agentName: scope.agentName,
-		env: scope.env,
-		req: undefined,
-		log: { info: log('info'), warn: log('warn'), error: log('error') },
-	};
-	return emit;
+  let eventIndex = 0
+  const emit: CoordinatorEventEmitter = (event, detail) => {
+    try {
+      const decorated: FlueEvent = {
+        ...event,
+        ...(scope.instanceId === undefined ? {} : { instanceId: scope.instanceId }),
+        ...(scope.agentName === undefined ? {} : { agentName: scope.agentName }),
+        v: 3,
+        eventIndex: eventIndex++,
+        timestamp: new Date().toISOString(),
+      }
+      dispatchGlobalEvent(decorated, ctx, detail)
+    }
+    catch (error) {
+      try {
+        reportSubscriberFailure(error)
+      }
+      catch {
+        // Nothing further to do — the emitter must never throw.
+      }
+    }
+  }
+  const log = (level: 'info' | 'warn' | 'error') => {
+    return (message: string, attributes?: Record<string, unknown>) => {
+      emit({ type: 'log', level, message, ...(attributes ? { attributes } : {}) })
+    }
+  }
+  const ctx: FlueEventContext = {
+    id: scope.instanceId ?? '',
+    agentName: scope.agentName,
+    env: scope.env,
+    req: undefined,
+    log: { info: log('info'), warn: log('warn'), error: log('error') },
+  }
+  return emit
 }

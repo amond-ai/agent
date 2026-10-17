@@ -12,33 +12,33 @@
  * full run per event.
  */
 export interface WatchQueue {
-	/** Schedule `run` behind in-flight work; coalesces with an already-queued run. */
-	schedule(run: () => Promise<void>): Promise<void>;
-	/** Resolves once all currently scheduled work has settled. Never rejects. */
-	settled(): Promise<void>;
+  /** Schedule `run` behind in-flight work; coalesces with an already-queued run. */
+  schedule(run: () => Promise<void>): Promise<void>
+  /** Resolves once all currently scheduled work has settled. Never rejects. */
+  settled(): Promise<void>
 }
 
 export function createWatchQueue(): WatchQueue {
-	let queue: Promise<void> = Promise.resolve();
-	let queued = false;
-	return {
-		schedule(run) {
-			if (queued) return queue;
-			queued = true;
-			const wrapped = async () => {
-				// Cleared at START of the run: events arriving mid-run must queue
-				// a follow-up, because this run may already have read disk.
-				queued = false;
-				await run();
-			};
-			queue = queue.then(wrapped, wrapped);
-			return queue;
-		},
-		settled() {
-			return queue.then(
-				() => undefined,
-				() => undefined,
-			);
-		},
-	};
+  let queue: Promise<void> = Promise.resolve()
+  let queued = false
+  return {
+    schedule(run) {
+      if (queued) { return queue }
+      queued = true
+      const wrapped = async () => {
+        // Cleared at START of the run: events arriving mid-run must queue
+        // a follow-up, because this run may already have read disk.
+        queued = false
+        await run()
+      }
+      queue = queue.then(wrapped, wrapped)
+      return queue
+    },
+    settled() {
+      return queue.then(
+        () => undefined,
+        () => undefined,
+      )
+    },
+  }
 }

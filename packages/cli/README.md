@@ -4,22 +4,22 @@ Not another SDK. Build autonomous agents with Flue's programmable TypeScript har
 
 ```ts
 // agents/triage.ts
-'use agent';
-import { useModel, useSandbox, useSkill, useTool } from '@flue/runtime';
-import { local } from '@flue/runtime/node';
-import triage from '../skills/triage/SKILL.md';
-import verify from '../skills/verify/SKILL.md';
-import { openIssue, searchCode } from '../tools/github.ts';
+'use agent'
+import { useModel, useSandbox, useSkill, useTool } from '@flue/runtime'
+import { local } from '@flue/runtime/node'
+import triage from '../skills/triage/SKILL.md'
+import verify from '../skills/verify/SKILL.md'
+import { openIssue, searchCode } from '../tools/github.ts'
 
 // The agent IS the function. Compose the complete harness it needs to do
 // real work, complete with virtual, local, or remote container sandbox.
 export function Triage() {
-  useModel('anthropic/claude-sonnet-4-6');
-  useSandbox(local());
-  useSkill(triage);
-  useSkill(verify);
-  useTool(openIssue);
-  useTool(searchCode);
+  useModel('anthropic/claude-sonnet-4-6')
+  useSandbox(local())
+  useSkill(triage)
+  useSkill(verify)
+  useTool(openIssue)
+  useTool(searchCode)
 
   // Give agents the context and autonomy to solve complex tasks:
   return `
@@ -27,7 +27,7 @@ Triage a bug report end-to-end: reproduce the bug,
 diagnose the root cause, verify whether the behavior is
 intentional, and attempt a fix.
 
-...`;
+...`
 }
 ```
 

@@ -15,18 +15,19 @@
  * any later time, and a submission that already settled resolves immediately.
  */
 
-import type { HttpClient } from '../http.ts';
-import type { FlueConversationSnapshot } from './conversation.ts';
-import { type AgentSubmissionReply, readSubmissionReply } from './reply.ts';
-import type { AgentSendResult } from './send.ts';
+import type { HttpClient } from '../http.ts'
+import type { FlueConversationSnapshot } from './conversation.ts'
+import { readSubmissionReply } from './reply.ts'
+import type { AgentSubmissionReply } from './reply.ts'
+import type { AgentSendResult } from './send.ts'
 import {
-	type AgentSettlementTarget,
-	type AgentWaitOptions,
-	waitForAgentSubmission,
-} from './settle.ts';
+  
+  waitForAgentSubmission,
+} from './settle.ts'
+import type { AgentSettlementTarget, AgentWaitOptions } from './settle.ts'
 
 /** Options for one `read()`. The same knobs as `wait()`, which it composes. */
-export type AgentReadOptions = AgentWaitOptions;
+export type AgentReadOptions = AgentWaitOptions
 
 /**
  * The read target `normalizeReadTarget` resolves to — a real `send()`
@@ -34,34 +35,34 @@ export type AgentReadOptions = AgentWaitOptions;
  * origin-offset target, which carries no uid.
  */
 interface ReadTarget extends AgentSettlementTarget {
-	uid?: string;
+  uid?: string
 }
 
 /** The settled reply a `read()` resolves with. */
 export interface AgentReadResult extends AgentSubmissionReply {
-	/** The settled submission's id. */
-	submissionId: string;
-	/** The contacted instance's uid, when the target admission carried one. */
-	uid?: string;
+  /** The settled submission's id. */
+  submissionId: string
+  /** The contacted instance's uid, when the target admission carried one. */
+  uid?: string
 }
 
 export async function readAgentSubmissionReply(
-	http: HttpClient,
-	target: AgentSendResult | string,
-	options: AgentReadOptions = {},
+  http: HttpClient,
+  target: AgentSendResult | string,
+  options: AgentReadOptions = {},
 ): Promise<AgentReadResult> {
-	const admission = normalizeReadTarget(http, target);
-	await waitForAgentSubmission(http, admission, options);
-	const snapshot = await http.json<FlueConversationSnapshot>({
-		query: { view: 'history' },
-		signal: options.signal,
-	});
-	const reply = readSubmissionReply(snapshot, admission.submissionId);
-	return {
-		...reply,
-		submissionId: admission.submissionId,
-		...(admission.uid !== undefined ? { uid: admission.uid } : {}),
-	};
+  const admission = normalizeReadTarget(http, target)
+  await waitForAgentSubmission(http, admission, options)
+  const snapshot = await http.json<FlueConversationSnapshot>({
+    query: { view: 'history' },
+    signal: options.signal,
+  })
+  const reply = readSubmissionReply(snapshot, admission.submissionId)
+  return {
+    ...reply,
+    submissionId: admission.submissionId,
+    ...(admission.uid !== undefined ? { uid: admission.uid } : {}),
+  }
 }
 
 /**
@@ -71,39 +72,40 @@ export async function readAgentSubmissionReply(
  * persisted only the id.
  */
 function normalizeReadTarget(http: HttpClient, target: AgentSendResult | string): ReadTarget {
-	if (typeof target === 'string') {
-		if (target.trim() === '') {
-			throw new Error('The client read() requires a non-empty submission id.');
-		}
-		return { streamUrl: http.url(''), offset: '-1', submissionId: target };
-	}
-	if (
-		typeof target !== 'object' ||
-		target === null ||
-		typeof target.submissionId !== 'string' ||
-		target.submissionId === ''
-	) {
-		throw new Error('The client read() takes a send() admission or a submission id string.');
-	}
-	// An admission belongs to one conversation. Waiting on the admission's
-	// stream but reading the reply from this client's conversation would
-	// silently return a message from the wrong conversation — compare by
-	// pathname, since service-binding setups never dial the URL's host.
-	const admissionPath = pathnameOf(target.streamUrl);
-	if (admissionPath !== undefined && admissionPath !== pathnameOf(http.url(''))) {
-		throw new Error(
-			'The client read() was given an admission from a different conversation ' +
-				`("${admissionPath}" vs this client's "${pathnameOf(http.url(''))}"). ` +
-				'Use a client constructed for that conversation URL.',
-		);
-	}
-	return target;
+  if (typeof target === 'string') {
+    if (target.trim() === '') {
+      throw new Error('The client read() requires a non-empty submission id.')
+    }
+    return { streamUrl: http.url(''), offset: '-1', submissionId: target }
+  }
+  if (
+    typeof target !== 'object' ||
+    target === null ||
+    typeof target.submissionId !== 'string' ||
+    target.submissionId === ''
+  ) {
+    throw new Error('The client read() takes a send() admission or a submission id string.')
+  }
+  // An admission belongs to one conversation. Waiting on the admission's
+  // stream but reading the reply from this client's conversation would
+  // silently return a message from the wrong conversation — compare by
+  // pathname, since service-binding setups never dial the URL's host.
+  const admissionPath = pathnameOf(target.streamUrl)
+  if (admissionPath !== undefined && admissionPath !== pathnameOf(http.url(''))) {
+    throw new Error(
+      'The client read() was given an admission from a different conversation ' +
+      `("${admissionPath}" vs this client's "${pathnameOf(http.url(''))}"). ` +
+      'Use a client constructed for that conversation URL.',
+    )
+  }
+  return target
 }
 
 function pathnameOf(url: string): string | undefined {
-	try {
-		return new URL(url).pathname;
-	} catch {
-		return undefined;
-	}
+  try {
+    return new URL(url).pathname
+  }
+  catch {
+    return undefined
+  }
 }

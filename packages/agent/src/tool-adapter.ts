@@ -1,26 +1,26 @@
-import type { ToolDefinition } from './tool-types.ts';
+import type { ToolDefinition } from './tool-types.ts'
 
-type PreparedToolAdapter = {
-	readonly parameters: object;
-	execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<string>;
-};
+interface PreparedToolAdapter {
+  readonly parameters: object
+  execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<string>
+}
 
-const preparedToolAdapter = Symbol('flue.preparedToolAdapter');
+const preparedToolAdapter = Symbol('flue.preparedToolAdapter')
 
 type PreparedToolDefinition = ToolDefinition & {
-	readonly [preparedToolAdapter]?: PreparedToolAdapter;
-};
+  readonly [preparedToolAdapter]?: PreparedToolAdapter
+}
 
 export function registerPreparedToolAdapter(
-	tool: ToolDefinition,
-	adapter: PreparedToolAdapter,
+  tool: ToolDefinition,
+  adapter: PreparedToolAdapter,
 ): void {
-	Object.defineProperty(tool, preparedToolAdapter, {
-		value: Object.freeze(adapter),
-		enumerable: true,
-	});
+  Object.defineProperty(tool, preparedToolAdapter, {
+    value: Object.freeze(adapter),
+    enumerable: true,
+  })
 }
 
 export function getPreparedToolAdapter(tool: ToolDefinition): PreparedToolAdapter | undefined {
-	return (tool as PreparedToolDefinition)[preparedToolAdapter];
+  return (tool as PreparedToolDefinition)[preparedToolAdapter]
 }

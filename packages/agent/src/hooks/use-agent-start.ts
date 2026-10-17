@@ -1,5 +1,5 @@
-import type { AgentStartContext } from '../message-output.ts';
-import { requireRenderFrame } from './frame.ts';
+import type { AgentStartContext } from '../message-output.ts'
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Run a callback when the agent starts work on a delivered message — after
@@ -57,14 +57,14 @@ import { requireRenderFrame } from './frame.ts';
  *   storage.
  */
 export function useAgentStart(run: (ctx: AgentStartContext) => void | Promise<void>): void {
-	const frame = requireRenderFrame('useAgentStart');
-	if (frame.kind === 'subagent') {
-		throw new Error(
-			"[flue] useAgentStart() is not available in a subagent render. Lifecycle hooks run against the root agent's durable record log; a delegate runs a detached task — do its up-front work in the task itself.",
-		);
-	}
-	if (typeof run !== 'function') {
-		throw new Error('[flue] useAgentStart(run) takes a callback as its only argument.');
-	}
-	frame.agentStarts.push({ run });
+  const frame = requireRenderFrame('useAgentStart')
+  if (frame.kind === 'subagent') {
+    throw new Error(
+      '[flue] useAgentStart() is not available in a subagent render. Lifecycle hooks run against the root agent\'s durable record log; a delegate runs a detached task — do its up-front work in the task itself.',
+    )
+  }
+  if (typeof run !== 'function') {
+    throw new Error('[flue] useAgentStart(run) takes a callback as its only argument.')
+  }
+  frame.agentStarts.push({ run })
 }

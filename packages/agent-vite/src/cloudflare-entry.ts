@@ -17,91 +17,91 @@
  * minus workflows, channels, the run registry, and the no-`app.ts` fallback —
  * on the new surface `app.ts` is required and the scan is the registration.
  */
-import type { AgentScanResult } from './agent-scan.ts';
+import type { AgentScanResult } from './agent-scan.ts'
 
 export interface GenerateCloudflareEntryOptions {
-	/** Absolute path of the user's `app.*` entry (required on the new surface). */
-	readonly appEntry: string;
-	/** Absolute path of the user's `cloudflare.*` entry, if any. */
-	readonly cloudflareEntry: string | undefined;
-	/** The scanned `'use agent'` module set. */
-	readonly agents: readonly AgentScanResult[];
-	/**
-	 * The configured provider IDs, or `undefined` for the all-built-ins
-	 * default. The list is exhaustive: the `cloudflare` Workers AI binding
-	 * provider is emitted only when the list is omitted or names it.
-	 */
-	readonly providers: readonly string[] | undefined;
-	/**
-	 * Default Cloudflare tracing (`flue.config.ts` `tracing`). `false` omits
-	 * the default-tracing block and its import from the generated entry;
-	 * `undefined` means on.
-	 */
-	readonly tracing: boolean | undefined;
+  /** Absolute path of the user's `app.*` entry (required on the new surface). */
+  readonly appEntry: string
+  /** Absolute path of the user's `cloudflare.*` entry, if any. */
+  readonly cloudflareEntry: string | undefined
+  /** The scanned `'use agent'` module set. */
+  readonly agents: readonly AgentScanResult[]
+  /**
+   * The configured provider IDs, or `undefined` for the all-built-ins
+   * default. The list is exhaustive: the `cloudflare` Workers AI binding
+   * provider is emitted only when the list is omitted or names it.
+   */
+  readonly providers: readonly string[] | undefined
+  /**
+   * Default Cloudflare tracing (`flue.config.ts` `tracing`). `false` omits
+   * the default-tracing block and its import from the generated entry;
+   * `undefined` means on.
+   */
+  readonly tracing: boolean | undefined
 }
 
 /** Posix-normalize a path for embedding in generated import specifiers. */
 function importPath(filePath: string): string {
-	return JSON.stringify(filePath.replace(/\\/g, '/'));
+  return JSON.stringify(filePath.replace(/\\/g, '/'))
 }
 
 export function generateCloudflareEntry(options: GenerateCloudflareEntryOptions): string {
-	const { appEntry, cloudflareEntry, agents, providers, tracing } = options;
-	const includeBindingProvider = providers === undefined || providers.includes('cloudflare');
-	const includeTracing = tracing !== false;
+  const { appEntry, cloudflareEntry, agents, providers, tracing } = options
+  const includeBindingProvider = providers === undefined || providers.includes('cloudflare')
+  const includeTracing = tracing !== false
 
-	// One import per module file; one entry (and one DO class) per agent.
-	const filePaths = [...new Set(agents.map((agent) => agent.filePath))];
-	const varByPath = new Map(
-		filePaths.map((filePath, index) => [filePath, `__flue_agent_module_${index}__`]),
-	);
-	const agentVar = (filePath: string) => varByPath.get(filePath) as string;
-	const agentAccess = (agent: AgentScanResult) =>
-		`${agentVar(agent.filePath)}[${JSON.stringify(agent.exportName)}]`;
+  // One import per module file; one entry (and one DO class) per agent.
+  const filePaths = [...new Set(agents.map(agent => agent.filePath))]
+  const varByPath = new Map(
+    filePaths.map((filePath, index) => [filePath, `__flue_agent_module_${index}__`]),
+  )
+  const agentVar = (filePath: string) => varByPath.get(filePath) as string
+  const agentAccess = (agent: AgentScanResult) =>
+    `${agentVar(agent.filePath)}[${JSON.stringify(agent.exportName)}]`
 
-	const agentImports = filePaths
-		.map((filePath) => `import * as ${agentVar(filePath)} from ${importPath(filePath)};`)
-		.join('\n');
+  const agentImports = filePaths
+    .map(filePath => `import * as ${agentVar(filePath)} from ${importPath(filePath)};`)
+    .join('\n')
 
-	const scannedAgentEntries = agents
-		.map(
-			(agent) => `\t{ identity: ${JSON.stringify(agent.identity)}, agent: ${agentAccess(agent)} },`,
-		)
-		.join('\n');
+  const scannedAgentEntries = agents
+    .map(
+      agent => `\t{ identity: ${JSON.stringify(agent.identity)}, agent: ${agentAccess(agent)} },`,
+    )
+    .join('\n')
 
-	const agentIdentityEntries = agents
-		.map(
-			(agent) =>
-				`\t${JSON.stringify(agent.identity)}: { bindingName: ${JSON.stringify(agent.bindingName)}, className: ${JSON.stringify(agent.className)} },`,
-		)
-		.join('\n');
+  const agentIdentityEntries = agents
+    .map(
+      agent =>
+        `\t${JSON.stringify(agent.identity)}: { bindingName: ${JSON.stringify(agent.bindingName)}, className: ${JSON.stringify(agent.className)} },`,
+    )
+    .join('\n')
 
-	const agentClassExports = agents
-		.map((agent) =>
-			[
-				`export const ${agent.className} = createFlueAgentClass({`,
-				`\tAgentBase: Agent,`,
-				`\truntime: cloudflareAgents,`,
-				`\tclassName: ${JSON.stringify(agent.className)},`,
-				`\tagentName: ${JSON.stringify(agent.identity)},`,
-				// The `cloudflare` extension export is optional (per module — it
-				// applies to every agent the module exports). Reflect.get keeps
-				// identical semantics (undefined when absent) without the static
-				// namespace member access bundlers flag as IMPORT_IS_UNDEFINED on
-				// every agent module that does not declare the export.
-				`\textension: Reflect.get(${agentVar(agent.filePath)}, 'cloudflare'),`,
-				`});`,
-			].join('\n'),
-		)
-		.join('\n\n');
+  const agentClassExports = agents
+    .map(agent =>
+      [
+        `export const ${agent.className} = createFlueAgentClass({`,
+        `\tAgentBase: Agent,`,
+        `\truntime: cloudflareAgents,`,
+        `\tclassName: ${JSON.stringify(agent.className)},`,
+        `\tagentName: ${JSON.stringify(agent.identity)},`,
+        // The `cloudflare` extension export is optional (per module — it
+        // applies to every agent the module exports). Reflect.get keeps
+        // identical semantics (undefined when absent) without the static
+        // namespace member access bundlers flag as IMPORT_IS_UNDEFINED on
+        // every agent module that does not declare the export.
+        `\textension: Reflect.get(${agentVar(agent.filePath)}, 'cloudflare'),`,
+        `});`,
+      ].join('\n'),
+    )
+    .join('\n\n')
 
-	const userCloudflareImport = cloudflareEntry
-		? `import * as userCloudflareModule from ${importPath(cloudflareEntry)};\nexport * from ${importPath(cloudflareEntry)};`
-		: '';
-	const userCloudflareValue = cloudflareEntry ? 'userCloudflareModule' : '{}';
-	const reservedCloudflareExportNames = agents.map((agent) => agent.className);
+  const userCloudflareImport = cloudflareEntry
+    ? `import * as userCloudflareModule from ${importPath(cloudflareEntry)};\nexport * from ${importPath(cloudflareEntry)};`
+    : ''
+  const userCloudflareValue = cloudflareEntry ? 'userCloudflareModule' : '{}'
+  const reservedCloudflareExportNames = agents.map(agent => agent.className)
 
-	return `// Auto-generated by @flue/vite (target: cloudflare). Do not edit.
+  return `// Auto-generated by @flue/vite (target: cloudflare). Do not edit.
 /* eslint-disable */
 // @ts-nocheck
 import { env } from 'cloudflare:workers';
@@ -122,9 +122,9 @@ import {
 	runWithCloudflareContext,
 } from '@flue/runtime/cloudflare/internal';
 ${
-	includeBindingProvider
-		? "import { cloudflareBindingProvider } from '@flue/runtime/cloudflare/workers-ai';"
-		: ''
+  includeBindingProvider
+    ? 'import { cloudflareBindingProvider } from \'@flue/runtime/cloudflare/workers-ai\';'
+    : ''
 }
 import userApp from ${importPath(appEntry)};
 ${userCloudflareImport}
@@ -132,8 +132,8 @@ ${agentImports}
 // The configured (or default) built-in provider set.
 import 'virtual:flue/providers';
 ${
-	includeBindingProvider
-		? `
+  includeBindingProvider
+    ? `
 // ─── Workers AI binding provider ────────────────────────────────────────────
 // User \`app.ts\` imports are hoisted above this body, so a user-supplied
 // \`setProvider(...)\` with the \`cloudflare\` ID runs first; the guard below
@@ -145,11 +145,11 @@ if (!hasProvider('cloudflare')) {
 	setProvider(cloudflareBindingProvider({ binding: env.AI }));
 }
 `
-		: ''
+    : ''
 }
 ${
-	includeTracing
-		? `
+  includeTracing
+    ? `
 // ─── Default tracing ────────────────────────────────────────────────────────
 // User \`app.ts\` imports are hoisted above this body, so a user-supplied
 // \`instrument(createCloudflareTracing(...))\` registers first and the
@@ -158,7 +158,7 @@ ${
 
 installDefaultCloudflareTracing();
 `
-		: ''
+    : ''
 }
 
 // ─── Registration ───────────────────────────────────────────────────────────
@@ -272,5 +272,5 @@ export default {
 		return flueApp.fetch(request, env, ctx);
 	},
 };
-`;
+`
 }

@@ -19,49 +19,50 @@
  * operator suspects divergence.
  */
 
-import type { AgentSubmissionStore } from '../agent-execution-store.ts';
-import type { ConversationRecord, SubmissionSettledRecord } from '../conversation-records.ts';
-import type { ConversationStreamStore } from './conversation-stream-store.ts';
-import { agentStreamPath } from './stream-offsets.ts';
+import type { AgentSubmissionStore } from '../agent-execution-store.ts'
+import type { ConversationRecord, SubmissionSettledRecord } from '../conversation-records.ts'
+import type { ConversationStreamStore } from './conversation-stream-store.ts'
+import { agentStreamPath } from './stream-offsets.ts'
 
 export async function rebuildSettledSubmissionRows(options: {
-	submissions: AgentSubmissionStore;
-	conversationStreamStore: ConversationStreamStore;
+  submissions: AgentSubmissionStore
+  conversationStreamStore: ConversationStreamStore
 }): Promise<{ repaired: string[] }> {
-	const { submissions, conversationStreamStore } = options;
-	const repaired: string[] = [];
-	for (const submission of await submissions.listRunningSubmissions()) {
-		if (!submission.attemptId) continue;
-		const path = agentStreamPath(submission.input.agent, submission.input.id);
-		let records: ConversationRecord[];
-		try {
-			records = (await conversationStreamStore.read(path)).batches.flatMap(
-				(batch) => batch.records,
-			);
-		} catch {
-			// No stream (or unreadable) — nothing durable to derive from.
-			continue;
-		}
-		const settled = records.find(
-			(record): record is SubmissionSettledRecord =>
-				record.type === 'submission_settled' && record.submissionId === submission.submissionId,
-		);
-		if (!settled) continue;
-		const attempt = {
-			submissionId: submission.submissionId,
-			attemptId: submission.attemptId,
-		};
-		// The stream's record IS the reserved obligation: exact-retry idempotency
-		// makes this safe against concurrent live settlement, and the record
-		// already being durable means finalize needs no append.
-		const obligation = await submissions.reserveSubmissionSettlement(attempt, {
-			recordId: settled.id,
-			record: settled,
-		});
-		if (!obligation) continue;
-		if (await submissions.finalizeSubmissionSettlement(attempt, settled.id)) {
-			repaired.push(submission.submissionId);
-		}
-	}
-	return { repaired };
+  const { submissions, conversationStreamStore } = options
+  const repaired: string[] = []
+  for (const submission of await submissions.listRunningSubmissions()) {
+    if (!submission.attemptId) { continue }
+    const path = agentStreamPath(submission.input.agent, submission.input.id)
+    let records: ConversationRecord[]
+    try {
+      records = (await conversationStreamStore.read(path)).batches.flatMap(
+        batch => batch.records,
+      )
+    }
+    catch {
+      // No stream (or unreadable) — nothing durable to derive from.
+      continue
+    }
+    const settled = records.find(
+      (record): record is SubmissionSettledRecord =>
+        record.type === 'submission_settled' && record.submissionId === submission.submissionId,
+    )
+    if (!settled) { continue }
+    const attempt = {
+      submissionId: submission.submissionId,
+      attemptId: submission.attemptId,
+    }
+    // The stream's record IS the reserved obligation: exact-retry idempotency
+    // makes this safe against concurrent live settlement, and the record
+    // already being durable means finalize needs no append.
+    const obligation = await submissions.reserveSubmissionSettlement(attempt, {
+      recordId: settled.id,
+      record: settled,
+    })
+    if (!obligation) { continue }
+    if (await submissions.finalizeSubmissionSettlement(attempt, settled.id)) {
+      repaired.push(submission.submissionId)
+    }
+  }
+  return { repaired }
 }

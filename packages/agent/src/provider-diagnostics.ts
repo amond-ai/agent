@@ -28,10 +28,10 @@
  * `RETRYABLE_INTERRUPTION_MARKER` until pi-ai grows structured error fields.)
  */
 
-import type { AssistantMessage, AssistantMessageDiagnostic } from '@earendil-works/pi-ai';
+import type { AssistantMessage, AssistantMessageDiagnostic } from '@earendil-works/pi-ai'
 
 /** Diagnostic `type` under which providers attach response metadata. */
-export const PROVIDER_RESPONSE_DIAGNOSTIC = 'flue:provider_response';
+export const PROVIDER_RESPONSE_DIAGNOSTIC = 'flue:provider_response'
 
 /**
  * Allowlisted provider-response metadata projected onto `turn` observations.
@@ -39,23 +39,23 @@ export const PROVIDER_RESPONSE_DIAGNOSTIC = 'flue:provider_response';
  * channel; anything else stashed in the diagnostic's `details` is ignored by
  * the projection.
  */
-export type ProviderResponseDiagnostics = {
-	/**
-	 * The provider's exact finish value before normalization (e.g. Workers AI
-	 * `tool_calls` behind the normalized `toolUse`). Lets an observer tell a
-	 * provider that said "stop" apart from one whose structured output was
-	 * lost after a "tool_calls" finish.
-	 */
-	providerFinishReason?: string;
-	/**
-	 * Response-level gateway log correlation (Cloudflare `cf-aig-log-id`).
-	 * Read from this response's own headers, so concurrent requests on a
-	 * shared binding can never cross-attribute it — unlike
-	 * `env.AI.aiGatewayLogId`, which reflects the binding's most recent
-	 * request.
-	 */
-	gatewayLogId?: string;
-};
+export interface ProviderResponseDiagnostics {
+  /**
+   * The provider's exact finish value before normalization (e.g. Workers AI
+   * `tool_calls` behind the normalized `toolUse`). Lets an observer tell a
+   * provider that said "stop" apart from one whose structured output was
+   * lost after a "tool_calls" finish.
+   */
+  providerFinishReason?: string
+  /**
+   * Response-level gateway log correlation (Cloudflare `cf-aig-log-id`).
+   * Read from this response's own headers, so concurrent requests on a
+   * shared binding can never cross-attribute it — unlike
+   * `env.AI.aiGatewayLogId`, which reflects the binding's most recent
+   * request.
+   */
+  gatewayLogId?: string
+}
 
 /**
  * Attach (or update) the message's provider-response diagnostic. Values merge
@@ -64,23 +64,23 @@ export type ProviderResponseDiagnostics = {
  * stream delivers it — and the entry survives onto error-path messages too.
  */
 export function attachProviderResponseDiagnostics(
-	message: AssistantMessage,
-	details: ProviderResponseDiagnostics,
+  message: AssistantMessage,
+  details: ProviderResponseDiagnostics,
 ): void {
-	message.diagnostics ??= [];
-	const diagnostics = message.diagnostics;
-	const existing = diagnostics.find(
-		(diagnostic) => diagnostic.type === PROVIDER_RESPONSE_DIAGNOSTIC,
-	);
-	if (existing) {
-		existing.details = { ...existing.details, ...pickAllowlisted(details) };
-		return;
-	}
-	diagnostics.push({
-		type: PROVIDER_RESPONSE_DIAGNOSTIC,
-		timestamp: Date.now(),
-		details: pickAllowlisted(details),
-	} satisfies AssistantMessageDiagnostic);
+  message.diagnostics ??= []
+  const diagnostics = message.diagnostics
+  const existing = diagnostics.find(
+    diagnostic => diagnostic.type === PROVIDER_RESPONSE_DIAGNOSTIC,
+  )
+  if (existing) {
+    existing.details = { ...existing.details, ...pickAllowlisted(details) }
+    return
+  }
+  diagnostics.push({
+    type: PROVIDER_RESPONSE_DIAGNOSTIC,
+    timestamp: Date.now(),
+    details: pickAllowlisted(details),
+  } satisfies AssistantMessageDiagnostic)
 }
 
 /**
@@ -88,23 +88,23 @@ export function attachProviderResponseDiagnostics(
  * fields in the diagnostic's `details` are deliberately not returned.
  */
 export function readProviderResponseDiagnostics(
-	message: AssistantMessage,
+  message: AssistantMessage,
 ): ProviderResponseDiagnostics | undefined {
-	const details = message.diagnostics?.findLast(
-		(diagnostic) => diagnostic.type === PROVIDER_RESPONSE_DIAGNOSTIC,
-	)?.details;
-	if (!details) return undefined;
-	const picked = pickAllowlisted(details as ProviderResponseDiagnostics);
-	return Object.keys(picked).length > 0 ? picked : undefined;
+  const details = message.diagnostics?.findLast(
+    diagnostic => diagnostic.type === PROVIDER_RESPONSE_DIAGNOSTIC,
+  )?.details
+  if (!details) { return undefined }
+  const picked = pickAllowlisted(details as ProviderResponseDiagnostics)
+  return Object.keys(picked).length > 0 ? picked : undefined
 }
 
 function pickAllowlisted(details: ProviderResponseDiagnostics): ProviderResponseDiagnostics {
-	return {
-		...(typeof details.providerFinishReason === 'string' && details.providerFinishReason.length > 0
-			? { providerFinishReason: details.providerFinishReason }
-			: {}),
-		...(typeof details.gatewayLogId === 'string' && details.gatewayLogId.length > 0
-			? { gatewayLogId: details.gatewayLogId }
-			: {}),
-	};
+  return {
+    ...(typeof details.providerFinishReason === 'string' && details.providerFinishReason.length > 0
+      ? { providerFinishReason: details.providerFinishReason }
+      : {}),
+    ...(typeof details.gatewayLogId === 'string' && details.gatewayLogId.length > 0
+      ? { gatewayLogId: details.gatewayLogId }
+      : {}),
+  }
 }

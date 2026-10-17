@@ -10,13 +10,14 @@
  * see `LocalSandboxOptions` and `DEFAULT_LOCAL_ENV_ALLOWLIST` in
  * `./local-env.ts`.
  */
-import type { SandboxFactory } from '../types.ts';
-import { createLocalSandbox, type LocalSandboxOptions } from './local-env.ts';
+import type { SandboxFactory } from '../types.ts'
+import { createLocalSandbox } from './local-env.ts'
+import type { LocalSandboxOptions } from './local-env.ts'
 
-export type { LocalSandboxOptions } from './local-env.ts';
+export type { LocalSandboxOptions } from './local-env.ts'
 
 export function local(options: LocalSandboxOptions = {}): SandboxFactory {
-	return {
-		createSandbox: async () => createLocalSandbox(options),
-	};
+  return {
+    createSandbox: async () => createLocalSandbox(options),
+  }
 }

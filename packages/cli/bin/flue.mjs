@@ -20,51 +20,52 @@
 // read package.json with `import { ... } from '../package.json' with { type: 'json' }`
 // (that's a recent feature) and don't want to fall back to fs+JSON.parse for
 // what's essentially a build-time constant.
-const MIN_NODE_MAJOR = 22;
-const MIN_NODE_MINOR = 19;
-const ENGINES_LABEL = '>=22.19 or >=23.6';
+const MIN_NODE_MAJOR = 22
+const MIN_NODE_MINOR = 19
+const ENGINES_LABEL = '>=22.19 or >=23.6'
 
 function checkNodeVersion() {
-	const v = process.versions.node;
-	const m = /^(\d+)\.(\d+)/.exec(v);
-	if (!m) return; // unparseable; let it through and let the real CLI fail loudly
-	const major = parseInt(m[1], 10);
-	const minor = parseInt(m[2], 10);
-	// Node 23.0–23.5 lacks default TS type-stripping (default-on only in
-	// 22.18+ and 23.6+), so it is unsupported despite exceeding the floor.
-	if (major !== 23 || minor >= 6) {
-		if (major > MIN_NODE_MAJOR) return;
-		if (major === MIN_NODE_MAJOR && minor >= MIN_NODE_MINOR) return;
-	}
+  const v = process.versions.node
+  const m = /^(\d+)\.(\d+)/.exec(v)
+  if (!m) { return } // unparseable; let it through and let the real CLI fail loudly
+  const major = parseInt(m[1], 10)
+  const minor = parseInt(m[2], 10)
+  // Node 23.0–23.5 lacks default TS type-stripping (default-on only in
+  // 22.18+ and 23.6+), so it is unsupported despite exceeding the floor.
+  if (major !== 23 || minor >= 6) {
+    if (major > MIN_NODE_MAJOR) { return }
+    if (major === MIN_NODE_MAJOR && minor >= MIN_NODE_MINOR) { return }
+  }
 
-	if (process.versions.bun) {
-		console.error(
-			'\nBun v' +
-				process.versions.bun +
-				' is not supported by Flue.\n' +
-				'Please upgrade Bun to a version compatible with Node.js ' +
-				ENGINES_LABEL +
-				'.\n',
-		);
-	} else {
-		console.error(
-			'\nNode.js v' +
-				v +
-				' is not supported by Flue.\n' +
-				'Flue requires Node.js ' +
-				ENGINES_LABEL +
-				' for native TypeScript config support.\n' +
-				'Please upgrade: https://nodejs.org/\n',
-		);
-	}
-	process.exit(1);
+  if (process.versions.bun) {
+    console.error(
+      `\nBun v${ 
+        process.versions.bun 
+      } is not supported by Flue.\n` +
+      `Please upgrade Bun to a version compatible with Node.js ${ 
+        ENGINES_LABEL 
+      }.\n`,
+    )
+  }
+  else {
+    console.error(
+      `\nNode.js v${ 
+        v 
+      } is not supported by Flue.\n` +
+      `Flue requires Node.js ${ 
+        ENGINES_LABEL 
+      } for native TypeScript config support.\n` +
+      `Please upgrade: https://nodejs.org/\n`,
+    )
+  }
+  process.exit(1)
 }
 
-checkNodeVersion();
+checkNodeVersion()
 
 // Hand off to the real CLI. Dynamic import keeps this file syntactically
 // reachable on older Node — the failure path above always wins on those.
 import('../dist/flue.js').catch((err) => {
-	console.error(err);
-	process.exit(1);
-});
+  console.error(err)
+  process.exit(1)
+})

@@ -26,20 +26,20 @@
  * registration does not matter.
  */
 
-import { Hono } from 'hono';
-import type * as v from 'valibot';
-import { assertDurability } from '../agent-tuning.ts';
-import { MethodNotAllowedError, toHttpResponse } from '../errors.ts';
-import { isValibotSchema } from '../schema.ts';
-import type { Agent, DurabilityConfig } from '../types.ts';
+import { Hono } from 'hono'
+import type * as v from 'valibot'
+import { assertDurability } from '../agent-tuning.ts'
+import { MethodNotAllowedError, toHttpResponse } from '../errors.ts'
+import { isValibotSchema } from '../schema.ts'
+import type { Agent, DurabilityConfig } from '../types.ts'
 import {
-	assertAgentInstanceId,
-	executeAgentAbort,
-	executeAgentAttachmentRead,
-	executeAgentConversationRead,
-	executeAgentPrompt,
-} from './agent-routes.ts';
-import { getFlueRuntime } from './flue-app.ts';
+  assertAgentInstanceId,
+  executeAgentAbort,
+  executeAgentAttachmentRead,
+  executeAgentConversationRead,
+  executeAgentPrompt,
+} from './agent-routes.ts'
+import { getFlueRuntime } from './flue-app.ts'
 
 /**
  * IDENTITY BINDING CONTRACT — consumed by the `@flue/vite` `'use agent'`
@@ -58,13 +58,13 @@ import { getFlueRuntime } from './flue-app.ts';
  * so bundled (minified) builds keep the durable identity intact.
  */
 export interface AgentIdentityBinding {
-	/** The agent's durable identity. Keys durable storage; non-empty, no `:`. */
-	identity: string;
+  /** The agent's durable identity. Keys durable storage; non-empty, no `:`. */
+  identity: string
 }
 
 /** One registered agent: the function joined to its identity. */
 export interface FlueAgentRegistration extends AgentIdentityBinding {
-	agent: Agent;
+  agent: Agent
 }
 
 /**
@@ -75,10 +75,10 @@ export interface FlueAgentRegistration extends AgentIdentityBinding {
  * match. Canonical copy — `@flue/vite`'s agent-scan mirrors it for
  * build-time enforcement.
  */
-export const AGENT_IDENTITY_PATTERN = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$/;
+export const AGENT_IDENTITY_PATTERN = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$/
 
-let identityBindings = new WeakMap<Agent, AgentIdentityBinding>();
-let registeredAgents = new Map<string, FlueAgentRegistration>();
+let identityBindings = new WeakMap<Agent, AgentIdentityBinding>()
+let registeredAgents = new Map<string, FlueAgentRegistration>()
 
 /**
  * Bind a build-derived identity to an agent function.
@@ -93,20 +93,20 @@ let registeredAgents = new Map<string, FlueAgentRegistration>();
  * position.
  */
 export function __flueBindAgentModule<TAgent extends Agent>(
-	agent: TAgent,
-	binding: AgentIdentityBinding,
+  agent: TAgent,
+  binding: AgentIdentityBinding,
 ): TAgent {
-	assertAgentFunction(agent, binding?.identity ?? '(unknown)');
-	assertAgentIdentity(binding?.identity);
-	const existing = identityBindings.get(agent);
-	if (existing && existing.identity !== binding.identity) {
-		throw new Error(
-			`[flue] Agent function is already bound to identity "${existing.identity}" and cannot be rebound as "${binding.identity}". ` +
-				'Each agent function carries exactly one durable identity.',
-		);
-	}
-	identityBindings.set(agent, { identity: binding.identity });
-	return agent;
+  assertAgentFunction(agent, binding?.identity ?? '(unknown)')
+  assertAgentIdentity(binding?.identity)
+  const existing = identityBindings.get(agent)
+  if (existing && existing.identity !== binding.identity) {
+    throw new Error(
+      `[flue] Agent function is already bound to identity "${existing.identity}" and cannot be rebound as "${binding.identity}". ` +
+      'Each agent function carries exactly one durable identity.',
+    )
+  }
+  identityBindings.set(agent, { identity: binding.identity })
+  return agent
 }
 
 /**
@@ -117,44 +117,44 @@ export function __flueBindAgentModule<TAgent extends Agent>(
  * Not public API — exposed via `@flue/runtime/internal` for generated code.
  */
 export function registerFlueAgents(records: readonly FlueAgentRegistration[]): void {
-	const next = new Map<string, FlueAgentRegistration>();
-	for (const record of records) {
-		const identity = record?.identity ?? '(unknown)';
-		assertAgentFunction(record?.agent, identity);
-		assertAgentIdentity(record?.identity);
-		const duplicateIdentity = next.get(record.identity);
-		if (duplicateIdentity) {
-			throw new Error(
-				`[flue] Duplicate agent identity "${record.identity}". ` +
-					'Agent identities derive from function names (or their `agentName` static override) and must be unique.',
-			);
-		}
-		const duplicateAgent = [...next.values()].find((existing) => existing.agent === record.agent);
-		if (duplicateAgent) {
-			throw new Error(
-				`[flue] Agents "${duplicateAgent.identity}" and "${record.identity}" are the same function value. ` +
-					'Each registered agent must be a distinct function.',
-			);
-		}
-		const bound = identityBindings.get(record.agent);
-		if (bound && bound.identity !== record.identity) {
-			throw new Error(
-				`[flue] Agent function is already bound to identity "${bound.identity}" and cannot be registered as "${record.identity}".`,
-			);
-		}
-		next.set(record.identity, { identity: record.identity, agent: record.agent });
-	}
-	registeredAgents = next;
-	// Registration also binds, so identity resolution works for functions
-	// registered without the build transform (tests, `start()` scripts).
-	for (const record of next.values()) {
-		identityBindings.set(record.agent, { identity: record.identity });
-	}
+  const next = new Map<string, FlueAgentRegistration>()
+  for (const record of records) {
+    const identity = record?.identity ?? '(unknown)'
+    assertAgentFunction(record?.agent, identity)
+    assertAgentIdentity(record?.identity)
+    const duplicateIdentity = next.get(record.identity)
+    if (duplicateIdentity) {
+      throw new Error(
+        `[flue] Duplicate agent identity "${record.identity}". ` +
+        'Agent identities derive from function names (or their `agentName` static override) and must be unique.',
+      )
+    }
+    const duplicateAgent = [...next.values()].find(existing => existing.agent === record.agent)
+    if (duplicateAgent) {
+      throw new Error(
+        `[flue] Agents "${duplicateAgent.identity}" and "${record.identity}" are the same function value. ` +
+        'Each registered agent must be a distinct function.',
+      )
+    }
+    const bound = identityBindings.get(record.agent)
+    if (bound && bound.identity !== record.identity) {
+      throw new Error(
+        `[flue] Agent function is already bound to identity "${bound.identity}" and cannot be registered as "${record.identity}".`,
+      )
+    }
+    next.set(record.identity, { identity: record.identity, agent: record.agent })
+  }
+  registeredAgents = next
+  // Registration also binds, so identity resolution works for functions
+  // registered without the build transform (tests, `start()` scripts).
+  for (const record of next.values()) {
+    identityBindings.set(record.agent, { identity: record.identity })
+  }
 }
 
 /** The currently registered agent set, in registration order. */
 export function getRegisteredFlueAgents(): readonly FlueAgentRegistration[] {
-	return [...registeredAgents.values()];
+  return [...registeredAgents.values()]
 }
 
 /**
@@ -164,14 +164,14 @@ export function getRegisteredFlueAgents(): readonly FlueAgentRegistration[] {
  * the identity and re-checking membership is exact function-value lookup.
  */
 export function getRegisteredAgentIdentity(agent: Agent): string | undefined {
-	const identity = resolveAgentIdentity(agent);
-	if (identity === undefined) return undefined;
-	return registeredAgents.get(identity)?.agent === agent ? identity : undefined;
+  const identity = resolveAgentIdentity(agent)
+  if (identity === undefined) { return undefined }
+  return registeredAgents.get(identity)?.agent === agent ? identity : undefined
 }
 
 /** Whether an identity names an agent registered with the app. */
 export function isRegisteredAgentIdentity(identity: string): boolean {
-	return registeredAgents.has(identity);
+  return registeredAgents.has(identity)
 }
 
 /**
@@ -180,18 +180,18 @@ export function isRegisteredAgentIdentity(identity: string): boolean {
  * `undefined` for an anonymous, unbound function.
  */
 export function resolveAgentIdentity(agent: Agent): string | undefined {
-	const bound = identityBindings.get(agent)?.identity;
-	if (bound !== undefined) return bound;
-	if (agent.agentName !== undefined) {
-		if (typeof agent.agentName !== 'string' || !AGENT_IDENTITY_PATTERN.test(agent.agentName)) {
-			throw new Error(
-				`[flue] Agent "${agent.name || '(anonymous)'}" has an invalid agentName static ` +
-					`("${String(agent.agentName)}"). Agent identities must match ${AGENT_IDENTITY_PATTERN}.`,
-			);
-		}
-		return agent.agentName;
-	}
-	return agent.name === '' ? undefined : agent.name;
+  const bound = identityBindings.get(agent)?.identity
+  if (bound !== undefined) { return bound }
+  if (agent.agentName !== undefined) {
+    if (typeof agent.agentName !== 'string' || !AGENT_IDENTITY_PATTERN.test(agent.agentName)) {
+      throw new Error(
+        `[flue] Agent "${agent.name || '(anonymous)'}" has an invalid agentName static ` +
+        `("${String(agent.agentName)}"). Agent identities must match ${AGENT_IDENTITY_PATTERN}.`,
+      )
+    }
+    return agent.agentName
+  }
+  return agent.name === '' ? undefined : agent.name
 }
 
 /**
@@ -204,11 +204,11 @@ export function resolveAgentIdentity(agent: Agent): string | undefined {
  * apply) for an unregistered identity or an agent carrying no static.
  */
 export function resolveAgentDurability(identity: string | undefined): DurabilityConfig | undefined {
-	if (identity === undefined) return undefined;
-	const durability = registeredAgents.get(identity)?.agent.durability;
-	if (durability === undefined) return undefined;
-	assertDurability(durability, `[agent "${identity}"]`);
-	return durability;
+  if (identity === undefined) { return undefined }
+  const durability = registeredAgents.get(identity)?.agent.durability
+  if (durability === undefined) { return undefined }
+  assertDurability(durability, `[agent "${identity}"]`)
+  return durability
 }
 
 /**
@@ -217,19 +217,19 @@ export function resolveAgentDurability(identity: string | undefined): Durability
  * binding or registration to apply.
  */
 export function resolveAgentInitialDataSchema(agent: Agent): v.GenericSchema | undefined {
-	if (agent.initialData === undefined) return undefined;
-	if (!isValibotSchema(agent.initialData)) {
-		throw new Error(
-			`[flue] Agent "${resolveAgentIdentity(agent) ?? agent.name}" has an invalid initialData static: ` +
-				'it must be a Valibot schema for the instance creation data.',
-		);
-	}
-	return agent.initialData;
+  if (agent.initialData === undefined) { return undefined }
+  if (!isValibotSchema(agent.initialData)) {
+    throw new Error(
+      `[flue] Agent "${resolveAgentIdentity(agent) ?? agent.name}" has an invalid initialData static: ` +
+      'it must be a Valibot schema for the instance creation data.',
+    )
+  }
+  return agent.initialData
 }
 
 export function resetFlueAgentRegistrationForTests(): void {
-	identityBindings = new WeakMap();
-	registeredAgents = new Map();
+  identityBindings = new WeakMap()
+  registeredAgents = new Map()
 }
 
 // ─── The mountable per-agent router ─────────────────────────────────────────
@@ -251,108 +251,108 @@ export function resetFlueAgentRegistrationForTests(): void {
  * before the bootstrap registers the scanned set is fine.
  */
 export function createAgentRouter(agent: Agent): Hono {
-	assertAgentFunction(agent, '(unresolved)');
-	const identity = resolveAgentIdentity(agent);
-	if (identity === undefined) {
-		throw new Error(
-			'[flue] createAgentRouter() could not resolve an identity for this agent: the function is ' +
-				'anonymous and carries no agentName static. Name the function (or assign ' +
-				"`fn.agentName = '<identity>'`).",
-		);
-	}
-	assertAgentIdentity(identity);
+  assertAgentFunction(agent, '(unresolved)')
+  const identity = resolveAgentIdentity(agent)
+  if (identity === undefined) {
+    throw new Error(
+      '[flue] createAgentRouter() could not resolve an identity for this agent: the function is ' +
+      'anonymous and carries no agentName static. Name the function (or assign ' +
+      '`fn.agentName = \'<identity>\'`).',
+    )
+  }
+  assertAgentIdentity(identity)
 
-	const app = new Hono();
+  const app = new Hono()
 
-	app.post('/:id', async (c) => {
-		const rt = requireRuntime();
-		const id = c.req.param('id') ?? '';
-		assertAgentInstanceId(id);
-		return executeAgentPrompt(rt, {
-			agentName: identity,
-			instanceId: id,
-			request: c.req.raw.clone(),
-			env: c.env,
-		});
-	});
+  app.post('/:id', async (c) => {
+    const rt = requireRuntime()
+    const id = c.req.param('id') ?? ''
+    assertAgentInstanceId(id)
+    return executeAgentPrompt(rt, {
+      agentName: identity,
+      instanceId: id,
+      request: c.req.raw.clone(),
+      env: c.env,
+    })
+  })
 
-	// Abort all in-flight/queued work for an agent instance. A distinct
-	// (longer) path, so it never collides with the prompt/stream routes.
-	app.all('/:id/abort', async (c) => {
-		const rt = requireRuntime();
-		if (c.req.method !== 'POST') {
-			throw new MethodNotAllowedError({ method: c.req.method, allowed: ['POST'] });
-		}
-		const id = c.req.param('id') ?? '';
-		assertAgentInstanceId(id);
-		return executeAgentAbort(rt, {
-			agentName: identity,
-			instanceId: id,
-			request: c.req.raw.clone(),
-			env: c.env,
-		});
-	});
+  // Abort all in-flight/queued work for an agent instance. A distinct
+  // (longer) path, so it never collides with the prompt/stream routes.
+  app.all('/:id/abort', async (c) => {
+    const rt = requireRuntime()
+    if (c.req.method !== 'POST') {
+      throw new MethodNotAllowedError({ method: c.req.method, allowed: ['POST'] })
+    }
+    const id = c.req.param('id') ?? ''
+    assertAgentInstanceId(id)
+    return executeAgentAbort(rt, {
+      agentName: identity,
+      instanceId: id,
+      request: c.req.raw.clone(),
+      env: c.env,
+    })
+  })
 
-	// Attachment byte download. A distinct (longer) path, so it never
-	// collides with the prompt/stream routes.
-	app.all('/:id/attachments/:attachmentId', async (c) => {
-		const rt = requireRuntime();
-		if (c.req.method !== 'GET') {
-			throw new MethodNotAllowedError({ method: c.req.method, allowed: ['GET'] });
-		}
-		return executeAgentAttachmentRead(rt, {
-			agentName: identity,
-			instanceId: c.req.param('id') ?? '',
-			attachmentId: c.req.param('attachmentId') ?? '',
-			request: c.req.raw.clone(),
-			env: c.env,
-		});
-	});
+  // Attachment byte download. A distinct (longer) path, so it never
+  // collides with the prompt/stream routes.
+  app.all('/:id/attachments/:attachmentId', async (c) => {
+    const rt = requireRuntime()
+    if (c.req.method !== 'GET') {
+      throw new MethodNotAllowedError({ method: c.req.method, allowed: ['GET'] })
+    }
+    return executeAgentAttachmentRead(rt, {
+      agentName: identity,
+      instanceId: c.req.param('id') ?? '',
+      attachmentId: c.req.param('attachmentId') ?? '',
+      request: c.req.raw.clone(),
+      env: c.env,
+    })
+  })
 
-	// GET/HEAD stream reads, and the canonical 405 envelope for any other
-	// unmatched method (instead of Hono's default 404).
-	app.all('/:id', async (c) => {
-		const rt = requireRuntime();
-		if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && c.req.method !== 'POST') {
-			throw new MethodNotAllowedError({
-				method: c.req.method,
-				allowed: ['GET', 'HEAD', 'POST'],
-			});
-		}
-		const id = c.req.param('id') ?? '';
-		assertAgentInstanceId(id);
-		return executeAgentConversationRead(rt, {
-			agentName: identity,
-			instanceId: id,
-			request: c.req.raw,
-			env: c.env,
-		});
-	});
+  // GET/HEAD stream reads, and the canonical 405 envelope for any other
+  // unmatched method (instead of Hono's default 404).
+  app.all('/:id', async (c) => {
+    const rt = requireRuntime()
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && c.req.method !== 'POST') {
+      throw new MethodNotAllowedError({
+        method: c.req.method,
+        allowed: ['GET', 'HEAD', 'POST'],
+      })
+    }
+    const id = c.req.param('id') ?? ''
+    assertAgentInstanceId(id)
+    return executeAgentConversationRead(rt, {
+      agentName: identity,
+      instanceId: id,
+      request: c.req.raw,
+      env: c.env,
+    })
+  })
 
-	app.onError((err, c) => toHttpResponse(err, { request: c.req.raw }));
+  app.onError((err, c) => toHttpResponse(err, { request: c.req.raw }))
 
-	return app;
+  return app
 }
 
 function requireRuntime() {
-	const rt = getFlueRuntime();
-	if (!rt) {
-		throw new Error(
-			'[flue] Agent route invoked before the runtime was configured. ' +
-				'This usually means the mounted app is served outside a Flue-built server entry.',
-		);
-	}
-	return rt;
+  const rt = getFlueRuntime()
+  if (!rt) {
+    throw new Error(
+      '[flue] Agent route invoked before the runtime was configured. ' +
+      'This usually means the mounted app is served outside a Flue-built server entry.',
+    )
+  }
+  return rt
 }
 
 function assertAgentFunction(value: unknown, identity: string): asserts value is Agent {
-	// Twin: `isAgentFunction` in flue-app.ts — keep in sync.
-	if (typeof value !== 'function') {
-		throw new Error(
-			`[flue] Agent "${identity}" must be a function — the agent IS the function. ` +
-				"Export a capitalized function from a 'use agent' module (there is no wrapper to call).",
-		);
-	}
+  // Twin: `isAgentFunction` in flue-app.ts — keep in sync.
+  if (typeof value !== 'function') {
+    throw new Error(
+      `[flue] Agent "${identity}" must be a function — the agent IS the function. ` +
+      'Export a capitalized function from a \'use agent\' module (there is no wrapper to call).',
+    )
+  }
 }
 
 /**
@@ -361,10 +361,10 @@ function assertAgentFunction(value: unknown, identity: string): asserts value is
  * in particular no `:` (URL addressing reserves a single namespace segment).
  */
 function assertAgentIdentity(identity: unknown): asserts identity is string {
-	if (typeof identity !== 'string' || !AGENT_IDENTITY_PATTERN.test(identity)) {
-		throw new Error(
-			`[flue] Agent identity "${String(identity)}" is invalid. Agent identities must match ${AGENT_IDENTITY_PATTERN} ` +
-				'(a function name like "IssueTriage", or a kebab-case override like "issue-triage").',
-		);
-	}
+  if (typeof identity !== 'string' || !AGENT_IDENTITY_PATTERN.test(identity)) {
+    throw new Error(
+      `[flue] Agent identity "${String(identity)}" is invalid. Agent identities must match ${AGENT_IDENTITY_PATTERN} ` +
+      '(a function name like "IssueTriage", or a kebab-case override like "issue-triage").',
+    )
+  }
 }

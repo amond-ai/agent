@@ -6,7 +6,7 @@
  * `app.route('/agents/triage', createAgentRouter(IssueTriage))`).
  */
 
-export { createAgentRouter } from './runtime/registration.ts';
+export { createAgentRouter } from './runtime/registration.ts'
 
 /**
  * Structural contract for the default export of an authored `app.ts` entry.
@@ -18,5 +18,5 @@ export { createAgentRouter } from './runtime/registration.ts';
  * the incoming and outgoing messages, and `ctx` is `undefined`.
  */
 export interface Fetchable {
-	fetch(request: Request, env?: unknown, ctx?: unknown): Response | Promise<Response>;
+  fetch(request: Request, env?: unknown, ctx?: unknown): Response | Promise<Response>
 }

@@ -1,8 +1,8 @@
-import { enqueueDispatch } from '../runtime/dispatch.ts';
-import { getFlueRuntime } from '../runtime/flue-app.ts';
-import { normalizeMessageInput } from '../runtime/message-input.ts';
-import type { DeliveredMessageInput, DispatchReceipt } from '../types.ts';
-import { isRendering, requireRenderFrame } from './frame.ts';
+import { enqueueDispatch } from '../runtime/dispatch.ts'
+import { getFlueRuntime } from '../runtime/flue-app.ts'
+import { normalizeMessageInput } from '../runtime/message-input.ts'
+import type { DeliveredMessageInput, DispatchReceipt } from '../types.ts'
+import { isRendering, requireRenderFrame } from './frame.ts'
 
 /**
  * Get a dispatcher bound to this agent instance — the agent-scoped form of
@@ -55,34 +55,34 @@ import { isRendering, requireRenderFrame } from './frame.ts';
  *   tooling/test renders with no runtime behind them.
  */
 export function useDispatchMessage(): (message: DeliveredMessageInput) => Promise<DispatchReceipt> {
-	const frame = requireRenderFrame('useDispatchMessage');
-	if (frame.kind === 'subagent') {
-		throw new Error(
-			'[flue] useDispatchMessage() is not available in a subagent render. A delegate has no instance of its own to dispatch to — return what it produced as its task result instead.',
-		);
-	}
-	const agentName = frame.state?.agentName;
-	const instanceId = frame.state?.instanceId;
-	return async (message: DeliveredMessageInput): Promise<DispatchReceipt> => {
-		if (isRendering()) {
-			throw new Error(
-				'[flue] The useDispatchMessage() dispatcher was called during render. Renders are pure reads — dispatch from tool run functions, effects, and other callbacks.',
-			);
-		}
-		if (agentName === undefined || instanceId === undefined) {
-			throw new Error(
-				'[flue] The useDispatchMessage() dispatcher has no durable runtime behind this render, so self-dispatch is unavailable.',
-			);
-		}
-		const rt = getFlueRuntime();
-		if (!rt) {
-			throw new Error(
-				'[flue] The useDispatchMessage() dispatcher was called before the Flue runtime was configured. This usually means the agent is running outside a Flue-built server entry.',
-			);
-		}
-		return enqueueDispatch({
-			request: { agent: agentName, id: instanceId, message: normalizeMessageInput(message) },
-			dispatchQueue: rt.dispatchQueue,
-		});
-	};
+  const frame = requireRenderFrame('useDispatchMessage')
+  if (frame.kind === 'subagent') {
+    throw new Error(
+      '[flue] useDispatchMessage() is not available in a subagent render. A delegate has no instance of its own to dispatch to — return what it produced as its task result instead.',
+    )
+  }
+  const agentName = frame.state?.agentName
+  const instanceId = frame.state?.instanceId
+  return async (message: DeliveredMessageInput): Promise<DispatchReceipt> => {
+    if (isRendering()) {
+      throw new Error(
+        '[flue] The useDispatchMessage() dispatcher was called during render. Renders are pure reads — dispatch from tool run functions, effects, and other callbacks.',
+      )
+    }
+    if (agentName === undefined || instanceId === undefined) {
+      throw new Error(
+        '[flue] The useDispatchMessage() dispatcher has no durable runtime behind this render, so self-dispatch is unavailable.',
+      )
+    }
+    const rt = getFlueRuntime()
+    if (!rt) {
+      throw new Error(
+        '[flue] The useDispatchMessage() dispatcher was called before the Flue runtime was configured. This usually means the agent is running outside a Flue-built server entry.',
+      )
+    }
+    return enqueueDispatch({
+      request: { agent: agentName, id: instanceId, message: normalizeMessageInput(message) },
+      dispatchQueue: rt.dispatchQueue,
+    })
+  }
 }

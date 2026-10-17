@@ -1,34 +1,34 @@
 import {
-	type ConversationUiMessage,
-	type ConversationUiSnapshot,
-	classifySignal,
-	projectConversationUi,
-	supersededAssistantErrorEntryIds,
-} from './conversation-projections.ts';
-import type { ConversationRecord, SubmissionSettledRecord } from './conversation-records.ts';
-import type { ReducedConversationState, ReducedInstanceState } from './conversation-reducer.ts';
+  classifySignal,
+  
+  projectConversationUi,
+  supersededAssistantErrorEntryIds,
+} from './conversation-projections.ts'
+import type { ConversationUiMessage, ConversationUiSnapshot } from './conversation-projections.ts'
+import type { ConversationRecord, SubmissionSettledRecord } from './conversation-records.ts'
+import type { ReducedConversationState, ReducedInstanceState } from './conversation-reducer.ts'
 import {
-	getActiveConversationPath,
-	hasUncommittedToolBatchAtLeaf,
-	toolResultEntryId,
-} from './conversation-reducer.ts';
-import { toolResultOutput, toolResultText } from './message-rendering.ts';
+  getActiveConversationPath,
+  hasUncommittedToolBatchAtLeaf,
+  toolResultEntryId,
+} from './conversation-reducer.ts'
+import { toolResultOutput, toolResultText } from './message-rendering.ts'
 
 interface AgentConversationSettlement {
-	submissionId: string;
-	outcome: 'completed' | 'failed' | 'aborted';
-	error?: unknown;
-	/**
-	 * The submission whose response answered this one — for a delivery that
-	 * joined a live response, the host submission whose reply coalesced it.
-	 * Derived at projection time from the attempt shared by the settlement
-	 * record and the response's assistant records (nothing stamps it at
-	 * settle time). Absent on settlements that predate attempt stamping and
-	 * on attempts that produced no assistant message.
-	 */
-	answeredBySubmissionId?: string;
-	/** Capture time (ISO 8601) of the `submission_settled` record. */
-	timestamp?: string;
+  submissionId: string
+  outcome: 'completed' | 'failed' | 'aborted'
+  error?: unknown
+  /**
+   * The submission whose response answered this one — for a delivery that
+   * joined a live response, the host submission whose reply coalesced it.
+   * Derived at projection time from the attempt shared by the settlement
+   * record and the response's assistant records (nothing stamps it at
+   * settle time). Absent on settlements that predate attempt stamping and
+   * on attempts that produced no assistant message.
+   */
+  answeredBySubmissionId?: string
+  /** Capture time (ISO 8601) of the `submission_settled` record. */
+  timestamp?: string
 }
 
 /**
@@ -36,28 +36,28 @@ interface AgentConversationSettlement {
  * with @flue/sdk's `FlueConversationSnapshot`.
  */
 export interface AgentConversationSnapshot {
-	v: 1;
-	conversationId: string;
-	offset: string;
-	/**
-	 * Durable stream-generation identity (see `ConversationStreamMeta.incarnation`).
-	 * A reset-and-regrown stream (dev restart on the in-memory store, wiped
-	 * store) serves different content at overlapping offsets; the incarnation is
-	 * what lets a client detect that its offsets belong to a dead generation.
-	 * Stamped by the history route from stream meta — absent on snapshots
-	 * projected without meta access (`conversation-reset` chunks), where the
-	 * generation cannot have changed within the delivering connection.
-	 */
-	incarnation?: string;
-	messages: ConversationUiMessage[];
-	settlements: AgentConversationSettlement[];
-	/**
-	 * Present only on bounded history reads (`limit` / `from`): the cursor for
-	 * the next older page — the id of the oldest returned message — or `null`
-	 * when `messages` starts at the beginning of the conversation. Absent on
-	 * unbounded reads and on `conversation-reset` snapshots.
-	 */
-	before?: string | null;
+  v: 1
+  conversationId: string
+  offset: string
+  /**
+   * Durable stream-generation identity (see `ConversationStreamMeta.incarnation`).
+   * A reset-and-regrown stream (dev restart on the in-memory store, wiped
+   * store) serves different content at overlapping offsets; the incarnation is
+   * what lets a client detect that its offsets belong to a dead generation.
+   * Stamped by the history route from stream meta — absent on snapshots
+   * projected without meta access (`conversation-reset` chunks), where the
+   * generation cannot have changed within the delivering connection.
+   */
+  incarnation?: string
+  messages: ConversationUiMessage[]
+  settlements: AgentConversationSettlement[]
+  /**
+   * Present only on bounded history reads (`limit` / `from`): the cursor for
+   * the next older page — the id of the oldest returned message — or `null`
+   * when `messages` starts at the beginning of the conversation. Absent on
+   * unbounded reads and on `conversation-reset` snapshots.
+   */
+  before?: string | null
 }
 
 /**
@@ -75,77 +75,79 @@ export interface AgentConversationSnapshot {
  * interpolate between stamped boundaries.
  */
 type ConversationStreamChunkBody =
-	| { type: 'conversation-reset'; conversationId: string; snapshot: AgentConversationSnapshot }
-	| { type: 'message-appended'; conversationId: string; message: ConversationUiMessage }
-	| {
-			type: 'message-started';
-			conversationId: string;
-			messageId: string;
-			submissionId?: string;
-			/** Turn this assistant message belongs to; the SDK stamps it onto the
-			 *  synthesized message so live grouping matches the snapshot projection. */
-			turnId?: string;
-			/** Agent-authored response metadata from `useResponseStart` hooks. */
-			metadata?: Record<string, unknown>;
-			/** Capture time (ISO 8601) of the underlying canonical record. */
-			timestamp?: string;
-	  }
-	| {
-			type: 'message-metadata';
-			conversationId: string;
-			messageId: string;
-			metadata: Record<string, unknown>;
-	  }
-	| {
-			type: 'data-part';
-			conversationId: string;
-			messageId: string;
-			name: string;
-			data: unknown;
-	  }
-	| {
-			type: 'message-delta';
-			conversationId: string;
-			messageId: string;
-			kind: 'text' | 'reasoning';
-			delta: string;
-	  }
-	| {
-			type: 'tool-input';
-			conversationId: string;
-			messageId: string;
-			toolCallId: string;
-			toolName: string;
-			input: unknown;
-			timestamp?: string;
-	  }
-	| {
-			type: 'tool-output';
-			conversationId: string;
-			toolCallId: string;
-			output: unknown;
-			durationMs?: number;
-			timestamp?: string;
-	  }
-	| {
-			type: 'tool-output-error';
-			conversationId: string;
-			toolCallId: string;
-			errorText: string;
-			durationMs?: number;
-			timestamp?: string;
-	  }
-	| { type: 'message-completed'; conversationId: string; messageId: string; timestamp?: string }
-	| {
-			type: 'submission-settled';
-			conversationId: string;
-			submissionId: string;
-			outcome: 'completed' | 'failed' | 'aborted';
-			error?: unknown;
-			/** See {@link AgentConversationSettlement.answeredBySubmissionId}. */
-			answeredBySubmissionId?: string;
-			timestamp?: string;
-	  };
+  | { type: 'conversation-reset', conversationId: string, snapshot: AgentConversationSnapshot }
+  | { type: 'message-appended', conversationId: string, message: ConversationUiMessage }
+  | {
+    type: 'message-started'
+    conversationId: string
+    messageId: string
+    submissionId?: string
+    /**
+     * Turn this assistant message belongs to; the SDK stamps it onto the
+     *  synthesized message so live grouping matches the snapshot projection.
+     */
+    turnId?: string
+    /** Agent-authored response metadata from `useResponseStart` hooks. */
+    metadata?: Record<string, unknown>
+    /** Capture time (ISO 8601) of the underlying canonical record. */
+    timestamp?: string
+  }
+  | {
+    type: 'message-metadata'
+    conversationId: string
+    messageId: string
+    metadata: Record<string, unknown>
+  }
+  | {
+    type: 'data-part'
+    conversationId: string
+    messageId: string
+    name: string
+    data: unknown
+  }
+  | {
+    type: 'message-delta'
+    conversationId: string
+    messageId: string
+    kind: 'text' | 'reasoning'
+    delta: string
+  }
+  | {
+    type: 'tool-input'
+    conversationId: string
+    messageId: string
+    toolCallId: string
+    toolName: string
+    input: unknown
+    timestamp?: string
+  }
+  | {
+    type: 'tool-output'
+    conversationId: string
+    toolCallId: string
+    output: unknown
+    durationMs?: number
+    timestamp?: string
+  }
+  | {
+    type: 'tool-output-error'
+    conversationId: string
+    toolCallId: string
+    errorText: string
+    durationMs?: number
+    timestamp?: string
+  }
+  | { type: 'message-completed', conversationId: string, messageId: string, timestamp?: string }
+  | {
+    type: 'submission-settled'
+    conversationId: string
+    submissionId: string
+    outcome: 'completed' | 'failed' | 'aborted'
+    error?: unknown
+    /** See {@link AgentConversationSettlement.answeredBySubmissionId}. */
+    answeredBySubmissionId?: string
+    timestamp?: string
+  }
 
 /**
  * Monotonic ordering token stamped on every chunk. `batch` is the durable batch
@@ -154,11 +156,11 @@ type ConversationStreamChunkBody =
  * then `index`) to dedupe chunks redelivered under at-least-once transports
  * (e.g. an SSE reconnect). Opaque otherwise — do not interpret the numbers.
  */
-type ConversationChunkPosition = { batch: number; index: number };
+interface ConversationChunkPosition { batch: number, index: number }
 
 export type ConversationStreamChunk = ConversationStreamChunkBody & {
-	position: ConversationChunkPosition;
-};
+  position: ConversationChunkPosition
+}
 
 /**
  * Wire-only continuity marker for the `updates` view. Carries the stream's
@@ -174,13 +176,13 @@ export type ConversationStreamChunk = ConversationStreamChunkBody & {
  * conversation does).
  */
 export interface ConversationStreamCheckpointChunk {
-	type: 'stream-checkpoint';
-	incarnation: string;
+  type: 'stream-checkpoint'
+  incarnation: string
 }
 
 /** Everything the `updates` wire can carry: projected chunks plus wire-only markers. */
 export type ConversationStreamWireChunk =
-	ConversationStreamChunk | ConversationStreamCheckpointChunk;
+	ConversationStreamChunk | ConversationStreamCheckpointChunk
 
 // The public conversation API addresses exactly one conversation per agent
 // instance: the default harness/session root. An instance can hold other root
@@ -188,37 +190,37 @@ export type ConversationStreamWireChunk =
 // must be selected by its stable identity rather than by record order. Fall
 // back to any root only when no default scope exists, preserving the prior
 // behavior for instances that never used the default session.
-const DEFAULT_HARNESS = 'default';
-const DEFAULT_SESSION = 'default';
+const DEFAULT_HARNESS = 'default'
+const DEFAULT_SESSION = 'default'
 
 function selectRootConversation(state: ReducedInstanceState) {
-	const roots = [...state.conversations.values()].filter(
-		(conversation) => conversation.kind === 'root',
-	);
-	return (
-		roots.find(
-			(conversation) =>
-				conversation.harness === DEFAULT_HARNESS && conversation.session === DEFAULT_SESSION,
-		) ?? roots[0]
-	);
+  const roots = [...state.conversations.values()].filter(
+    conversation => conversation.kind === 'root',
+  )
+  return (
+    roots.find(
+      conversation =>
+        conversation.harness === DEFAULT_HARNESS && conversation.session === DEFAULT_SESSION,
+    ) ?? roots[0]
+  )
 }
 
 export function projectAgentConversationSnapshot(
-	state: ReducedInstanceState,
+  state: ReducedInstanceState,
 ): AgentConversationSnapshot | undefined {
-	const conversation = selectRootConversation(state);
-	if (!conversation) return undefined;
-	const ui: ConversationUiSnapshot = projectConversationUi(
-		conversation,
-		state.recordsThroughOffset,
-	);
-	return {
-		v: 1,
-		conversationId: conversation.conversationId,
-		offset: ui.streamOffset,
-		messages: ui.messages,
-		settlements: projectSettlements(state, conversation.conversationId),
-	};
+  const conversation = selectRootConversation(state)
+  if (!conversation) { return undefined }
+  const ui: ConversationUiSnapshot = projectConversationUi(
+    conversation,
+    state.recordsThroughOffset,
+  )
+  return {
+    v: 1,
+    conversationId: conversation.conversationId,
+    offset: ui.streamOffset,
+    messages: ui.messages,
+    settlements: projectSettlements(state, conversation.conversationId),
+  }
 }
 
 /**
@@ -240,64 +242,64 @@ export function projectAgentConversationSnapshot(
  *   still to arrive (covers untracked turns with no submission).
  */
 export function projectLiveMessageTargets(state: ReducedInstanceState): ReadonlySet<string> {
-	const targets = new Set<string>();
-	const conversation = selectRootConversation(state);
-	if (!conversation) return targets;
-	const settled = new Set(
-		projectSettlements(state, conversation.conversationId).map((entry) => entry.submissionId),
-	);
-	const responseIds = buildResponseMessageIndex(conversation);
-	for (const [submissionId, messageId] of responseIds) {
-		if (!settled.has(submissionId)) targets.add(messageId);
-	}
-	for (const message of conversation.inProgressMessages.values()) {
-		targets.add(message.messageId);
-		const response = message.submissionId ? responseIds.get(message.submissionId) : undefined;
-		if (response) targets.add(response);
-	}
-	if (hasUncommittedToolBatchAtLeaf(conversation) && conversation.activeLeafId) {
-		const leaf = conversation.entries.get(conversation.activeLeafId);
-		const response =
-			leaf?.type === 'message' && leaf.submissionId
-				? responseIds.get(leaf.submissionId)
-				: undefined;
-		targets.add(response ?? conversation.activeLeafId);
-	}
-	return targets;
+  const targets = new Set<string>()
+  const conversation = selectRootConversation(state)
+  if (!conversation) { return targets }
+  const settled = new Set(
+    projectSettlements(state, conversation.conversationId).map(entry => entry.submissionId),
+  )
+  const responseIds = buildResponseMessageIndex(conversation)
+  for (const [submissionId, messageId] of responseIds) {
+    if (!settled.has(submissionId)) { targets.add(messageId) }
+  }
+  for (const message of conversation.inProgressMessages.values()) {
+    targets.add(message.messageId)
+    const response = message.submissionId ? responseIds.get(message.submissionId) : undefined
+    if (response) { targets.add(response) }
+  }
+  if (hasUncommittedToolBatchAtLeaf(conversation) && conversation.activeLeafId) {
+    const leaf = conversation.entries.get(conversation.activeLeafId)
+    const response =
+      leaf?.type === 'message' && leaf.submissionId
+        ? responseIds.get(leaf.submissionId)
+        : undefined
+    targets.add(response ?? conversation.activeLeafId)
+  }
+  return targets
 }
 
 export function projectAgentConversationBatch(options: {
-	state: ReducedInstanceState;
-	previousState?: ReducedInstanceState;
-	records: readonly ConversationRecord[];
-	/** Durable batch ordinal these records were read at; stamped onto each chunk. */
-	batchOrdinal: number;
+  state: ReducedInstanceState
+  previousState?: ReducedInstanceState
+  records: readonly ConversationRecord[]
+  /** Durable batch ordinal these records were read at; stamped onto each chunk. */
+  batchOrdinal: number
 }): ConversationStreamChunk[] {
-	const conversation =
-		selectRootConversation(options.state) ??
-		(options.previousState ? selectRootConversation(options.previousState) : undefined);
-	if (!conversation) return [];
-	const conversationId = conversation.conversationId;
-	const relevant = options.records.filter((record) => record.conversationId === conversationId);
-	if (relevant.length === 0) return [];
+  const conversation =
+    selectRootConversation(options.state) ??
+    (options.previousState ? selectRootConversation(options.previousState) : undefined)
+  if (!conversation) { return [] }
+  const conversationId = conversation.conversationId
+  const relevant = options.records.filter(record => record.conversationId === conversationId)
+  if (relevant.length === 0) { return [] }
 
-	// A reset subsumes the whole batch: a fresh snapshot already reflects every
-	// record in it, so emitting per-record chunks too would double-apply.
-	if (relevant.some((record) => requiresSnapshotReset(record, options.state))) {
-		const snapshot = projectAgentConversationSnapshot(options.state);
-		return snapshot
-			? withPositions(
-					[{ type: 'conversation-reset', conversationId, snapshot }],
-					options.batchOrdinal,
-				)
-			: [];
-	}
+  // A reset subsumes the whole batch: a fresh snapshot already reflects every
+  // record in it, so emitting per-record chunks too would double-apply.
+  if (relevant.some(record => requiresSnapshotReset(record, options.state))) {
+    const snapshot = projectAgentConversationSnapshot(options.state)
+    return snapshot
+      ? withPositions(
+          [{ type: 'conversation-reset', conversationId, snapshot }],
+          options.batchOrdinal,
+        )
+      : []
+  }
 
-	const responseIds = buildResponseMessageIndex(conversation);
-	return withPositions(
-		relevant.flatMap((record) => encodeRecord(record, conversationId, options.state, responseIds)),
-		options.batchOrdinal,
-	);
+  const responseIds = buildResponseMessageIndex(conversation)
+  return withPositions(
+    relevant.flatMap(record => encodeRecord(record, conversationId, options.state, responseIds)),
+    options.batchOrdinal,
+  )
 }
 
 /**
@@ -309,18 +311,18 @@ export function projectAgentConversationBatch(options: {
  * accumulate on the open message).
  */
 function buildResponseMessageIndex(conversation: ReducedConversationState): Map<string, string> {
-	const first = new Map<string, string>();
-	for (const entry of getActiveConversationPath(conversation)) {
-		if (entry.type !== 'message' || entry.message.role !== 'assistant' || !entry.submissionId) {
-			continue;
-		}
-		if (!first.has(entry.submissionId)) first.set(entry.submissionId, entry.id);
-	}
-	for (const message of conversation.inProgressMessages.values()) {
-		if (!message.submissionId || first.has(message.submissionId)) continue;
-		first.set(message.submissionId, message.messageId);
-	}
-	return first;
+  const first = new Map<string, string>()
+  for (const entry of getActiveConversationPath(conversation)) {
+    if (entry.type !== 'message' || entry.message.role !== 'assistant' || !entry.submissionId) {
+      continue
+    }
+    if (!first.has(entry.submissionId)) { first.set(entry.submissionId, entry.id) }
+  }
+  for (const message of conversation.inProgressMessages.values()) {
+    if (!message.submissionId || first.has(message.submissionId)) { continue }
+    first.set(message.submissionId, message.messageId)
+  }
+  return first
 }
 
 /**
@@ -330,255 +332,255 @@ function buildResponseMessageIndex(conversation: ReducedConversationState): Map<
  * conversation. This is the identity consumers dedupe on under redelivery.
  */
 function withPositions(
-	bodies: ConversationStreamChunkBody[],
-	batch: number,
+  bodies: ConversationStreamChunkBody[],
+  batch: number,
 ): ConversationStreamChunk[] {
-	return bodies.map((body, index) => ({ ...body, position: { batch, index } }));
+  return bodies.map((body, index) => ({ ...body, position: { batch, index } }))
 }
 
 function requiresSnapshotReset(record: ConversationRecord, state: ReducedInstanceState): boolean {
-	if (record.type === 'conversation_created' || record.type === 'compaction') return true;
-	if (record.type !== 'assistant_message_started' || !record.submissionId) return false;
-	// A live client already rendered the failed step's partial parts onto the
-	// response id. Starting its replacement must retract those parts before new
-	// deltas target that same stable id; the snapshot projection supplies the
-	// corrected response shell.
-	const conversation = state.conversations.get(record.conversationId);
-	if (!conversation) return false;
-	const superseded = supersededAssistantErrorEntryIds(conversation);
-	return getActiveConversationPath(conversation).some(
-		(entry) =>
-			entry.type === 'message' &&
-			entry.message.role === 'assistant' &&
-			entry.submissionId === record.submissionId &&
-			superseded.has(entry.id),
-	);
+  if (record.type === 'conversation_created' || record.type === 'compaction') { return true }
+  if (record.type !== 'assistant_message_started' || !record.submissionId) { return false }
+  // A live client already rendered the failed step's partial parts onto the
+  // response id. Starting its replacement must retract those parts before new
+  // deltas target that same stable id; the snapshot projection supplies the
+  // corrected response shell.
+  const conversation = state.conversations.get(record.conversationId)
+  if (!conversation) { return false }
+  const superseded = supersededAssistantErrorEntryIds(conversation)
+  return getActiveConversationPath(conversation).some(
+    entry =>
+      entry.type === 'message' &&
+      entry.message.role === 'assistant' &&
+      entry.submissionId === record.submissionId &&
+      superseded.has(entry.id),
+  )
 }
 
 function encodeRecord(
-	record: ConversationRecord,
-	conversationId: string,
-	state: ReducedInstanceState,
-	responseIds: Map<string, string>,
+  record: ConversationRecord,
+  conversationId: string,
+  state: ReducedInstanceState,
+  responseIds: Map<string, string>,
 ): ConversationStreamChunkBody[] {
-	// Assistant records of a tracked submission address the submission's
-	// response message, not the per-step canonical message.
-	const uiMessageId = (messageId: string): string =>
-		(record.submissionId ? responseIds.get(record.submissionId) : undefined) ?? messageId;
-	switch (record.type) {
-		case 'user_message':
-			return [
-				{
-					type: 'message-appended',
-					conversationId,
-					message: {
-						id: record.messageId,
-						role: 'user',
-						purpose: 'user',
-						display: 'visible',
-						...(record.submissionId ? { submissionId: record.submissionId } : {}),
-						...(record.turnId ? { turnId: record.turnId } : {}),
-						...(record.timestamp ? { timestamp: record.timestamp } : {}),
-						parts: record.content.map((content) =>
-							content.type === 'text'
-								? { type: 'text', text: content.text, state: 'done' }
-								: {
-										type: 'file',
-										mediaType: content.attachment.mimeType,
-										id: content.attachment.id,
-										size: content.attachment.size,
-										...(content.attachment.filename
-											? { filename: content.attachment.filename }
-											: {}),
-									},
-						),
-					},
-				},
-			];
-		case 'signal': {
-			const { purpose, display, settlement } = classifySignal(record.signalType);
-			const signal = {
-				...(record.tagName ? { tagName: record.tagName } : {}),
-				...(record.attributes ? { attributes: record.attributes } : {}),
-			};
-			return [
-				{
-					type: 'message-appended',
-					conversationId,
-					message: {
-						id: record.messageId,
-						role: 'system',
-						purpose,
-						display,
-						...(record.submissionId ? { submissionId: record.submissionId } : {}),
-						...(record.turnId ? { turnId: record.turnId } : {}),
-						...(Object.keys(signal).length > 0 ? { signal } : {}),
-						...(settlement ? { settlement } : {}),
-						...(record.timestamp ? { timestamp: record.timestamp } : {}),
-						parts: [{ type: 'text', text: record.content, state: 'done' }],
-					},
-				},
-			];
-		}
-		case 'assistant_message_started':
-			return [
-				{
-					type: 'message-started',
-					conversationId,
-					messageId: uiMessageId(record.messageId),
-					...(record.submissionId ? { submissionId: record.submissionId } : {}),
-					...(record.turnId ? { turnId: record.turnId } : {}),
-					...(record.responseMetadata ? { metadata: record.responseMetadata } : {}),
-					...(record.timestamp ? { timestamp: record.timestamp } : {}),
-				},
-			];
-		case 'message_metadata': {
-			const messageId = record.submissionId ? responseIds.get(record.submissionId) : undefined;
-			return messageId
-				? [{ type: 'message-metadata', conversationId, messageId, metadata: record.metadata }]
-				: [];
-		}
-		case 'message_data_write': {
-			const messageId = record.submissionId ? responseIds.get(record.submissionId) : undefined;
-			return messageId
-				? [{ type: 'data-part', conversationId, messageId, name: record.name, data: record.data }]
-				: [];
-		}
-		case 'assistant_text_delta':
-			return [
-				{
-					type: 'message-delta',
-					conversationId,
-					messageId: uiMessageId(record.messageId),
-					kind: 'text',
-					delta: record.delta,
-				},
-			];
-		case 'assistant_reasoning_delta':
-			return [
-				{
-					type: 'message-delta',
-					conversationId,
-					messageId: uiMessageId(record.messageId),
-					kind: 'reasoning',
-					delta: record.delta,
-				},
-			];
-		// Block lifecycle (`assistant_text_started`/`assistant_*_completed`) carries no
-		// UI-visible payload: the first delta opens a streaming part, a `kind` change or
-		// `message-completed` closes it. So those records project to no chunk.
-		case 'assistant_tool_call':
-			return [
-				{
-					type: 'tool-input',
-					conversationId,
-					messageId: uiMessageId(record.messageId),
-					toolCallId: record.toolCallId,
-					toolName: record.name,
-					input: record.arguments,
-					...(record.timestamp ? { timestamp: record.timestamp } : {}),
-				},
-			];
-		case 'assistant_message_completed':
-			return [
-				{
-					type: 'message-completed',
-					conversationId,
-					messageId: uiMessageId(record.messageId),
-					...(record.timestamp ? { timestamp: record.timestamp } : {}),
-				},
-			];
-		case 'tool_results_committed': {
-			const conversation = state.conversations.get(record.conversationId);
-			if (!conversation) return [];
-			const assistant = conversation.entries.get(record.assistantMessageId);
-			if (assistant?.type !== 'message' || assistant.message.role !== 'assistant') return [];
-			// The fold guarantees one committed tool-result entry per assistant
-			// tool call, in call order — the same entries the snapshot projection
-			// renders, so the live stream cannot drift from it.
-			return assistant.message.content.flatMap((block) =>
-				block.type === 'toolCall'
-					? encodeToolResultEntry(conversation, record.assistantMessageId, block.id, conversationId)
-					: [],
-			);
-		}
-		case 'submission_settled': {
-			const answeredBy =
-				typeof record.attemptId === 'string'
-					? assistantSubmissionByAttempt(state).get(record.attemptId)
-					: undefined;
-			return [
-				{
-					type: 'submission-settled',
-					conversationId,
-					submissionId: record.submissionId,
-					outcome: record.outcome,
-					...(record.error === undefined ? {} : { error: record.error }),
-					...(answeredBy === undefined ? {} : { answeredBySubmissionId: answeredBy }),
-					...(record.timestamp ? { timestamp: record.timestamp } : {}),
-				},
-			];
-		}
-		default:
-			return [];
-	}
+  // Assistant records of a tracked submission address the submission's
+  // response message, not the per-step canonical message.
+  const uiMessageId = (messageId: string): string =>
+    (record.submissionId ? responseIds.get(record.submissionId) : undefined) ?? messageId
+  switch (record.type) {
+    case 'user_message':
+      return [
+        {
+          type: 'message-appended',
+          conversationId,
+          message: {
+            id: record.messageId,
+            role: 'user',
+            purpose: 'user',
+            display: 'visible',
+            ...(record.submissionId ? { submissionId: record.submissionId } : {}),
+            ...(record.turnId ? { turnId: record.turnId } : {}),
+            ...(record.timestamp ? { timestamp: record.timestamp } : {}),
+            parts: record.content.map(content =>
+              content.type === 'text'
+                ? { type: 'text', text: content.text, state: 'done' }
+                : {
+                    type: 'file',
+                    mediaType: content.attachment.mimeType,
+                    id: content.attachment.id,
+                    size: content.attachment.size,
+                    ...(content.attachment.filename
+                      ? { filename: content.attachment.filename }
+                      : {}),
+                  },
+            ),
+          },
+        },
+      ]
+    case 'signal': {
+      const { purpose, display, settlement } = classifySignal(record.signalType)
+      const signal = {
+        ...(record.tagName ? { tagName: record.tagName } : {}),
+        ...(record.attributes ? { attributes: record.attributes } : {}),
+      }
+      return [
+        {
+          type: 'message-appended',
+          conversationId,
+          message: {
+            id: record.messageId,
+            role: 'system',
+            purpose,
+            display,
+            ...(record.submissionId ? { submissionId: record.submissionId } : {}),
+            ...(record.turnId ? { turnId: record.turnId } : {}),
+            ...(Object.keys(signal).length > 0 ? { signal } : {}),
+            ...(settlement ? { settlement } : {}),
+            ...(record.timestamp ? { timestamp: record.timestamp } : {}),
+            parts: [{ type: 'text', text: record.content, state: 'done' }],
+          },
+        },
+      ]
+    }
+    case 'assistant_message_started':
+      return [
+        {
+          type: 'message-started',
+          conversationId,
+          messageId: uiMessageId(record.messageId),
+          ...(record.submissionId ? { submissionId: record.submissionId } : {}),
+          ...(record.turnId ? { turnId: record.turnId } : {}),
+          ...(record.responseMetadata ? { metadata: record.responseMetadata } : {}),
+          ...(record.timestamp ? { timestamp: record.timestamp } : {}),
+        },
+      ]
+    case 'message_metadata': {
+      const messageId = record.submissionId ? responseIds.get(record.submissionId) : undefined
+      return messageId
+        ? [{ type: 'message-metadata', conversationId, messageId, metadata: record.metadata }]
+        : []
+    }
+    case 'message_data_write': {
+      const messageId = record.submissionId ? responseIds.get(record.submissionId) : undefined
+      return messageId
+        ? [{ type: 'data-part', conversationId, messageId, name: record.name, data: record.data }]
+        : []
+    }
+    case 'assistant_text_delta':
+      return [
+        {
+          type: 'message-delta',
+          conversationId,
+          messageId: uiMessageId(record.messageId),
+          kind: 'text',
+          delta: record.delta,
+        },
+      ]
+    case 'assistant_reasoning_delta':
+      return [
+        {
+          type: 'message-delta',
+          conversationId,
+          messageId: uiMessageId(record.messageId),
+          kind: 'reasoning',
+          delta: record.delta,
+        },
+      ]
+      // Block lifecycle (`assistant_text_started`/`assistant_*_completed`) carries no
+      // UI-visible payload: the first delta opens a streaming part, a `kind` change or
+      // `message-completed` closes it. So those records project to no chunk.
+    case 'assistant_tool_call':
+      return [
+        {
+          type: 'tool-input',
+          conversationId,
+          messageId: uiMessageId(record.messageId),
+          toolCallId: record.toolCallId,
+          toolName: record.name,
+          input: record.arguments,
+          ...(record.timestamp ? { timestamp: record.timestamp } : {}),
+        },
+      ]
+    case 'assistant_message_completed':
+      return [
+        {
+          type: 'message-completed',
+          conversationId,
+          messageId: uiMessageId(record.messageId),
+          ...(record.timestamp ? { timestamp: record.timestamp } : {}),
+        },
+      ]
+    case 'tool_results_committed': {
+      const conversation = state.conversations.get(record.conversationId)
+      if (!conversation) { return [] }
+      const assistant = conversation.entries.get(record.assistantMessageId)
+      if (assistant?.type !== 'message' || assistant.message.role !== 'assistant') { return [] }
+      // The fold guarantees one committed tool-result entry per assistant
+      // tool call, in call order — the same entries the snapshot projection
+      // renders, so the live stream cannot drift from it.
+      return assistant.message.content.flatMap(block =>
+        block.type === 'toolCall'
+          ? encodeToolResultEntry(conversation, record.assistantMessageId, block.id, conversationId)
+          : [],
+      )
+    }
+    case 'submission_settled': {
+      const answeredBy =
+        typeof record.attemptId === 'string'
+          ? assistantSubmissionByAttempt(state).get(record.attemptId)
+          : undefined
+      return [
+        {
+          type: 'submission-settled',
+          conversationId,
+          submissionId: record.submissionId,
+          outcome: record.outcome,
+          ...(record.error === undefined ? {} : { error: record.error }),
+          ...(answeredBy === undefined ? {} : { answeredBySubmissionId: answeredBy }),
+          ...(record.timestamp ? { timestamp: record.timestamp } : {}),
+        },
+      ]
+    }
+    default:
+      return []
+  }
 }
 
 function encodeToolResultEntry(
-	conversation: ReducedConversationState,
-	assistantMessageId: string,
-	toolCallId: string,
-	conversationId: string,
+  conversation: ReducedConversationState,
+  assistantMessageId: string,
+  toolCallId: string,
+  conversationId: string,
 ): ConversationStreamChunkBody[] {
-	const entry = conversation.entries.get(toolResultEntryId(assistantMessageId, toolCallId));
-	if (entry?.type !== 'message' || entry.message.role !== 'toolResult') return [];
-	const result = entry.message;
-	// The entry carries the outcome's own capture time (when the tool result
-	// was recorded), not the commit record's batch time.
-	return result.isError
-		? [
-				{
-					type: 'tool-output-error',
-					conversationId,
-					toolCallId: result.toolCallId,
-					errorText: toolResultText(result.content),
-					...(entry.toolDurationMs !== undefined ? { durationMs: entry.toolDurationMs } : {}),
-					...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
-				},
-			]
-		: [
-				{
-					type: 'tool-output',
-					conversationId,
-					toolCallId: result.toolCallId,
-					output: entry.toolOutput ? entry.toolOutput.value : toolResultOutput(result.content),
-					...(entry.toolDurationMs !== undefined ? { durationMs: entry.toolDurationMs } : {}),
-					...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
-				},
-			];
+  const entry = conversation.entries.get(toolResultEntryId(assistantMessageId, toolCallId))
+  if (entry?.type !== 'message' || entry.message.role !== 'toolResult') { return [] }
+  const result = entry.message
+  // The entry carries the outcome's own capture time (when the tool result
+  // was recorded), not the commit record's batch time.
+  return result.isError
+    ? [
+        {
+          type: 'tool-output-error',
+          conversationId,
+          toolCallId: result.toolCallId,
+          errorText: toolResultText(result.content),
+          ...(entry.toolDurationMs !== undefined ? { durationMs: entry.toolDurationMs } : {}),
+          ...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
+        },
+      ]
+    : [
+        {
+          type: 'tool-output',
+          conversationId,
+          toolCallId: result.toolCallId,
+          output: entry.toolOutput ? entry.toolOutput.value : toolResultOutput(result.content),
+          ...(entry.toolDurationMs !== undefined ? { durationMs: entry.toolDurationMs } : {}),
+          ...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
+        },
+      ]
 }
 
 function projectSettlements(
-	state: ReducedInstanceState,
-	conversationId: string,
+  state: ReducedInstanceState,
+  conversationId: string,
 ): AgentConversationSettlement[] {
-	const answeredBy = assistantSubmissionByAttempt(state);
-	return [...state.recordsById.values()]
-		.filter(
-			(record): record is SubmissionSettledRecord =>
-				record.type === 'submission_settled' && record.conversationId === conversationId,
-		)
-		.map((record) => {
-			const by =
-				typeof record.attemptId === 'string' ? answeredBy.get(record.attemptId) : undefined;
-			return {
-				submissionId: record.submissionId,
-				outcome: record.outcome,
-				...(record.error === undefined ? {} : { error: record.error }),
-				...(by === undefined ? {} : { answeredBySubmissionId: by }),
-				...(record.timestamp ? { timestamp: record.timestamp } : {}),
-			};
-		});
+  const answeredBy = assistantSubmissionByAttempt(state)
+  return [...state.recordsById.values()]
+    .filter(
+      (record): record is SubmissionSettledRecord =>
+        record.type === 'submission_settled' && record.conversationId === conversationId,
+    )
+    .map((record) => {
+      const by =
+        typeof record.attemptId === 'string' ? answeredBy.get(record.attemptId) : undefined
+      return {
+        submissionId: record.submissionId,
+        outcome: record.outcome,
+        ...(record.error === undefined ? {} : { error: record.error }),
+        ...(by === undefined ? {} : { answeredBySubmissionId: by }),
+        ...(record.timestamp ? { timestamp: record.timestamp } : {}),
+      }
+    })
 }
 
 /**
@@ -590,11 +592,11 @@ function projectSettlements(
  * attempt stamping simply miss the index (legacy fallback applies).
  */
 function assistantSubmissionByAttempt(state: ReducedInstanceState): Map<string, string> {
-	const index = new Map<string, string>();
-	for (const record of state.recordsById.values()) {
-		if (record.type !== 'assistant_message_started') continue;
-		if (typeof record.attemptId !== 'string' || typeof record.submissionId !== 'string') continue;
-		index.set(record.attemptId, record.submissionId);
-	}
-	return index;
+  const index = new Map<string, string>()
+  for (const record of state.recordsById.values()) {
+    if (record.type !== 'assistant_message_started') { continue }
+    if (typeof record.attemptId !== 'string' || typeof record.submissionId !== 'string') { continue }
+    index.set(record.attemptId, record.submissionId)
+  }
+  return index
 }

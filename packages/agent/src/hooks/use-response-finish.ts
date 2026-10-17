@@ -1,5 +1,5 @@
-import type { ResponseFinishContext, ResponseMetadataCallback } from '../message-output.ts';
-import { requireRenderFrame } from './frame.ts';
+import type { ResponseFinishContext, ResponseMetadataCallback } from '../message-output.ts'
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Observe the response's true end — once per response, synchronously, after
@@ -39,14 +39,14 @@ import { requireRenderFrame } from './frame.ts';
  *   prompt and never re-runs the agent.
  */
 export function useResponseFinish(run: ResponseMetadataCallback<ResponseFinishContext>): void {
-	const frame = requireRenderFrame('useResponseFinish');
-	if (frame.kind === 'subagent') {
-		throw new Error(
-			"[flue] useResponseFinish() is not available in a subagent render. Response metadata decorates the agent's public conversation; delegates run detached tasks with no client-facing output.",
-		);
-	}
-	if (typeof run !== 'function') {
-		throw new Error('[flue] useResponseFinish(run) takes a callback as its only argument.');
-	}
-	frame.responseFinishes.push({ run });
+  const frame = requireRenderFrame('useResponseFinish')
+  if (frame.kind === 'subagent') {
+    throw new Error(
+      '[flue] useResponseFinish() is not available in a subagent render. Response metadata decorates the agent\'s public conversation; delegates run detached tasks with no client-facing output.',
+    )
+  }
+  if (typeof run !== 'function') {
+    throw new Error('[flue] useResponseFinish(run) takes a callback as its only argument.')
+  }
+  frame.responseFinishes.push({ run })
 }

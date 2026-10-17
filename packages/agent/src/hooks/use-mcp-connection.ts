@@ -1,21 +1,21 @@
-import type { McpConnectionDefinition, McpTransport } from '../mcp-types.ts';
-import { requireRenderFrame } from './frame.ts';
+import type { McpConnectionDefinition, McpTransport } from '../mcp-types.ts'
+import { requireRenderFrame } from './frame.ts'
 
 const DEFINITION_KEYS = new Set<string>([
-	'name',
-	'url',
-	'transport',
-	'auth',
-	'headers',
-	'requestInit',
-	'fetch',
-	'timeoutMs',
-	'resetTimeoutOnProgress',
-	'tools',
-	'optional',
-]);
+  'name',
+  'url',
+  'transport',
+  'auth',
+  'headers',
+  'requestInit',
+  'fetch',
+  'timeoutMs',
+  'resetTimeoutOnProgress',
+  'tools',
+  'optional',
+])
 
-const TRANSPORTS: readonly McpTransport[] = ['streamable-http', 'sse'];
+const TRANSPORTS: readonly McpTransport[] = ['streamable-http', 'sse']
 
 /**
  * Validate an MCP connection definition. Shared between
@@ -24,88 +24,88 @@ const TRANSPORTS: readonly McpTransport[] = ['streamable-http', 'sse'];
  * site without passing through the helper.
  */
 function assertMcpConnectionDefinition(
-	definition: unknown,
-	source: string,
+  definition: unknown,
+  source: string,
 ): asserts definition is McpConnectionDefinition {
-	if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
-		throw new Error(`[flue] ${source} requires a definition object: { name, url, ... }.`);
-	}
-	const candidate = definition as Partial<McpConnectionDefinition>;
-	const { name } = candidate;
-	if (typeof name !== 'string' || name.trim().length === 0) {
-		throw new Error(`[flue] ${source} name must be a non-empty string.`);
-	}
-	for (const key of Object.keys(definition)) {
-		if (!DEFINITION_KEYS.has(key)) {
-			throw new Error(`[flue] ${source} "${name}" received unknown field "${key}".`);
-		}
-	}
-	const { url } = candidate;
-	if (typeof url !== 'string' && !(url instanceof URL)) {
-		throw new Error(`[flue] ${source} "${name}" requires \`url\`: the MCP server endpoint.`);
-	}
-	if (typeof url === 'string' && !URL.canParse(url)) {
-		throw new Error(
-			`[flue] ${source} "${name}" url ${JSON.stringify(url)} is not a valid absolute URL.`,
-		);
-	}
-	if (candidate.transport !== undefined && !TRANSPORTS.includes(candidate.transport)) {
-		throw new Error(
-			`[flue] ${source} "${name}" transport must be one of ${TRANSPORTS.map((transport) => `'${transport}'`).join(', ')}.`,
-		);
-	}
-	if (candidate.auth !== undefined) {
-		const validStatic = typeof candidate.auth === 'string' && candidate.auth.length > 0;
-		if (!validStatic && typeof candidate.auth !== 'function') {
-			throw new Error(
-				`[flue] ${source} "${name}" auth must be a bearer token or a function resolving one per request.`,
-			);
-		}
-	}
-	if (
-		candidate.headers !== undefined &&
-		(typeof candidate.headers !== 'object' || candidate.headers === null)
-	) {
-		throw new Error(
-			`[flue] ${source} "${name}" headers must be a static HeadersInit value; for credentials resolved per request, use \`auth\`.`,
-		);
-	}
-	if (
-		candidate.requestInit !== undefined &&
-		(typeof candidate.requestInit !== 'object' || Array.isArray(candidate.requestInit))
-	) {
-		throw new Error(`[flue] ${source} "${name}" requestInit must be an object.`);
-	}
-	if (candidate.fetch !== undefined && typeof candidate.fetch !== 'function') {
-		throw new Error(`[flue] ${source} "${name}" fetch must be a function.`);
-	}
-	if (
-		candidate.timeoutMs !== undefined &&
-		(typeof candidate.timeoutMs !== 'number' ||
-			!Number.isFinite(candidate.timeoutMs) ||
-			candidate.timeoutMs <= 0)
-	) {
-		throw new Error(`[flue] ${source} "${name}" timeoutMs must be a positive number.`);
-	}
-	if (
-		candidate.resetTimeoutOnProgress !== undefined &&
-		typeof candidate.resetTimeoutOnProgress !== 'boolean'
-	) {
-		throw new Error(`[flue] ${source} "${name}" resetTimeoutOnProgress must be a boolean.`);
-	}
-	if (candidate.tools !== undefined) {
-		if (
-			!Array.isArray(candidate.tools) ||
-			candidate.tools.some((tool) => typeof tool !== 'string' || tool.length === 0)
-		) {
-			throw new Error(
-				`[flue] ${source} "${name}" tools must be an array of tool names (the server's own names).`,
-			);
-		}
-	}
-	if (candidate.optional !== undefined && typeof candidate.optional !== 'boolean') {
-		throw new Error(`[flue] ${source} "${name}" optional must be a boolean.`);
-	}
+  if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
+    throw new Error(`[flue] ${source} requires a definition object: { name, url, ... }.`)
+  }
+  const candidate = definition as Partial<McpConnectionDefinition>
+  const { name } = candidate
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error(`[flue] ${source} name must be a non-empty string.`)
+  }
+  for (const key of Object.keys(definition)) {
+    if (!DEFINITION_KEYS.has(key)) {
+      throw new Error(`[flue] ${source} "${name}" received unknown field "${key}".`)
+    }
+  }
+  const { url } = candidate
+  if (typeof url !== 'string' && !(url instanceof URL)) {
+    throw new Error(`[flue] ${source} "${name}" requires \`url\`: the MCP server endpoint.`)
+  }
+  if (typeof url === 'string' && !URL.canParse(url)) {
+    throw new Error(
+      `[flue] ${source} "${name}" url ${JSON.stringify(url)} is not a valid absolute URL.`,
+    )
+  }
+  if (candidate.transport !== undefined && !TRANSPORTS.includes(candidate.transport)) {
+    throw new Error(
+      `[flue] ${source} "${name}" transport must be one of ${TRANSPORTS.map(transport => `'${transport}'`).join(', ')}.`,
+    )
+  }
+  if (candidate.auth !== undefined) {
+    const validStatic = typeof candidate.auth === 'string' && candidate.auth.length > 0
+    if (!validStatic && typeof candidate.auth !== 'function') {
+      throw new Error(
+        `[flue] ${source} "${name}" auth must be a bearer token or a function resolving one per request.`,
+      )
+    }
+  }
+  if (
+    candidate.headers !== undefined &&
+    (typeof candidate.headers !== 'object' || candidate.headers === null)
+  ) {
+    throw new Error(
+      `[flue] ${source} "${name}" headers must be a static HeadersInit value; for credentials resolved per request, use \`auth\`.`,
+    )
+  }
+  if (
+    candidate.requestInit !== undefined &&
+    (typeof candidate.requestInit !== 'object' || Array.isArray(candidate.requestInit))
+  ) {
+    throw new Error(`[flue] ${source} "${name}" requestInit must be an object.`)
+  }
+  if (candidate.fetch !== undefined && typeof candidate.fetch !== 'function') {
+    throw new Error(`[flue] ${source} "${name}" fetch must be a function.`)
+  }
+  if (
+    candidate.timeoutMs !== undefined &&
+    (typeof candidate.timeoutMs !== 'number' ||
+      !Number.isFinite(candidate.timeoutMs) ||
+      candidate.timeoutMs <= 0)
+  ) {
+    throw new Error(`[flue] ${source} "${name}" timeoutMs must be a positive number.`)
+  }
+  if (
+    candidate.resetTimeoutOnProgress !== undefined &&
+    typeof candidate.resetTimeoutOnProgress !== 'boolean'
+  ) {
+    throw new Error(`[flue] ${source} "${name}" resetTimeoutOnProgress must be a boolean.`)
+  }
+  if (candidate.tools !== undefined) {
+    if (
+      !Array.isArray(candidate.tools) ||
+      candidate.tools.some(tool => typeof tool !== 'string' || tool.length === 0)
+    ) {
+      throw new Error(
+        `[flue] ${source} "${name}" tools must be an array of tool names (the server's own names).`,
+      )
+    }
+  }
+  if (candidate.optional !== undefined && typeof candidate.optional !== 'boolean') {
+    throw new Error(`[flue] ${source} "${name}" optional must be a boolean.`)
+  }
 }
 
 /**
@@ -128,11 +128,11 @@ function assertMcpConnectionDefinition(
  * cleanly: `useMcpConnection({ ...linear, tools: ['create_issue'] })`.
  */
 export function defineMcpConnection(definition: McpConnectionDefinition): McpConnectionDefinition {
-	assertMcpConnectionDefinition(definition, 'defineMcpConnection()');
-	return Object.freeze({
-		...definition,
-		...(definition.tools !== undefined ? { tools: Object.freeze([...definition.tools]) } : {}),
-	}) as McpConnectionDefinition;
+  assertMcpConnectionDefinition(definition, 'defineMcpConnection()')
+  return Object.freeze({
+    ...definition,
+    ...(definition.tools !== undefined ? { tools: Object.freeze([...definition.tools]) } : {}),
+  }) as McpConnectionDefinition
 }
 
 /**
@@ -181,17 +181,17 @@ export function defineMcpConnection(definition: McpConnectionDefinition): McpCon
  * subagent renders.
  */
 export function useMcpConnection(definition: McpConnectionDefinition): void {
-	const frame = requireRenderFrame('useMcpConnection');
-	if (frame.kind === 'subagent') {
-		throw new Error(
-			"[flue] useMcpConnection() is not available in a subagent render. Declare the connection on the root agent and give the delegate what it needs through the parent's tools.",
-		);
-	}
-	assertMcpConnectionDefinition(definition, 'useMcpConnection()');
-	if (frame.mcpConnections.some((declared) => declared.name === definition.name)) {
-		throw new Error(
-			`[flue] useMcpConnection() declared the MCP server name "${definition.name}" twice in one render. Each server declares once; share it from a single custom hook.`,
-		);
-	}
-	frame.mcpConnections.push(definition);
+  const frame = requireRenderFrame('useMcpConnection')
+  if (frame.kind === 'subagent') {
+    throw new Error(
+      '[flue] useMcpConnection() is not available in a subagent render. Declare the connection on the root agent and give the delegate what it needs through the parent\'s tools.',
+    )
+  }
+  assertMcpConnectionDefinition(definition, 'useMcpConnection()')
+  if (frame.mcpConnections.some(declared => declared.name === definition.name)) {
+    throw new Error(
+      `[flue] useMcpConnection() declared the MCP server name "${definition.name}" twice in one render. Each server declares once; share it from a single custom hook.`,
+    )
+  }
+  frame.mcpConnections.push(definition)
 }

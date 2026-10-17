@@ -8,19 +8,19 @@
  * persistence path (normalizing pi-ai's `Usage` into our `PromptUsage`
  * before storing on a canonical compaction record).
  */
-import type { Usage } from '@earendil-works/pi-ai';
-import type { PromptUsage } from './types.ts';
+import type { Usage } from '@earendil-works/pi-ai'
+import type { PromptUsage } from './types.ts'
 
 /** All-zero `PromptUsage`. Identity element for `addUsage`. */
 export function emptyUsage(): PromptUsage {
-	return {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 0,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-	};
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  }
 }
 
 /**
@@ -28,20 +28,20 @@ export function emptyUsage(): PromptUsage {
  * sub-object. Returns a fresh object; neither argument is mutated.
  */
 export function addUsage(a: PromptUsage, b: PromptUsage): PromptUsage {
-	return {
-		input: a.input + b.input,
-		output: a.output + b.output,
-		cacheRead: a.cacheRead + b.cacheRead,
-		cacheWrite: a.cacheWrite + b.cacheWrite,
-		totalTokens: a.totalTokens + b.totalTokens,
-		cost: {
-			input: a.cost.input + b.cost.input,
-			output: a.cost.output + b.cost.output,
-			cacheRead: a.cost.cacheRead + b.cost.cacheRead,
-			cacheWrite: a.cost.cacheWrite + b.cost.cacheWrite,
-			total: a.cost.total + b.cost.total,
-		},
-	};
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    cacheRead: a.cacheRead + b.cacheRead,
+    cacheWrite: a.cacheWrite + b.cacheWrite,
+    totalTokens: a.totalTokens + b.totalTokens,
+    cost: {
+      input: a.cost.input + b.cost.input,
+      output: a.cost.output + b.cost.output,
+      cacheRead: a.cost.cacheRead + b.cost.cacheRead,
+      cacheWrite: a.cost.cacheWrite + b.cost.cacheWrite,
+      total: a.cost.total + b.cost.total,
+    },
+  }
 }
 
 /**
@@ -52,19 +52,19 @@ export function addUsage(a: PromptUsage, b: PromptUsage): PromptUsage {
  * surface. Returns `undefined` when the input is `undefined`.
  */
 export function fromProviderUsage(usage: Usage | undefined): PromptUsage | undefined {
-	if (!usage) return undefined;
-	return {
-		input: usage.input,
-		output: usage.output,
-		cacheRead: usage.cacheRead,
-		cacheWrite: usage.cacheWrite,
-		totalTokens: usage.totalTokens,
-		cost: {
-			input: usage.cost.input,
-			output: usage.cost.output,
-			cacheRead: usage.cost.cacheRead,
-			cacheWrite: usage.cost.cacheWrite,
-			total: usage.cost.total,
-		},
-	};
+  if (!usage) { return undefined }
+  return {
+    input: usage.input,
+    output: usage.output,
+    cacheRead: usage.cacheRead,
+    cacheWrite: usage.cacheWrite,
+    totalTokens: usage.totalTokens,
+    cost: {
+      input: usage.cost.input,
+      output: usage.cost.output,
+      cacheRead: usage.cost.cacheRead,
+      cacheWrite: usage.cost.cacheWrite,
+      total: usage.cost.total,
+    },
+  }
 }

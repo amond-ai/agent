@@ -1,89 +1,89 @@
-import * as v from 'valibot';
-import { RESERVED_SIGNAL_TYPES } from '../conversation-records.ts';
-import { DOCUMENT_MIME_TYPES } from '../document-attachments.ts';
-import { InvalidRequestError } from '../errors.ts';
-import type { DeliveredMessage } from '../types.ts';
+import * as v from 'valibot'
+import { RESERVED_SIGNAL_TYPES } from '../conversation-records.ts'
+import { DOCUMENT_MIME_TYPES } from '../document-attachments.ts'
+import { InvalidRequestError } from '../errors.ts'
+import type { DeliveredMessage } from '../types.ts'
 
 /**
  * Per-attachment base64 length cap, shared by images and documents (~10.5 MB
  * decoded).
  */
-export const MAX_IMAGE_DATA_LENGTH = 14 * 1024 * 1024;
+export const MAX_IMAGE_DATA_LENGTH = 14 * 1024 * 1024
 
 const DeliveredImageAttachmentSchema = v.object({
-	type: v.literal('image'),
-	data: v.pipe(
-		v.string(),
-		v.maxLength(
-			MAX_IMAGE_DATA_LENGTH,
-			`Image data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`,
-		),
-	),
-	mimeType: v.string(),
-	filename: v.optional(v.string()),
-});
+  type: v.literal('image'),
+  data: v.pipe(
+    v.string(),
+    v.maxLength(
+      MAX_IMAGE_DATA_LENGTH,
+      `Image data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`,
+    ),
+  ),
+  mimeType: v.string(),
+  filename: v.optional(v.string()),
+})
 
 const DeliveredDocumentAttachmentSchema = v.object({
-	type: v.literal('document'),
-	data: v.pipe(
-		v.string(),
-		v.maxLength(
-			MAX_IMAGE_DATA_LENGTH,
-			`Document data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`,
-		),
-	),
-	mimeType: v.picklist(
-		[...DOCUMENT_MIME_TYPES],
-		`Document mimeType must be one of: ${[...DOCUMENT_MIME_TYPES].join(', ')}.`,
-	),
-	filename: v.optional(v.string()),
-});
+  type: v.literal('document'),
+  data: v.pipe(
+    v.string(),
+    v.maxLength(
+      MAX_IMAGE_DATA_LENGTH,
+      `Document data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`,
+    ),
+  ),
+  mimeType: v.picklist(
+    [...DOCUMENT_MIME_TYPES],
+    `Document mimeType must be one of: ${[...DOCUMENT_MIME_TYPES].join(', ')}.`,
+  ),
+  filename: v.optional(v.string()),
+})
 
 /** Attachment shape for a `DeliveredMessage`'s `attachments`. */
 const DeliveredAttachmentSchema = v.variant('type', [
-	DeliveredImageAttachmentSchema,
-	DeliveredDocumentAttachmentSchema,
-]);
+  DeliveredImageAttachmentSchema,
+  DeliveredDocumentAttachmentSchema,
+])
 
 const DeliveredUserMessageSchema = v.object({
-	kind: v.literal('user'),
-	body: v.string(),
-	attachments: v.optional(v.array(DeliveredAttachmentSchema)),
-});
+  kind: v.literal('user'),
+  body: v.string(),
+  attachments: v.optional(v.array(DeliveredAttachmentSchema)),
+})
 
 const DeliveredSignalMessageSchema = v.object({
-	kind: v.literal('signal'),
-	type: v.pipe(
-		v.string(),
-		v.nonEmpty('Signal message "type" must not be empty.'),
-		// Reserved framework vocabulary: a record carrying one of these types
-		// must be framework-authored (recovery classification and the
-		// `useDelivery()` resume filter read provenance off the type string),
-		// so no delivery surface may mint one.
-		v.check(
-			(type) => !RESERVED_SIGNAL_TYPES.has(type),
-			(issue) =>
-				`Signal type "${issue.input}" is framework-reserved vocabulary ` +
-				"(the runtime's own narration and recovery signals) — use an application-specific type.",
-		),
-	),
-	body: v.string(),
-	attributes: v.optional(v.record(v.string(), v.string())),
-	// The tag name is rendered unescaped as the signal's XML envelope in model
-	// context, so it must be a valid XML name — anything looser would let a
-	// caller-controlled value inject markup that the body/attribute escaping
-	// exists to prevent.
-	tagName: v.optional(
-		v.pipe(
-			v.string(),
-			v.regex(
-				/^[A-Za-z_][A-Za-z0-9_.-]*$/,
-				'Signal message "tagName" must be a valid XML tag name ' +
-					'(letters, digits, "_", "-", "."; must not start with a digit, "-", or ".").',
-			),
-		),
-	),
-});
+  kind: v.literal('signal'),
+  type: v.pipe(
+    v.string(),
+    v.nonEmpty('Signal message "type" must not be empty.'),
+    // Reserved framework vocabulary: a record carrying one of these types
+    // must be framework-authored (recovery classification and the
+    // `useDelivery()` resume filter read provenance off the type string),
+    // so no delivery surface may mint one.
+    v.check(
+      type => !RESERVED_SIGNAL_TYPES.has(type),
+      issue =>
+        `Signal type "${issue.input}" is framework-reserved vocabulary ` +
+        '(the runtime\'s own narration and recovery signals) — use an application-specific type.',
+    ),
+  ),
+  body: v.string(),
+  attributes: v.optional(v.record(v.string(), v.string())),
+  // The tag name is rendered unescaped as the signal's XML envelope in model
+  // context, so it must be a valid XML name — anything looser would let a
+  // caller-controlled value inject markup that the body/attribute escaping
+  // exists to prevent.
+  tagName: v.optional(
+    v.pipe(
+      v.string(),
+      v.regex(
+        /^[A-Za-z_][A-Za-z0-9_.-]*$/,
+        'Signal message "tagName" must be a valid XML tag name ' +
+        '(letters, digits, "_", "-", "."; must not start with a digit, "-", or ".").',
+      ),
+    ),
+  ),
+})
 
 /**
  * The single validated shape for a message delivered into an agent's
@@ -91,9 +91,9 @@ const DeliveredSignalMessageSchema = v.object({
  * (whose wire body is this shape verbatim).
  */
 export const DeliveredMessageSchema = v.variant('kind', [
-	DeliveredUserMessageSchema,
-	DeliveredSignalMessageSchema,
-]);
+  DeliveredUserMessageSchema,
+  DeliveredSignalMessageSchema,
+])
 
 /**
  * Validate a raw value as a {@link DeliveredMessage}. Shared by `dispatch()`
@@ -101,26 +101,28 @@ export const DeliveredMessageSchema = v.variant('kind', [
  * structured {@link InvalidRequestError} on bad input.
  */
 export function parseDeliveredMessage(value: unknown): DeliveredMessage {
-	const parsed = v.safeParse(DeliveredMessageSchema, value);
-	if (parsed.success) return parsed.output;
-	const specificIssue = parsed.issues.find(
-		(issue) =>
-			issue.type === 'max_length' ||
-			issue.type === 'regex' ||
-			issue.type === 'check' ||
-			issue.type === 'picklist',
-	);
-	throw new InvalidRequestError({
-		reason:
+  const parsed = v.safeParse(DeliveredMessageSchema, value)
+  if (parsed.success) { return parsed.output }
+  const specificIssue = parsed.issues.find(
+    issue =>
+      issue.type === 'max_length' ||
+      issue.type === 'regex' ||
+      issue.type === 'check' ||
+      issue.type === 'picklist',
+  )
+  throw new InvalidRequestError({
+    reason:
 			specificIssue?.message ??
 			'Delivered messages must be { kind: "user", body: string, attachments?: attachment[] } ' +
-				'or { kind: "signal", type: string, body: string, attributes?: Record<string, string>, tagName?: string }.',
-	});
+			'or { kind: "signal", type: string, body: string, attributes?: Record<string, string>, tagName?: string }.',
+  })
 }
 
-/** Length cap for a caller-supplied `idempotencyKey` — no format restriction
- *  otherwise, so Slack event ids, Stripe event ids, and UUIDs all pass. */
-const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
+/**
+ * Length cap for a caller-supplied `idempotencyKey` — no format restriction
+ *  otherwise, so Slack event ids, Stripe event ids, and UUIDs all pass.
+ */
+const MAX_IDEMPOTENCY_KEY_LENGTH = 256
 
 /**
  * Validate a caller-supplied idempotency key: a non-empty string of at most
@@ -129,17 +131,17 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
  * with the same structured {@link InvalidRequestError}.
  */
 export function parseIdempotencyKey(value: unknown): string {
-	if (typeof value !== 'string' || value === '') {
-		throw new InvalidRequestError({
-			reason: '`idempotencyKey` must be a non-empty string naming this delivery.',
-		});
-	}
-	if (value.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
-		throw new InvalidRequestError({
-			reason: `\`idempotencyKey\` must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters.`,
-		});
-	}
-	return value;
+  if (typeof value !== 'string' || value === '') {
+    throw new InvalidRequestError({
+      reason: '`idempotencyKey` must be a non-empty string naming this delivery.',
+    })
+  }
+  if (value.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+    throw new InvalidRequestError({
+      reason: `\`idempotencyKey\` must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters.`,
+    })
+  }
+  return value
 }
 
 /**
@@ -154,28 +156,28 @@ export function parseIdempotencyKey(value: unknown): string {
  *   carrying the same key converges on the original submission.
  */
 export function parseDeliveredInput(value: unknown): {
-	message: DeliveredMessage;
-	initialData?: unknown;
-	uid?: string | null;
-	idempotencyKey?: string;
+  message: DeliveredMessage
+  initialData?: unknown
+  uid?: string | null
+  idempotencyKey?: string
 } {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		return { message: parseDeliveredMessage(value) };
-	}
-	if (!('initialData' in value) && !('uid' in value) && !('idempotencyKey' in value)) {
-		return { message: parseDeliveredMessage(value) };
-	}
-	const { initialData, uid, idempotencyKey, ...rest } = value as Record<string, unknown>;
-	if ('uid' in value && uid !== null && typeof uid !== 'string') {
-		throw new InvalidRequestError({
-			reason:
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { message: parseDeliveredMessage(value) }
+  }
+  if (!('initialData' in value) && !('uid' in value) && !('idempotencyKey' in value)) {
+    return { message: parseDeliveredMessage(value) }
+  }
+  const { initialData, uid, idempotencyKey, ...rest } = value as Record<string, unknown>
+  if ('uid' in value && uid !== null && typeof uid !== 'string') {
+    throw new InvalidRequestError({
+      reason:
 				'`uid` must be a string (continue only that incarnation) or null (create only when fresh).',
-		});
-	}
-	return {
-		message: parseDeliveredMessage(rest),
-		...(initialData !== undefined ? { initialData } : {}),
-		...('uid' in value ? { uid: uid as string | null } : {}),
-		...('idempotencyKey' in value ? { idempotencyKey: parseIdempotencyKey(idempotencyKey) } : {}),
-	};
+    })
+  }
+  return {
+    message: parseDeliveredMessage(rest),
+    ...(initialData !== undefined ? { initialData } : {}),
+    ...('uid' in value ? { uid: uid as string | null } : {}),
+    ...('idempotencyKey' in value ? { idempotencyKey: parseIdempotencyKey(idempotencyKey) } : {}),
+  }
 }

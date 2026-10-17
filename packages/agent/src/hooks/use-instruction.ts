@@ -1,4 +1,4 @@
-import { requireRenderFrame } from './frame.ts';
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Append raw instruction text for the current render — the deliberately
@@ -18,9 +18,9 @@ import { requireRenderFrame } from './frame.ts';
  * a custom hook it calls); throws anywhere else.
  */
 export function useInstruction(text: string): void {
-	const frame = requireRenderFrame('useInstruction');
-	if (typeof text !== 'string' || text.trim().length === 0) {
-		throw new Error('[flue] useInstruction() requires a non-empty string.');
-	}
-	frame.instructions.push(text);
+  const frame = requireRenderFrame('useInstruction')
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    throw new Error('[flue] useInstruction() requires a non-empty string.')
+  }
+  frame.instructions.push(text)
 }

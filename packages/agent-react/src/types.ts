@@ -2,7 +2,7 @@
 // directly here — React adds optimistic/local state but does not reinterpret
 // canonical part semantics.
 export type {
-	FlueConversationMessage,
-	FlueConversationPart,
-	FlueConversationSettlement,
-} from '@flue/sdk';
+  FlueConversationMessage,
+  FlueConversationPart,
+  FlueConversationSettlement,
+} from '@flue/sdk'

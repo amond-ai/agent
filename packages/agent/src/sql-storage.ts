@@ -6,9 +6,9 @@
  */
 
 interface SqlResult {
-	toArray(): Array<Record<string, unknown>>;
+  toArray(): Array<Record<string, unknown>>
 }
 
 export interface SqlStorage {
-	exec(query: string, ...bindings: unknown[]): SqlResult;
+  exec(query: string, ...bindings: unknown[]): SqlResult
 }

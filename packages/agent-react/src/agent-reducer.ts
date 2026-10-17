@@ -1,332 +1,332 @@
 import type {
-	DeliveredAttachment,
-	FlueConversationMessage,
-	FlueConversationSettlement,
-	FlueConversationState,
-} from '@flue/sdk';
+  DeliveredAttachment,
+  FlueConversationMessage,
+  FlueConversationSettlement,
+  FlueConversationState,
+} from '@flue/sdk'
 
-export type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error';
+export type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error'
 
 /** One locally-submitted message whose send failed, retained for retry UIs. */
 export interface FailedSend {
-	/** Id of the retained optimistic message in `messages` (the local id). */
-	id: string;
-	/** The text the user tried to send. */
-	message: string;
-	error: Error;
+  /** Id of the retained optimistic message in `messages` (the local id). */
+  id: string
+  /** The text the user tried to send. */
+  message: string
+  error: Error
 }
 
 export interface AgentSnapshot {
-	messages: FlueConversationMessage[];
-	status: AgentStatus;
-	historyReady: boolean;
-	error: Error | undefined;
-	/**
-	 * Sends whose admission receipt never reached the client — the request was
-	 * rejected or its outcome is unknown (a lost response may still have been
-	 * admitted server-side). Their optimistic messages remain in `messages`
-	 * (keyed by `id`) so a UI can show them with a retry affordance instead of
-	 * having them silently disappear.
-	 */
-	failedSends: FailedSend[];
-	/**
-	 * Terminal outcomes of the conversation's tracked submissions, mirrored
-	 * from the observed conversation. Purely additive exposure for programmatic
-	 * needs (correlating a `submissionId` with its outcome); `status`/`error`
-	 * semantics are unchanged.
-	 */
-	settlements: FlueConversationSettlement[];
+  messages: FlueConversationMessage[]
+  status: AgentStatus
+  historyReady: boolean
+  error: Error | undefined
+  /**
+   * Sends whose admission receipt never reached the client — the request was
+   * rejected or its outcome is unknown (a lost response may still have been
+   * admitted server-side). Their optimistic messages remain in `messages`
+   * (keyed by `id`) so a UI can show them with a retry affordance instead of
+   * having them silently disappear.
+   */
+  failedSends: FailedSend[]
+  /**
+   * Terminal outcomes of the conversation's tracked submissions, mirrored
+   * from the observed conversation. Purely additive exposure for programmatic
+   * needs (correlating a `submissionId` with its outcome); `status`/`error`
+   * semantics are unchanged.
+   */
+  settlements: FlueConversationSettlement[]
 }
 
 interface PendingSend {
-	localId: string;
-	submissionId?: string;
-	optimistic: FlueConversationMessage;
+  localId: string
+  submissionId?: string
+  optimistic: FlueConversationMessage
 }
 
 export interface AgentState extends AgentSnapshot {
-	conversation: FlueConversationState | undefined;
-	pendingSends: PendingSend[];
-	/** Optimistic messages for failed sends, retained so they stay rendered. */
-	failedOptimistic: FlueConversationMessage[];
-	/**
-	 * Maps a submission id to the local id its optimistic message used. The
-	 * canonical user message that later arrives is re-keyed to this local id so
-	 * the row identity is stable across the optimistic→confirmed transition
-	 * (otherwise a keyed/virtualized list sees remove+add and loses scroll/focus).
-	 */
-	localMessageIds: { submissionId: string; localId: string }[];
-	/** Submission ids admitted through local sends, in admission order. */
-	localSubmissionIds: string[];
-	/**
-	 * Unsettled submission ids admitted through local sends. Kept separate from
-	 * the conversation-derived active set (see `converge`) so a reload's observed
-	 * submissions can drive `streaming` without persisting into this in-memory
-	 * recollection.
-	 */
-	activeSubmissionIds: string[];
+  conversation: FlueConversationState | undefined
+  pendingSends: PendingSend[]
+  /** Optimistic messages for failed sends, retained so they stay rendered. */
+  failedOptimistic: FlueConversationMessage[]
+  /**
+   * Maps a submission id to the local id its optimistic message used. The
+   * canonical user message that later arrives is re-keyed to this local id so
+   * the row identity is stable across the optimistic→confirmed transition
+   * (otherwise a keyed/virtualized list sees remove+add and loses scroll/focus).
+   */
+  localMessageIds: { submissionId: string, localId: string }[]
+  /** Submission ids admitted through local sends, in admission order. */
+  localSubmissionIds: string[]
+  /**
+   * Unsettled submission ids admitted through local sends. Kept separate from
+   * the conversation-derived active set (see `converge`) so a reload's observed
+   * submissions can drive `streaming` without persisting into this in-memory
+   * recollection.
+   */
+  activeSubmissionIds: string[]
 }
 
 export const emptyAgentState: AgentState = {
-	messages: [],
-	status: 'idle',
-	historyReady: false,
-	error: undefined,
-	failedSends: [],
-	settlements: [],
-	conversation: undefined,
-	pendingSends: [],
-	failedOptimistic: [],
-	localMessageIds: [],
-	localSubmissionIds: [],
-	activeSubmissionIds: [],
-};
+  messages: [],
+  status: 'idle',
+  historyReady: false,
+  error: undefined,
+  failedSends: [],
+  settlements: [],
+  conversation: undefined,
+  pendingSends: [],
+  failedOptimistic: [],
+  localMessageIds: [],
+  localSubmissionIds: [],
+  activeSubmissionIds: [],
+}
 
 export type AgentReducerEvent =
-	| {
-			type: 'local_send_submitted';
-			localId: string;
-			message: string;
-			attachments?: DeliveredAttachment[];
-	  }
-	| { type: 'local_send_admitted'; localId: string; submissionId: string }
-	| { type: 'local_send_failed'; localId: string; error: Error }
-	| {
-			type: 'local_observation';
-			conversation: FlueConversationState | undefined;
-			phase: 'loading' | 'connecting' | 'live' | 'absent' | 'error' | 'closed';
-			error?: Error;
-	  };
+  | {
+    type: 'local_send_submitted'
+    localId: string
+    message: string
+    attachments?: DeliveredAttachment[]
+  }
+  | { type: 'local_send_admitted', localId: string, submissionId: string }
+  | { type: 'local_send_failed', localId: string, error: Error }
+  | {
+    type: 'local_observation'
+    conversation: FlueConversationState | undefined
+    phase: 'loading' | 'connecting' | 'live' | 'absent' | 'error' | 'closed'
+    error?: Error
+  }
 
 export function reduceAgentEvent(state: AgentState, event: AgentReducerEvent): AgentState {
-	switch (event.type) {
-		case 'local_send_submitted': {
-			const settledIds = new Set(
-				state.conversation?.settlements.map((settlement) => settlement.submissionId) ?? [],
-			);
-			return converge({
-				...state,
-				pendingSends: [
-					...state.pendingSends,
-					{ localId: event.localId, optimistic: optimisticMessage(event) },
-				],
-				localSubmissionIds: state.localSubmissionIds.filter((id) => !settledIds.has(id)),
-				// Submitting supersedes any prior failed send: a retry re-sends and
-				// the failed row is replaced by the new pending one, and moving on to
-				// a new message dismisses the earlier failure. This keeps a stale
-				// failure from lingering in the transcript or poisoning `status`/
-				// `error` after a later send succeeds.
-				failedSends: [],
-				failedOptimistic: [],
-				error: undefined,
-			});
-		}
-		case 'local_send_admitted':
-			return converge({
-				...state,
-				pendingSends: state.pendingSends.map((send) =>
-					send.localId === event.localId ? { ...send, submissionId: event.submissionId } : send,
-				),
-				localMessageIds: [
-					...state.localMessageIds,
-					{ submissionId: event.submissionId, localId: event.localId },
-				],
-				localSubmissionIds: addUnique(state.localSubmissionIds, event.submissionId),
-				activeSubmissionIds: addUnique(state.activeSubmissionIds, event.submissionId),
-			});
-		case 'local_send_failed': {
-			const failed = state.pendingSends.find((send) => send.localId === event.localId);
-			return converge({
-				...state,
-				pendingSends: state.pendingSends.filter((send) => send.localId !== event.localId),
-				...(failed
-					? {
-							failedOptimistic: [...state.failedOptimistic, failed.optimistic],
-							failedSends: [
-								...state.failedSends,
-								{ id: failed.localId, message: messageText(failed.optimistic), error: event.error },
-							],
-						}
-					: {}),
-			});
-		}
-		case 'local_observation': {
-			if (event.phase === 'error') return { ...state, status: 'error', error: event.error };
-			if (event.phase === 'absent') {
-				return converge({ ...state, conversation: undefined, historyReady: true });
-			}
-			if (event.conversation) {
-				const merged = converge({ ...state, conversation: event.conversation, historyReady: true });
-				return event.phase === 'loading' || event.phase === 'connecting'
-					? {
-							...merged,
-							status: merged.status === 'idle' ? 'connecting' : merged.status,
-							error: event.error ?? merged.error,
-						}
-					: merged;
-			}
-			return {
-				...state,
-				status:
+  switch (event.type) {
+    case 'local_send_submitted': {
+      const settledIds = new Set(
+        state.conversation?.settlements.map(settlement => settlement.submissionId) ?? [],
+      )
+      return converge({
+        ...state,
+        pendingSends: [
+          ...state.pendingSends,
+          { localId: event.localId, optimistic: optimisticMessage(event) },
+        ],
+        localSubmissionIds: state.localSubmissionIds.filter(id => !settledIds.has(id)),
+        // Submitting supersedes any prior failed send: a retry re-sends and
+        // the failed row is replaced by the new pending one, and moving on to
+        // a new message dismisses the earlier failure. This keeps a stale
+        // failure from lingering in the transcript or poisoning `status`/
+        // `error` after a later send succeeds.
+        failedSends: [],
+        failedOptimistic: [],
+        error: undefined,
+      })
+    }
+    case 'local_send_admitted':
+      return converge({
+        ...state,
+        pendingSends: state.pendingSends.map(send =>
+          send.localId === event.localId ? { ...send, submissionId: event.submissionId } : send,
+        ),
+        localMessageIds: [
+          ...state.localMessageIds,
+          { submissionId: event.submissionId, localId: event.localId },
+        ],
+        localSubmissionIds: addUnique(state.localSubmissionIds, event.submissionId),
+        activeSubmissionIds: addUnique(state.activeSubmissionIds, event.submissionId),
+      })
+    case 'local_send_failed': {
+      const failed = state.pendingSends.find(send => send.localId === event.localId)
+      return converge({
+        ...state,
+        pendingSends: state.pendingSends.filter(send => send.localId !== event.localId),
+        ...(failed
+          ? {
+              failedOptimistic: [...state.failedOptimistic, failed.optimistic],
+              failedSends: [
+                ...state.failedSends,
+                { id: failed.localId, message: messageText(failed.optimistic), error: event.error },
+              ],
+            }
+          : {}),
+      })
+    }
+    case 'local_observation': {
+      if (event.phase === 'error') { return { ...state, status: 'error', error: event.error } }
+      if (event.phase === 'absent') {
+        return converge({ ...state, conversation: undefined, historyReady: true })
+      }
+      if (event.conversation) {
+        const merged = converge({ ...state, conversation: event.conversation, historyReady: true })
+        return event.phase === 'loading' || event.phase === 'connecting'
+          ? {
+              ...merged,
+              status: merged.status === 'idle' ? 'connecting' : merged.status,
+              error: event.error ?? merged.error,
+            }
+          : merged
+      }
+      return {
+        ...state,
+        status:
 					event.phase === 'loading' || event.phase === 'connecting' ? 'connecting' : state.status,
-				error: event.error,
-			};
-		}
-	}
+        error: event.error,
+      }
+    }
+  }
 }
 
 function converge(state: AgentState): AgentState {
-	const conversation = state.conversation;
-	const settledIds = new Set(
-		conversation?.settlements.map((settlement) => settlement.submissionId) ?? [],
-	);
-	const localIdBySubmissionId = new Map(
-		state.localMessageIds.map((entry) => [entry.submissionId, entry.localId] as const),
-	);
+  const conversation = state.conversation
+  const settledIds = new Set(
+    conversation?.settlements.map(settlement => settlement.submissionId) ?? [],
+  )
+  const localIdBySubmissionId = new Map(
+    state.localMessageIds.map(entry => [entry.submissionId, entry.localId] as const),
+  )
 
-	// Re-key the canonical user message that originated from a local send back to
-	// the id its optimistic echo used, so the rendered row is stable across the
-	// optimistic→confirmed swap. Only the user message adopts the optimistic id:
-	// a submission's assistant turns share the same submissionId but must keep
-	// their own ids, otherwise the user and assistant rows collide on one React
-	// key and the latest assistant message visibly duplicates.
-	const canonical = (conversation?.messages ?? []).map((message) => {
-		const localId =
-			message.role === 'user' && message.submissionId
-				? localIdBySubmissionId.get(message.submissionId)
-				: undefined;
-		return localId ? { ...message, id: localId } : message;
-	});
-	const canonicalSubmissionIds = new Set(
-		(conversation?.messages ?? [])
-			.map((message) => message.submissionId)
-			.filter((value): value is string => typeof value === 'string'),
-	);
+  // Re-key the canonical user message that originated from a local send back to
+  // the id its optimistic echo used, so the rendered row is stable across the
+  // optimistic→confirmed swap. Only the user message adopts the optimistic id:
+  // a submission's assistant turns share the same submissionId but must keep
+  // their own ids, otherwise the user and assistant rows collide on one React
+  // key and the latest assistant message visibly duplicates.
+  const canonical = (conversation?.messages ?? []).map((message) => {
+    const localId =
+      message.role === 'user' && message.submissionId
+        ? localIdBySubmissionId.get(message.submissionId)
+        : undefined
+    return localId ? { ...message, id: localId } : message
+  })
+  const canonicalSubmissionIds = new Set(
+    (conversation?.messages ?? [])
+      .map(message => message.submissionId)
+      .filter((value): value is string => typeof value === 'string'),
+  )
 
-	// Keep showing an optimistic echo until its canonical copy (or settlement)
-	// arrives; once it does, the re-keyed canonical message takes its place.
-	const pendingSends: PendingSend[] = [];
-	const pendingEchoes: FlueConversationMessage[] = [];
-	for (const pending of state.pendingSends) {
-		const confirmed = pending.submissionId
-			? canonicalSubmissionIds.has(pending.submissionId) || settledIds.has(pending.submissionId)
-			: false;
-		if (confirmed) continue;
-		pendingSends.push(pending);
-		pendingEchoes.push(pending.optimistic);
-	}
+  // Keep showing an optimistic echo until its canonical copy (or settlement)
+  // arrives; once it does, the re-keyed canonical message takes its place.
+  const pendingSends: PendingSend[] = []
+  const pendingEchoes: FlueConversationMessage[] = []
+  for (const pending of state.pendingSends) {
+    const confirmed = pending.submissionId
+      ? canonicalSubmissionIds.has(pending.submissionId) || settledIds.has(pending.submissionId)
+      : false
+    if (confirmed) { continue }
+    pendingSends.push(pending)
+    pendingEchoes.push(pending.optimistic)
+  }
 
-	const messages = [...canonical, ...pendingEchoes, ...state.failedOptimistic];
+  const messages = [...canonical, ...pendingEchoes, ...state.failedOptimistic]
 
-	const ownStreaming = (conversation?.messages ?? []).some(
-		(message) =>
-			message.role === 'assistant' &&
-			message.parts.some(
-				(part) => (part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming',
-			),
-	);
-	// Only the most recently admitted local submission's settlement can drive
-	// error status: an earlier failure that a later local send has moved past
-	// must not keep pinning status/error after that later send settles.
-	const settlementBySubmissionId = new Map(
-		(conversation?.settlements ?? []).map(
-			(settlement) => [settlement.submissionId, settlement] as const,
-		),
-	);
-	const lastSettledLocalSubmission = [...state.localSubmissionIds]
-		.reverse()
-		.map((id) => settlementBySubmissionId.get(id))
-		.find((settlement): settlement is NonNullable<typeof settlement> => settlement !== undefined);
-	const failedSettlement =
-		lastSettledLocalSubmission?.outcome === 'failed' ? lastSettledLocalSubmission : undefined;
-	// Locally-admitted submissions that have not yet settled. This is the only
-	// in-memory recollection of admission and does not survive a reload.
-	const localActiveSubmissionIds = state.activeSubmissionIds.filter((id) => !settledIds.has(id));
-	// The conversation itself is reload-safe for submissions that already have at
-	// least one materialized message: every tracked submission stamps its
-	// `submissionId` on its messages, and `settlements` records terminal
-	// outcomes. Unsettled submission ids can therefore be derived from the
-	// observed conversation (message submission ids minus settled ids), so an
-	// admitted-but-unsettled submission keeps `status === 'streaming'` after a
-	// reload even though the reducer has no memory of the admission receipt.
-	//
-	// Residual window: admission persists the operational row and returns the
-	// 202 receipt before `processSubmissionInput()` appends the submission's
-	// canonical user/signal message, so a reload in that window — or a queued/
-	// recovering submission delayed before input application — hydrates a
-	// conversation with no message for the submission and reports `idle` until
-	// its first message materializes. Closing that window needs reload-safe
-	// active-submission state (admission-time materialization or a durable
-	// client-side receipt) and is intentionally out of scope here.
-	const observedActiveSubmissionIds = [...canonicalSubmissionIds].filter(
-		(id) => !settledIds.has(id),
-	);
-	const hasActiveSubmission =
-		localActiveSubmissionIds.length > 0 || observedActiveSubmissionIds.length > 0;
-	const hasFailedSend = state.failedSends.length > 0;
+  const ownStreaming = (conversation?.messages ?? []).some(
+    message =>
+      message.role === 'assistant' &&
+      message.parts.some(
+        part => (part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming',
+      ),
+  )
+  // Only the most recently admitted local submission's settlement can drive
+  // error status: an earlier failure that a later local send has moved past
+  // must not keep pinning status/error after that later send settles.
+  const settlementBySubmissionId = new Map(
+    (conversation?.settlements ?? []).map(
+      settlement => [settlement.submissionId, settlement] as const,
+    ),
+  )
+  const lastSettledLocalSubmission = [...state.localSubmissionIds]
+    .reverse()
+    .map(id => settlementBySubmissionId.get(id))
+    .find((settlement): settlement is NonNullable<typeof settlement> => settlement !== undefined)
+  const failedSettlement =
+    lastSettledLocalSubmission?.outcome === 'failed' ? lastSettledLocalSubmission : undefined
+  // Locally-admitted submissions that have not yet settled. This is the only
+  // in-memory recollection of admission and does not survive a reload.
+  const localActiveSubmissionIds = state.activeSubmissionIds.filter(id => !settledIds.has(id))
+  // The conversation itself is reload-safe for submissions that already have at
+  // least one materialized message: every tracked submission stamps its
+  // `submissionId` on its messages, and `settlements` records terminal
+  // outcomes. Unsettled submission ids can therefore be derived from the
+  // observed conversation (message submission ids minus settled ids), so an
+  // admitted-but-unsettled submission keeps `status === 'streaming'` after a
+  // reload even though the reducer has no memory of the admission receipt.
+  //
+  // Residual window: admission persists the operational row and returns the
+  // 202 receipt before `processSubmissionInput()` appends the submission's
+  // canonical user/signal message, so a reload in that window — or a queued/
+  // recovering submission delayed before input application — hydrates a
+  // conversation with no message for the submission and reports `idle` until
+  // its first message materializes. Closing that window needs reload-safe
+  // active-submission state (admission-time materialization or a durable
+  // client-side receipt) and is intentionally out of scope here.
+  const observedActiveSubmissionIds = [...canonicalSubmissionIds].filter(
+    id => !settledIds.has(id),
+  )
+  const hasActiveSubmission =
+    localActiveSubmissionIds.length > 0 || observedActiveSubmissionIds.length > 0
+  const hasFailedSend = state.failedSends.length > 0
 
-	const status: AgentStatus = failedSettlement
-		? 'error'
-		: ownStreaming
-			? 'streaming'
-			: pendingSends.length > 0
-				? 'submitted'
-				: hasActiveSubmission
-					? 'streaming'
-					: hasFailedSend
-						? 'error'
-						: 'idle';
+  const status: AgentStatus = failedSettlement
+    ? 'error'
+    : ownStreaming
+      ? 'streaming'
+      : pendingSends.length > 0
+        ? 'submitted'
+        : hasActiveSubmission
+          ? 'streaming'
+          : hasFailedSend
+            ? 'error'
+            : 'idle'
 
-	return {
-		...state,
-		messages,
-		settlements: conversation?.settlements ?? [],
-		pendingSends,
-		activeSubmissionIds: localActiveSubmissionIds,
-		status,
-		error: failedSettlement
-			? new Error(settlementError(failedSettlement.error))
-			: status === 'error' && hasFailedSend
-				? state.failedSends[state.failedSends.length - 1]?.error
-				: undefined,
-	};
+  return {
+    ...state,
+    messages,
+    settlements: conversation?.settlements ?? [],
+    pendingSends,
+    activeSubmissionIds: localActiveSubmissionIds,
+    status,
+    error: failedSettlement
+      ? new Error(settlementError(failedSettlement.error))
+      : status === 'error' && hasFailedSend
+        ? state.failedSends[state.failedSends.length - 1]?.error
+        : undefined,
+  }
 }
 
 function optimisticMessage(
-	event: Extract<AgentReducerEvent, { type: 'local_send_submitted' }>,
+  event: Extract<AgentReducerEvent, { type: 'local_send_submitted' }>,
 ): FlueConversationMessage {
-	return {
-		id: event.localId,
-		role: 'user',
-		purpose: 'user',
-		display: 'visible',
-		parts: [
-			{ type: 'text', text: event.message, state: 'done' },
-			// The echo has no durable attachment id yet, but it does have the bytes
-			// the caller passed — so render an instant local preview via a data URL.
-			// On the optimistic→confirmed swap, the canonical part (carrying the
-			// hosted `url` + `id`) takes its place; consumers read `part.url` either
-			// way, with no flicker and no object-URL lifecycle to manage.
-			...(event.attachments ?? []).map((attachment) => ({
-				type: 'file' as const,
-				mediaType: attachment.mimeType,
-				url: `data:${attachment.mimeType};base64,${attachment.data}`,
-				...(attachment.filename ? { filename: attachment.filename } : {}),
-			})),
-		],
-	};
+  return {
+    id: event.localId,
+    role: 'user',
+    purpose: 'user',
+    display: 'visible',
+    parts: [
+      { type: 'text', text: event.message, state: 'done' },
+      // The echo has no durable attachment id yet, but it does have the bytes
+      // the caller passed — so render an instant local preview via a data URL.
+      // On the optimistic→confirmed swap, the canonical part (carrying the
+      // hosted `url` + `id`) takes its place; consumers read `part.url` either
+      // way, with no flicker and no object-URL lifecycle to manage.
+      ...(event.attachments ?? []).map(attachment => ({
+        type: 'file' as const,
+        mediaType: attachment.mimeType,
+        url: `data:${attachment.mimeType};base64,${attachment.data}`,
+        ...(attachment.filename ? { filename: attachment.filename } : {}),
+      })),
+    ],
+  }
 }
 
 function messageText(message: FlueConversationMessage): string {
-	const part = message.parts.find((value) => value.type === 'text');
-	return part && part.type === 'text' ? part.text : '';
+  const part = message.parts.find(value => value.type === 'text')
+  return part && part.type === 'text' ? part.text : ''
 }
 
 function addUnique(values: string[], value: string): string[] {
-	return values.includes(value) ? values : [...values, value];
+  return values.includes(value) ? values : [...values, value]
 }
 
 function settlementError(value: unknown): string {
-	if (value && typeof value === 'object' && 'message' in value) return String(value.message);
-	return 'Agent submission failed';
+  if (value && typeof value === 'object' && 'message' in value) { return String(value.message) }
+  return 'Agent submission failed'
 }

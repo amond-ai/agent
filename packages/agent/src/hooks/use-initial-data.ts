@@ -1,4 +1,4 @@
-import { requireRenderFrame } from './frame.ts';
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Read the instance's creation data — the `data` a caller sent with this
@@ -43,7 +43,7 @@ import { requireRenderFrame } from './frame.ts';
  *   is not a secrets channel — keys and tokens stay in the environment.
  */
 export function useInitialData<T = unknown>(): T {
-	const frame = requireRenderFrame('useInitialData');
-	if (frame.kind === 'subagent') return undefined as T;
-	return frame.state?.initialData as T;
+  const frame = requireRenderFrame('useInitialData')
+  if (frame.kind === 'subagent') { return undefined as T }
+  return frame.state?.initialData as T
 }

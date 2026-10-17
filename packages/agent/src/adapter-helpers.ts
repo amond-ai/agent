@@ -8,17 +8,17 @@
  * All functions operate on plain values — no database driver types.
  */
 
-import * as v from 'valibot';
-import type { AgentDispatchAdmission, AgentSubmission } from './agent-execution-store.ts';
-import type { SubmissionChunkRow } from './persisted-image-placement.ts';
+import * as v from 'valibot'
+import type { AgentDispatchAdmission, AgentSubmission } from './agent-execution-store.ts'
+import type { SubmissionChunkRow } from './persisted-image-placement.ts'
 import {
-	matchesPersistedSubmissionAttachments,
-	prepareSubmissionAttachments,
-	sameSubmissionChunks,
-} from './persisted-image-placement.ts';
-import type { AgentSubmissionInput } from './runtime/agent-submissions.ts';
-import { DeliveredMessageSchema } from './runtime/schemas.ts';
-import { createSessionStorageKey } from './session-identity.ts';
+  matchesPersistedSubmissionAttachments,
+  prepareSubmissionAttachments,
+  sameSubmissionChunks,
+} from './persisted-image-placement.ts'
+import type { AgentSubmissionInput } from './runtime/agent-submissions.ts'
+import { DeliveredMessageSchema } from './runtime/schemas.ts'
+import { createSessionStorageKey } from './session-identity.ts'
 
 /**
  * Agent-mode submissions (HTTP and dispatch) always target the
@@ -28,7 +28,7 @@ import { createSessionStorageKey } from './session-identity.ts';
  *
  * Exported for adapter implementations that construct session storage keys.
  */
-export const SUBMISSION_HARNESS_NAME = 'default';
+export const SUBMISSION_HARNESS_NAME = 'default'
 
 /**
  * Agent-mode submissions always target the default session of the
@@ -36,7 +36,7 @@ export const SUBMISSION_HARNESS_NAME = 'default';
  *
  * Exported for adapter implementations that construct session storage keys.
  */
-export const SUBMISSION_SESSION_NAME = 'default';
+export const SUBMISSION_SESSION_NAME = 'default'
 
 // ─── Payload validation ─────────────────────────────────────────────────────
 
@@ -47,10 +47,10 @@ export const SUBMISSION_SESSION_NAME = 'default';
  * type before calling {@link isSubmissionPayload}.
  */
 export interface SubmissionPayloadContext {
-	readonly kind: string;
-	readonly submissionId: string;
-	readonly sessionKey: string;
-	readonly acceptedAt: number;
+  readonly kind: string
+  readonly submissionId: string
+  readonly sessionKey: string
+  readonly acceptedAt: number
 }
 
 /**
@@ -74,25 +74,25 @@ export interface SubmissionPayloadContext {
  * check terminalizes the row instead of running it.
  */
 export function isSubmissionPayload(
-	input: unknown,
-	ctx: SubmissionPayloadContext,
+  input: unknown,
+  ctx: SubmissionPayloadContext,
 ): input is AgentSubmission['input'] {
-	if (!input || typeof input !== 'object') return false;
-	const value = input as Record<string, unknown>;
-	if (value.kind !== ctx.kind || value.submissionId !== ctx.submissionId) return false;
-	if (!v.safeParse(DeliveredMessageSchema, value.message).success) return false;
-	return (
-		typeof value.agent === 'string' &&
-		typeof value.id === 'string' &&
-		createSessionStorageKey(
-			value.agent as string,
-			value.id as string,
-			SUBMISSION_HARNESS_NAME,
-			SUBMISSION_SESSION_NAME,
-		) === ctx.sessionKey &&
-		typeof value.acceptedAt === 'string' &&
-		Date.parse(value.acceptedAt as string) === ctx.acceptedAt
-	);
+  if (!input || typeof input !== 'object') { return false }
+  const value = input as Record<string, unknown>
+  if (value.kind !== ctx.kind || value.submissionId !== ctx.submissionId) { return false }
+  if (!v.safeParse(DeliveredMessageSchema, value.message).success) { return false }
+  return (
+    typeof value.agent === 'string' &&
+    typeof value.id === 'string' &&
+    createSessionStorageKey(
+      value.agent as string,
+      value.id as string,
+      SUBMISSION_HARNESS_NAME,
+      SUBMISSION_SESSION_NAME,
+    ) === ctx.sessionKey &&
+    typeof value.acceptedAt === 'string' &&
+    Date.parse(value.acceptedAt as string) === ctx.acceptedAt
+  )
 }
 
 // ─── Submission admission ───────────────────────────────────────────────────
@@ -104,16 +104,16 @@ export function isSubmissionPayload(
  * whole admission without ever yielding to the microtask queue.
  */
 function chain<T, R>(value: T | Promise<T>, next: (value: T) => R | Promise<R>): R | Promise<R> {
-	return value instanceof Promise ? value.then(next) : next(value);
+  return value instanceof Promise ? value.then(next) : next(value)
 }
 
 /** The queued row that {@link admitSubmissionWithBackend} writes on first admission. */
 export interface SubmissionInsertRow {
-	readonly submissionId: string;
-	readonly sessionKey: string;
-	readonly kind: 'dispatch' | 'direct';
-	readonly payload: string;
-	readonly acceptedAt: number;
+  readonly submissionId: string
+  readonly sessionKey: string
+  readonly kind: 'dispatch' | 'direct'
+  readonly payload: string
+  readonly acceptedAt: number
 }
 
 /**
@@ -122,8 +122,8 @@ export interface SubmissionInsertRow {
  * against the incoming admission.
  */
 export interface SubmissionAdmissionRow {
-	readonly kind?: unknown;
-	readonly payload?: unknown;
+  readonly kind?: unknown
+  readonly payload?: unknown
 }
 
 /**
@@ -134,18 +134,18 @@ export interface SubmissionAdmissionRow {
  * `Promise`s — non-native thenables are not supported.
  */
 export interface SubmissionAdmissionBackend<Row extends SubmissionAdmissionRow> {
-	/** Insert the queued submission row, ignoring a duplicate `submissionId`. */
-	insertIfAbsent(row: SubmissionInsertRow): void | Promise<void>;
-	/** Read back the submission row for `submissionId`, if present. */
-	getExisting(submissionId: string): Row | undefined | Promise<Row | undefined>;
-	/** Read the persisted attachment chunks for the submission. */
-	readChunks(
-		submissionId: string,
-	): readonly SubmissionChunkRow[] | Promise<readonly SubmissionChunkRow[]>;
-	/** Replace the persisted attachment chunks for the submission. */
-	replaceChunks(submissionId: string, chunks: readonly SubmissionChunkRow[]): void | Promise<void>;
-	/** Parse a persisted row (plus its attachment chunks) into an {@link AgentSubmission}. */
-	parseSubmission(row: Row, chunks: readonly SubmissionChunkRow[]): AgentSubmission;
+  /** Insert the queued submission row, ignoring a duplicate `submissionId`. */
+  insertIfAbsent(row: SubmissionInsertRow): void | Promise<void>
+  /** Read back the submission row for `submissionId`, if present. */
+  getExisting(submissionId: string): Row | undefined | Promise<Row | undefined>
+  /** Read the persisted attachment chunks for the submission. */
+  readChunks(
+    submissionId: string,
+  ): readonly SubmissionChunkRow[] | Promise<readonly SubmissionChunkRow[]>
+  /** Replace the persisted attachment chunks for the submission. */
+  replaceChunks(submissionId: string, chunks: readonly SubmissionChunkRow[]): void | Promise<void>
+  /** Parse a persisted row (plus its attachment chunks) into an {@link AgentSubmission}. */
+  parseSubmission(row: Row, chunks: readonly SubmissionChunkRow[]): AgentSubmission
 }
 
 /**
@@ -159,69 +159,69 @@ export interface SubmissionAdmissionBackend<Row extends SubmissionAdmissionRow> 
  * transaction wrappers such as Durable Object `transactionSync`.
  */
 export function admitSubmissionWithBackend<Row extends SubmissionAdmissionRow>(
-	input: AgentSubmissionInput,
-	backend: SubmissionAdmissionBackend<Row>,
+  input: AgentSubmissionInput,
+  backend: SubmissionAdmissionBackend<Row>,
 ): AgentDispatchAdmission | Promise<AgentDispatchAdmission> {
-	const { kind, submissionId } = input;
-	const prepared = prepareSubmissionAttachments(input);
-	const payload = JSON.stringify(prepared.value);
-	const acceptedAt = parseAcceptedAt(input.acceptedAt, `${kind} admission`);
-	const sessionKey = createSessionStorageKey(
-		input.agent,
-		input.id,
-		SUBMISSION_HARNESS_NAME,
-		SUBMISSION_SESSION_NAME,
-	);
-	const adopt = (row: Row): AgentDispatchAdmission | Promise<AgentDispatchAdmission> => {
-		if (row.kind !== kind) return { kind: 'conflict' as const };
-		if (row.payload !== payload) {
-			// Serialized payloads differ, but the admission may still be an
-			// idempotent replay once persisted attachment chunks are hydrated
-			// back into the stored payload.
-			return chain(backend.readChunks(submissionId), (persistedChunks) => {
-				if (
-					typeof row.payload !== 'string' ||
-					!matchesPersistedSubmissionAttachments(
-						input,
-						JSON.parse(row.payload) as AgentSubmissionInput,
-						persistedChunks,
-					)
-				) {
-					return { kind: 'conflict' as const };
-				}
-				return {
-					kind: 'submission' as const,
-					submission: backend.parseSubmission(row, persistedChunks),
-				};
-			});
-		}
-		return chain(backend.readChunks(submissionId), (persistedChunks) => {
-			if (persistedChunks.length === 0 && prepared.chunks.length > 0) {
-				return chain(backend.replaceChunks(submissionId, prepared.chunks), () => ({
-					kind: 'submission' as const,
-					submission: backend.parseSubmission(row, prepared.chunks),
-				}));
-			}
-			if (!sameSubmissionChunks(persistedChunks, prepared.chunks)) {
-				return { kind: 'conflict' as const };
-			}
-			return {
-				kind: 'submission' as const,
-				submission: backend.parseSubmission(row, prepared.chunks),
-			};
-		});
-	};
+  const { kind, submissionId } = input
+  const prepared = prepareSubmissionAttachments(input)
+  const payload = JSON.stringify(prepared.value)
+  const acceptedAt = parseAcceptedAt(input.acceptedAt, `${kind} admission`)
+  const sessionKey = createSessionStorageKey(
+    input.agent,
+    input.id,
+    SUBMISSION_HARNESS_NAME,
+    SUBMISSION_SESSION_NAME,
+  )
+  const adopt = (row: Row): AgentDispatchAdmission | Promise<AgentDispatchAdmission> => {
+    if (row.kind !== kind) { return { kind: 'conflict' as const } }
+    if (row.payload !== payload) {
+      // Serialized payloads differ, but the admission may still be an
+      // idempotent replay once persisted attachment chunks are hydrated
+      // back into the stored payload.
+      return chain(backend.readChunks(submissionId), (persistedChunks) => {
+        if (
+          typeof row.payload !== 'string' ||
+          !matchesPersistedSubmissionAttachments(
+            input,
+            JSON.parse(row.payload) as AgentSubmissionInput,
+            persistedChunks,
+          )
+        ) {
+          return { kind: 'conflict' as const }
+        }
+        return {
+          kind: 'submission' as const,
+          submission: backend.parseSubmission(row, persistedChunks),
+        }
+      })
+    }
+    return chain(backend.readChunks(submissionId), (persistedChunks) => {
+      if (persistedChunks.length === 0 && prepared.chunks.length > 0) {
+        return chain(backend.replaceChunks(submissionId, prepared.chunks), () => ({
+          kind: 'submission' as const,
+          submission: backend.parseSubmission(row, prepared.chunks),
+        }))
+      }
+      if (!sameSubmissionChunks(persistedChunks, prepared.chunks)) {
+        return { kind: 'conflict' as const }
+      }
+      return {
+        kind: 'submission' as const,
+        submission: backend.parseSubmission(row, prepared.chunks),
+      }
+    })
+  }
 
-	return chain(
-		backend.insertIfAbsent({ submissionId, sessionKey, kind, payload, acceptedAt }),
-		() =>
-			chain(backend.getExisting(submissionId), (row) => {
-				if (!row) {
-					throw new Error(`[flue] Durable ${kind} admission did not create a submission row.`);
-				}
-				return adopt(row);
-			}),
-	);
+  return chain(
+    backend.insertIfAbsent({ submissionId, sessionKey, kind, payload, acceptedAt }),
+    () =>
+      chain(backend.getExisting(submissionId), (row) => {
+        if (!row) {
+          throw new Error(`[flue] Durable ${kind} admission did not create a submission row.`)
+        }
+        return adopt(row)
+      }),
+  )
 }
 
 // ─── Timestamp parsing ──────────────────────────────────────────────────────
@@ -231,11 +231,11 @@ export function admitSubmissionWithBackend<Row extends SubmissionAdmissionRow>(
  * Throws with a `[flue]` error if the value is not a finite number.
  */
 export function parseAcceptedAt(value: string, label: string): number {
-	const acceptedAt = Date.parse(value);
-	if (!Number.isFinite(acceptedAt)) {
-		throw new Error(`[flue] Internal ${label} received an invalid acceptedAt timestamp.`);
-	}
-	return acceptedAt;
+  const acceptedAt = Date.parse(value)
+  if (!Number.isFinite(acceptedAt)) {
+    throw new Error(`[flue] Internal ${label} received an invalid acceptedAt timestamp.`)
+  }
+  return acceptedAt
 }
 
 // ─── Limit clamping ──────────────────────────────────────────────────────────
@@ -249,10 +249,10 @@ export function parseAcceptedAt(value: string, label: string): number {
  * (`DEFAULT_READ_LIMIT`/`MAX_READ_LIMIT`).
  */
 export function clampLimit(
-	limit: number | undefined,
-	defaultLimit: number,
-	maxLimit: number,
+  limit: number | undefined,
+  defaultLimit: number,
+  maxLimit: number,
 ): number {
-	if (!limit || !Number.isFinite(limit) || limit <= 0) return defaultLimit;
-	return Math.min(limit, maxLimit);
+  if (!limit || !Number.isFinite(limit) || limit <= 0) { return defaultLimit }
+  return Math.min(limit, maxLimit)
 }

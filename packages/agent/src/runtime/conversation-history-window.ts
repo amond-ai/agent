@@ -1,6 +1,6 @@
-import type { ConversationUiMessage } from '../conversation-projections.ts';
-import type { AgentConversationSnapshot } from '../conversation-public.ts';
-import { HistoryCursorNotFoundError, InvalidRequestError } from '../errors.ts';
+import type { ConversationUiMessage } from '../conversation-projections.ts'
+import type { AgentConversationSnapshot } from '../conversation-public.ts'
+import { HistoryCursorNotFoundError, InvalidRequestError } from '../errors.ts'
 
 /**
  * Bounded history reads (`?view=history` with `limit` / `before` / `from`) and
@@ -41,10 +41,10 @@ import { HistoryCursorNotFoundError, InvalidRequestError } from '../errors.ts';
  * is only sound when settlements cover every submission in the window.
  */
 export type HistoryWindow =
-	| { kind: 'full' }
-	| { kind: 'newest'; limit: number }
-	| { kind: 'from'; cursor: HistoryCursor }
-	| { kind: 'before'; cursor: HistoryCursor; limit?: number };
+  | { kind: 'full' }
+  | { kind: 'newest', limit: number }
+  | { kind: 'from', cursor: HistoryCursor }
+  | { kind: 'before', cursor: HistoryCursor, limit?: number }
 
 /**
  * Window applied to `conversation-reset` snapshots on the updates view. A
@@ -54,136 +54,137 @@ export type HistoryWindow =
  * (the client sees a changed cursor and re-bases).
  */
 export interface ResetWindow {
-	from?: HistoryCursor;
-	limit?: number;
+  from?: HistoryCursor
+  limit?: number
 }
 
 /** A decoded history cursor: one message in one stream generation. */
 interface HistoryCursor {
-	/** The raw token, echoed in errors. */
-	token: string;
-	incarnation: string;
-	messageId: string;
+  /** The raw token, echoed in errors. */
+  token: string
+  incarnation: string
+  messageId: string
 }
 
 /** Context a window resolves against: the serving generation and live targets. */
 export interface HistoryWindowContext {
-	incarnation: string;
-	liveTargets: ReadonlySet<string>;
+  incarnation: string
+  liveTargets: ReadonlySet<string>
 }
 
 /** An older history page (`before=<cursor>`). */
 export interface AgentConversationHistoryPage {
-	v: 1;
-	conversationId: string;
-	messages: ConversationUiMessage[];
-	before: string | null;
+  v: 1
+  conversationId: string
+  messages: ConversationUiMessage[]
+  before: string | null
 }
 
-const CURSOR_PREFIX = 'hc1.';
+const CURSOR_PREFIX = 'hc1.'
 
 export function encodeHistoryCursor(incarnation: string, messageId: string): string {
-	const bytes = new TextEncoder().encode(JSON.stringify([incarnation, messageId]));
-	let binary = '';
-	for (const byte of bytes) binary += String.fromCharCode(byte);
-	return CURSOR_PREFIX + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const bytes = new TextEncoder().encode(JSON.stringify([incarnation, messageId]))
+  let binary = ''
+  for (const byte of bytes) { binary += String.fromCharCode(byte) }
+  return CURSOR_PREFIX + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 function decodeHistoryCursor(token: string): HistoryCursor | undefined {
-	if (!token.startsWith(CURSOR_PREFIX)) return undefined;
-	const body = token.slice(CURSOR_PREFIX.length);
-	if (!/^[A-Za-z0-9_-]+$/.test(body)) return undefined;
-	try {
-		const binary = atob(body.replace(/-/g, '+').replace(/_/g, '/'));
-		const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-		const value: unknown = JSON.parse(
-			new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes),
-		);
-		if (
-			!Array.isArray(value) ||
-			value.length !== 2 ||
-			typeof value[0] !== 'string' ||
-			typeof value[1] !== 'string' ||
-			value[1] === ''
-		) {
-			return undefined;
-		}
-		return { token, incarnation: value[0], messageId: value[1] };
-	} catch {
-		return undefined;
-	}
+  if (!token.startsWith(CURSOR_PREFIX)) { return undefined }
+  const body = token.slice(CURSOR_PREFIX.length)
+  if (!/^[A-Za-z0-9_-]+$/.test(body)) { return undefined }
+  try {
+    const binary = atob(body.replace(/-/g, '+').replace(/_/g, '/'))
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
+    const value: unknown = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes),
+    )
+    if (
+      !Array.isArray(value) ||
+      value.length !== 2 ||
+      typeof value[0] !== 'string' ||
+      typeof value[1] !== 'string' ||
+      value[1] === ''
+    ) {
+      return undefined
+    }
+    return { token, incarnation: value[0], messageId: value[1] }
+  }
+  catch {
+    return undefined
+  }
 }
 
-type BoundParams = { limit?: number; before?: HistoryCursor; from?: HistoryCursor };
+interface BoundParams { limit?: number, before?: HistoryCursor, from?: HistoryCursor }
 
 function parseBoundParams(url: URL): BoundParams | InvalidRequestError {
-	const params = url.searchParams;
-	for (const name of ['limit', 'before', 'from']) {
-		if (params.getAll(name).length > 1) {
-			return new InvalidRequestError({ reason: `History reads accept at most one "${name}".` });
-		}
-	}
-	const bounds: BoundParams = {};
-	const rawLimit = params.get('limit');
-	if (rawLimit !== null) {
-		const limit = /^[1-9][0-9]*$/.test(rawLimit) ? Number(rawLimit) : Number.NaN;
-		if (!Number.isSafeInteger(limit)) {
-			return new InvalidRequestError({ reason: 'History "limit" must be a positive integer.' });
-		}
-		bounds.limit = limit;
-	}
-	for (const name of ['before', 'from'] as const) {
-		const raw = params.get(name);
-		if (raw === null) continue;
-		const cursor = decodeHistoryCursor(raw);
-		if (!cursor) {
-			return new InvalidRequestError({
-				reason: `History "${name}" must be a cursor returned by a previous history read.`,
-			});
-		}
-		bounds[name] = cursor;
-	}
-	return bounds;
+  const params = url.searchParams
+  for (const name of ['limit', 'before', 'from']) {
+    if (params.getAll(name).length > 1) {
+      return new InvalidRequestError({ reason: `History reads accept at most one "${name}".` })
+    }
+  }
+  const bounds: BoundParams = {}
+  const rawLimit = params.get('limit')
+  if (rawLimit !== null) {
+    const limit = /^[1-9][0-9]*$/.test(rawLimit) ? Number(rawLimit) : Number.NaN
+    if (!Number.isSafeInteger(limit)) {
+      return new InvalidRequestError({ reason: 'History "limit" must be a positive integer.' })
+    }
+    bounds.limit = limit
+  }
+  for (const name of ['before', 'from'] as const) {
+    const raw = params.get(name)
+    if (raw === null) { continue }
+    const cursor = decodeHistoryCursor(raw)
+    if (!cursor) {
+      return new InvalidRequestError({
+        reason: `History "${name}" must be a cursor returned by a previous history read.`,
+      })
+    }
+    bounds[name] = cursor
+  }
+  return bounds
 }
 
 export function parseHistoryWindow(url: URL): HistoryWindow | InvalidRequestError {
-	const bounds = parseBoundParams(url);
-	if (bounds instanceof InvalidRequestError) return bounds;
-	const { limit, before, from } = bounds;
-	if (before && from) {
-		return new InvalidRequestError({
-			reason: 'History reads accept "before" or "from", not both.',
-		});
-	}
-	if (from) {
-		if (limit !== undefined) {
-			return new InvalidRequestError({
-				reason:
+  const bounds = parseBoundParams(url)
+  if (bounds instanceof InvalidRequestError) { return bounds }
+  const { limit, before, from } = bounds
+  if (before && from) {
+    return new InvalidRequestError({
+      reason: 'History reads accept "before" or "from", not both.',
+    })
+  }
+  if (from) {
+    if (limit !== undefined) {
+      return new InvalidRequestError({
+        reason:
 					'History "from" reads return everything through the head and do not accept "limit".',
-			});
-		}
-		return { kind: 'from', cursor: from };
-	}
-	if (before) {
-		return limit === undefined
-			? { kind: 'before', cursor: before }
-			: { kind: 'before', cursor: before, limit };
-	}
-	if (limit !== undefined) return { kind: 'newest', limit };
-	return { kind: 'full' };
+      })
+    }
+    return { kind: 'from', cursor: from }
+  }
+  if (before) {
+    return limit === undefined
+      ? { kind: 'before', cursor: before }
+      : { kind: 'before', cursor: before, limit }
+  }
+  if (limit !== undefined) { return { kind: 'newest', limit } }
+  return { kind: 'full' }
 }
 
 /** Parse the reset window of an updates read (`from` and/or `limit`). */
 export function parseResetWindow(url: URL): ResetWindow | InvalidRequestError {
-	const bounds = parseBoundParams(url);
-	if (bounds instanceof InvalidRequestError) return bounds;
-	if (bounds.before) {
-		return new InvalidRequestError({ reason: 'Update streams do not accept "before".' });
-	}
-	return {
-		...(bounds.from ? { from: bounds.from } : {}),
-		...(bounds.limit !== undefined ? { limit: bounds.limit } : {}),
-	};
+  const bounds = parseBoundParams(url)
+  if (bounds instanceof InvalidRequestError) { return bounds }
+  if (bounds.before) {
+    return new InvalidRequestError({ reason: 'Update streams do not accept "before".' })
+  }
+  return {
+    ...(bounds.from ? { from: bounds.from } : {}),
+    ...(bounds.limit !== undefined ? { limit: bounds.limit } : {}),
+  }
 }
 
 /**
@@ -192,29 +193,29 @@ export function parseResetWindow(url: URL): ResetWindow | InvalidRequestError {
  * generation or names no current message.
  */
 export function applyHistoryWindow(
-	snapshot: AgentConversationSnapshot,
-	window: HistoryWindow,
-	context: HistoryWindowContext,
+  snapshot: AgentConversationSnapshot,
+  window: HistoryWindow,
+  context: HistoryWindowContext,
 ): AgentConversationSnapshot | AgentConversationHistoryPage {
-	const messages = snapshot.messages;
-	switch (window.kind) {
-		case 'full':
-			return snapshot;
-		case 'newest':
-			return windowFrom(snapshot, Math.max(0, messages.length - window.limit), context);
-		case 'from':
-			return windowFrom(snapshot, resolveCursor(messages, window.cursor, context), context);
-		case 'before': {
-			const end = resolveCursor(messages, window.cursor, context);
-			const start = window.limit === undefined ? 0 : Math.max(0, end - window.limit);
-			return {
-				v: 1,
-				conversationId: snapshot.conversationId,
-				messages: messages.slice(start, end),
-				before: cursorAt(messages, start, context.incarnation),
-			};
-		}
-	}
+  const messages = snapshot.messages
+  switch (window.kind) {
+    case 'full':
+      return snapshot
+    case 'newest':
+      return windowFrom(snapshot, Math.max(0, messages.length - window.limit), context)
+    case 'from':
+      return windowFrom(snapshot, resolveCursor(messages, window.cursor, context), context)
+    case 'before': {
+      const end = resolveCursor(messages, window.cursor, context)
+      const start = window.limit === undefined ? 0 : Math.max(0, end - window.limit)
+      return {
+        v: 1,
+        conversationId: snapshot.conversationId,
+        messages: messages.slice(start, end),
+        before: cursorAt(messages, start, context.incarnation),
+      }
+    }
+  }
 }
 
 /**
@@ -223,62 +224,62 @@ export function applyHistoryWindow(
  * and with neither bound the snapshot passes through whole.
  */
 export function applyResetWindow(
-	snapshot: AgentConversationSnapshot,
-	window: ResetWindow,
-	context: HistoryWindowContext,
+  snapshot: AgentConversationSnapshot,
+  window: ResetWindow,
+  context: HistoryWindowContext,
 ): AgentConversationSnapshot {
-	const messages = snapshot.messages;
-	if (window.from && window.from.incarnation === context.incarnation) {
-		const anchor = window.from.messageId;
-		const index = messages.findIndex((message) => message.id === anchor);
-		if (index >= 0) return windowFrom(snapshot, index, context);
-	}
-	if (window.limit !== undefined) {
-		return windowFrom(snapshot, Math.max(0, messages.length - window.limit), context);
-	}
-	return snapshot;
+  const messages = snapshot.messages
+  if (window.from && window.from.incarnation === context.incarnation) {
+    const anchor = window.from.messageId
+    const index = messages.findIndex(message => message.id === anchor)
+    if (index >= 0) { return windowFrom(snapshot, index, context) }
+  }
+  if (window.limit !== undefined) {
+    return windowFrom(snapshot, Math.max(0, messages.length - window.limit), context)
+  }
+  return snapshot
 }
 
 /** The closed window starting no later than `start`. */
 function windowFrom(
-	snapshot: AgentConversationSnapshot,
-	start: number,
-	context: HistoryWindowContext,
+  snapshot: AgentConversationSnapshot,
+  start: number,
+  context: HistoryWindowContext,
 ): AgentConversationSnapshot {
-	const messages = snapshot.messages;
-	let closed = start;
-	for (let index = 0; index < start; index++) {
-		if (context.liveTargets.has((messages[index] as ConversationUiMessage).id)) {
-			closed = index;
-			break;
-		}
-	}
-	return {
-		...snapshot,
-		messages: messages.slice(closed),
-		before: cursorAt(messages, closed, context.incarnation),
-	};
+  const messages = snapshot.messages
+  let closed = start
+  for (let index = 0; index < start; index++) {
+    if (context.liveTargets.has((messages[index] as ConversationUiMessage).id)) {
+      closed = index
+      break
+    }
+  }
+  return {
+    ...snapshot,
+    messages: messages.slice(closed),
+    before: cursorAt(messages, closed, context.incarnation),
+  }
 }
 
 function resolveCursor(
-	messages: readonly ConversationUiMessage[],
-	cursor: HistoryCursor,
-	context: HistoryWindowContext,
+  messages: readonly ConversationUiMessage[],
+  cursor: HistoryCursor,
+  context: HistoryWindowContext,
 ): number {
-	const index =
-		cursor.incarnation === context.incarnation
-			? messages.findIndex((message) => message.id === cursor.messageId)
-			: -1;
-	if (index < 0) throw new HistoryCursorNotFoundError({ cursor: cursor.token });
-	return index;
+  const index =
+    cursor.incarnation === context.incarnation
+      ? messages.findIndex(message => message.id === cursor.messageId)
+      : -1
+  if (index < 0) { throw new HistoryCursorNotFoundError({ cursor: cursor.token }) }
+  return index
 }
 
 /** Cursor for the page older than `messages[start..]`, or null at the origin. */
 function cursorAt(
-	messages: readonly ConversationUiMessage[],
-	start: number,
-	incarnation: string,
+  messages: readonly ConversationUiMessage[],
+  start: number,
+  incarnation: string,
 ): string | null {
-	const message = start > 0 ? messages[start] : undefined;
-	return message ? encodeHistoryCursor(incarnation, message.id) : null;
+  const message = start > 0 ? messages[start] : undefined
+  return message ? encodeHistoryCursor(incarnation, message.id) : null
 }

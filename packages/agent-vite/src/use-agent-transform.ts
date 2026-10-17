@@ -14,20 +14,20 @@
  * which works for every export form (declaration, const initializer, named
  * default) without rewriting authored code.
  */
-import MagicString from 'magic-string';
-import { parseAstAsync } from 'vite';
-import { findAgentDirectiveStatement, parserLangForFile } from './agent-scan.ts';
+import MagicString from 'magic-string'
+import { parseAstAsync } from 'vite'
+import { findAgentDirectiveStatement, parserLangForFile } from './agent-scan.ts'
 
 export interface UseAgentTransformResult {
-	code: string;
-	map: ReturnType<MagicString['generateMap']>;
+  code: string
+  map: ReturnType<MagicString['generateMap']>
 }
 
 export interface UseAgentTransformAgent {
-	/** The export the agent function rides (`'default'` for default exports). */
-	readonly exportName: string;
-	/** The agent's scanned durable identity. */
-	readonly identity: string;
+  /** The export the agent function rides (`'default'` for default exports). */
+  readonly exportName: string
+  /** The agent's scanned durable identity. */
+  readonly identity: string
 }
 
 /**
@@ -37,42 +37,42 @@ export interface UseAgentTransformAgent {
  * (e.g. the marker text only appears in a string or comment).
  */
 export async function transformUseAgentModule(options: {
-	code: string;
-	/** The Vite module id, used verbatim as the self-import specifier. */
-	id: string;
-	/** Filesystem path (id without query), for parser dialect detection. */
-	filePath: string;
-	/** The module's scanned agents. */
-	agents: readonly UseAgentTransformAgent[];
+  code: string
+  /** The Vite module id, used verbatim as the self-import specifier. */
+  id: string
+  /** Filesystem path (id without query), for parser dialect detection. */
+  filePath: string
+  /** The module's scanned agents. */
+  agents: readonly UseAgentTransformAgent[]
 }): Promise<UseAgentTransformResult | null> {
-	const { code, id, filePath, agents } = options;
-	const program = await parseAstAsync(code, { lang: parserLangForFile(filePath) }, filePath);
-	const body = program.body as readonly unknown[];
-	const directive = findAgentDirectiveStatement(body);
-	if (!directive) return null;
+  const { code, id, filePath, agents } = options
+  const program = await parseAstAsync(code, { lang: parserLangForFile(filePath) }, filePath)
+  const body = program.body as readonly unknown[]
+  const directive = findAgentDirectiveStatement(body)
+  if (!directive) { return null }
 
-	const bindings = agents.map(
-		(agent) =>
-			`__flue_bind_agent_module__(__flue_agent_module__[${JSON.stringify(agent.exportName)}], { identity: ${JSON.stringify(agent.identity)} });`,
-	);
+  const bindings = agents.map(
+    agent =>
+      `__flue_bind_agent_module__(__flue_agent_module__[${JSON.stringify(agent.exportName)}], { identity: ${JSON.stringify(agent.identity)} });`,
+  )
 
-	const ms = new MagicString(code);
-	ms.append(
-		[
-			'',
-			'',
-			'// Injected by @flue/vite ("use agent" identity binding).',
-			`import { __flueBindAgentModule as __flue_bind_agent_module__ } from '@flue/runtime';`,
-			`import * as __flue_agent_module__ from ${JSON.stringify(id)};`,
-			...bindings,
-			'',
-		].join('\n'),
-	);
-	// `source` + `includeContent` keep the original module text in the emitted
-	// map; without them Vite's sourcemap composition can drop the original
-	// source and downstream consumers fall back to transformed code.
-	return {
-		code: ms.toString(),
-		map: ms.generateMap({ hires: 'boundary', source: id, includeContent: true }),
-	};
+  const ms = new MagicString(code)
+  ms.append(
+    [
+      '',
+      '',
+      '// Injected by @flue/vite ("use agent" identity binding).',
+      `import { __flueBindAgentModule as __flue_bind_agent_module__ } from '@flue/runtime';`,
+      `import * as __flue_agent_module__ from ${JSON.stringify(id)};`,
+      ...bindings,
+      '',
+    ].join('\n'),
+  )
+  // `source` + `includeContent` keep the original module text in the emitted
+  // map; without them Vite's sourcemap composition can drop the original
+  // source and downstream consumers fall back to transformed code.
+  return {
+    code: ms.toString(),
+    map: ms.generateMap({ hires: 'boundary', source: id, includeContent: true }),
+  }
 }

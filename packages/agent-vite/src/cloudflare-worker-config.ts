@@ -39,24 +39,24 @@
  * its own `flue()` instance, concurrent Vite servers in one process never
  * cross-talk.
  */
-import { stackless } from './diagnostics.ts';
+import { stackless } from './diagnostics.ts'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const MIN_COMPATIBILITY_DATE = '2026-04-01';
+const MIN_COMPATIBILITY_DATE = '2026-04-01'
 
 /** compatibility_flag Flue requires for pi-ai's process.env-based API key lookup. */
-const REQUIRED_COMPAT_FLAG = 'nodejs_compat';
+const REQUIRED_COMPAT_FLAG = 'nodejs_compat'
 
 /** The virtual Worker entry `main` points at (served by the flue() plugin). */
-export const VIRTUAL_WORKER_ENTRY = 'virtual:flue/worker';
+export const VIRTUAL_WORKER_ENTRY = 'virtual:flue/worker'
 
 // ─── State linkage ──────────────────────────────────────────────────────────
 
 /** A Flue-owned generated DO binding. */
 interface FlueDoBinding {
-	readonly name: string;
-	readonly class_name: string;
+  readonly name: string
+  readonly class_name: string
 }
 
 /**
@@ -65,21 +65,21 @@ interface FlueDoBinding {
  * reports back through `customizerInvoked`.
  */
 export interface FlueWorkerConfigSource {
-	/** True once flue()'s `config` hook has resolved the project for this resolution. */
-	configReady: boolean;
-	/** Preview serves built artifacts; the customizer must not touch the config. */
-	isPreview: boolean;
-	/** The scanned per-agent Durable Object bindings. */
-	readonly doBindings: readonly FlueDoBinding[];
-	/** Set by the customizer so `configResolved` can diagnose missing wiring. */
-	customizerInvoked: boolean;
+  /** True once flue()'s `config` hook has resolved the project for this resolution. */
+  configReady: boolean
+  /** Preview serves built artifacts; the customizer must not touch the config. */
+  isPreview: boolean
+  /** The scanned per-agent Durable Object bindings. */
+  readonly doBindings: readonly FlueDoBinding[]
+  /** Set by the customizer so `configResolved` can diagnose missing wiring. */
+  customizerInvoked: boolean
 }
 
-let latestSource: FlueWorkerConfigSource | undefined;
+let latestSource: FlueWorkerConfigSource | undefined
 
 /** Called synchronously by `flue()` at plugin creation. */
 export function registerFlueWorkerConfigSource(source: FlueWorkerConfigSource): void {
-	latestSource = source;
+  latestSource = source
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -90,50 +90,50 @@ export function registerFlueWorkerConfigSource(source: FlueWorkerConfigSource): 
  * (`object`) because `@flue/vite` deliberately has no dependency on
  * `@cloudflare/vite-plugin`; the sibling passes its resolved `WorkerConfig`.
  */
-export type FlueWorkerConfigCustomizer = (config: object) => void;
+export type FlueWorkerConfigCustomizer = (config: object) => void
 
 /**
  * Create the worker-config customizer for the `flue()` instance created in
  * the same `vite.config.ts` evaluation. Must be called after `flue()`.
  */
 export function flueWorkerConfig(): FlueWorkerConfigCustomizer {
-	// One-shot capture: consuming the slot means a flueWorkerConfig() created
-	// before its flue() always hits the clear error below — even in a warm
-	// process where a previous resolution's registration would otherwise
-	// linger in the module scope and be captured silently.
-	const source = latestSource;
-	latestSource = undefined;
-	if (!source) {
-		throw stackless(
-			new Error(
-				'[flue] flueWorkerConfig() was called before flue(). Create the flue() plugin first ' +
-					'in the same Vite config:\n\n' +
-					'  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
-			),
-		);
-	}
-	return (config: object) => {
-		source.customizerInvoked = true;
-		// Preview serves the already-built Worker output; its config is the
-		// emitted deploy config and must pass through untouched.
-		if (source.isPreview) return;
-		if (!source.configReady) {
-			// The linked flue() never took the Cloudflare config path in this
-			// resolution — its hook hasn't run yet (plugin ordering), or it
-			// configured the Node target (explicit `target: 'node'`, or the
-			// cloudflare() plugin was not visible as a plain plugins entry).
-			throw stackless(
-				new Error(
-					'[flue] flueWorkerConfig() ran before flue() configured the Cloudflare target. ' +
-						'Ensure flue() precedes cloudflare() as plain entries of the same `plugins` array ' +
-						"(not wrapped in a Promise or added by another plugin), and that flue's `target` " +
-						"is not forced to 'node':\n\n" +
-						'  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
-				),
-			);
-		}
-		applyFlueWorkerConfig(config as Record<string, unknown>, source.doBindings);
-	};
+  // One-shot capture: consuming the slot means a flueWorkerConfig() created
+  // before its flue() always hits the clear error below — even in a warm
+  // process where a previous resolution's registration would otherwise
+  // linger in the module scope and be captured silently.
+  const source = latestSource
+  latestSource = undefined
+  if (!source) {
+    throw stackless(
+      new Error(
+        '[flue] flueWorkerConfig() was called before flue(). Create the flue() plugin first ' +
+        'in the same Vite config:\n\n' +
+        '  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
+      ),
+    )
+  }
+  return (config: object) => {
+    source.customizerInvoked = true
+    // Preview serves the already-built Worker output; its config is the
+    // emitted deploy config and must pass through untouched.
+    if (source.isPreview) { return }
+    if (!source.configReady) {
+      // The linked flue() never took the Cloudflare config path in this
+      // resolution — its hook hasn't run yet (plugin ordering), or it
+      // configured the Node target (explicit `target: 'node'`, or the
+      // cloudflare() plugin was not visible as a plain plugins entry).
+      throw stackless(
+        new Error(
+          '[flue] flueWorkerConfig() ran before flue() configured the Cloudflare target. ' +
+          'Ensure flue() precedes cloudflare() as plain entries of the same `plugins` array ' +
+          '(not wrapped in a Promise or added by another plugin), and that flue\'s `target` ' +
+          'is not forced to \'node\':\n\n' +
+          '  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
+        ),
+      )
+    }
+    applyFlueWorkerConfig(config as Record<string, unknown>, source.doBindings)
+  }
 }
 
 /**
@@ -142,14 +142,14 @@ export function flueWorkerConfig(): FlueWorkerConfigCustomizer {
  * resolution + agent scan) must have run first.
  */
 export function cloudflareOrderingError(): Error {
-	return stackless(
-		new Error(
-			'[flue] flue() must come before cloudflare() in the Vite plugins array. ' +
-				'The Cloudflare plugin invokes flueWorkerConfig() while Vite resolves the config, and ' +
-				'flue() must have scanned the project first. Reorder:\n\n' +
-				'  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
-		),
-	);
+  return stackless(
+    new Error(
+      '[flue] flue() must come before cloudflare() in the Vite plugins array. ' +
+      'The Cloudflare plugin invokes flueWorkerConfig() while Vite resolves the config, and ' +
+      'flue() must have scanned the project first. Reorder:\n\n' +
+      '  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
+    ),
+  )
 }
 
 // ─── Customizer body ────────────────────────────────────────────────────────
@@ -161,34 +161,34 @@ export function cloudflareOrderingError(): Error {
  * effective config for the environment actually being built or served.
  */
 function applyFlueWorkerConfig(
-	config: Record<string, unknown>,
-	doBindings: readonly FlueDoBinding[],
+  config: Record<string, unknown>,
+  doBindings: readonly FlueDoBinding[],
 ): void {
-	validateCompatibilityDate(config);
+  validateCompatibilityDate(config)
 
-	// compatibility_flags: union in nodejs_compat. The deploy artifact is the
-	// sibling-emitted merged config, so the union is always effective; the
-	// user's authored file no longer needs to carry the flag itself.
-	const flags = Array.isArray(config.compatibility_flags)
-		? (config.compatibility_flags as unknown[]).filter((f): f is string => typeof f === 'string')
-		: [];
-	if (!flags.includes(REQUIRED_COMPAT_FLAG)) flags.push(REQUIRED_COMPAT_FLAG);
-	config.compatibility_flags = flags;
+  // compatibility_flags: union in nodejs_compat. The deploy artifact is the
+  // sibling-emitted merged config, so the union is always effective; the
+  // user's authored file no longer needs to carry the flag itself.
+  const flags = Array.isArray(config.compatibility_flags)
+    ? (config.compatibility_flags as unknown[]).filter((f): f is string => typeof f === 'string')
+    : []
+  if (!flags.includes(REQUIRED_COMPAT_FLAG)) { flags.push(REQUIRED_COMPAT_FLAG) }
+  config.compatibility_flags = flags
 
-	// main: default to the generated virtual Worker entry. A user-set main is
-	// respected — it owns the Worker entry and can re-export the generated
-	// module (`export * from 'virtual:flue/worker'` for the Durable Object
-	// classes) while composing its own default handler.
-	if (typeof config.main !== 'string' || config.main.length === 0) {
-		config.main = VIRTUAL_WORKER_ENTRY;
-	}
+  // main: default to the generated virtual Worker entry. A user-set main is
+  // respected — it owns the Worker entry and can re-export the generated
+  // module (`export * from 'virtual:flue/worker'` for the Durable Object
+  // classes) while composing its own default handler.
+  if (typeof config.main !== 'string' || config.main.length === 0) {
+    config.main = VIRTUAL_WORKER_ENTRY
+  }
 
-	mergeDurableObjectBindings(config, doBindings);
+  mergeDurableObjectBindings(config, doBindings)
 
-	// compatibility_date and name are left to the sibling's own defaults when
-	// unset (its date default tracks the workerd version it bundles, which is
-	// strictly better than a Flue-pinned floor). containers, migrations, and
-	// every other field pass through untouched.
+  // compatibility_date and name are left to the sibling's own defaults when
+  // unset (its date default tracks the workerd version it bundles, which is
+  // strictly better than a Flue-pinned floor). containers, migrations, and
+  // every other field pass through untouched.
 }
 
 /**
@@ -199,24 +199,24 @@ function applyFlueWorkerConfig(
  * date deliberately.
  */
 function validateCompatibilityDate(config: Record<string, unknown>): void {
-	if (typeof config.compatibility_date !== 'string') return;
-	const userDate = config.compatibility_date;
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(userDate)) {
-		throw stackless(
-			new Error(
-				`[flue] Your wrangler config's "compatibility_date" ("${userDate}") is not in YYYY-MM-DD format.`,
-			),
-		);
-	}
-	if (userDate < MIN_COMPATIBILITY_DATE) {
-		throw stackless(
-			new Error(
-				`[flue] Your wrangler config's "compatibility_date" is "${userDate}". ` +
-					`Flue requires at least "${MIN_COMPATIBILITY_DATE}" for SQLite-backed Durable Object support, nodejs_compat v2, and AsyncLocalStorage. ` +
-					`Bump the date (set it to today unless you have a specific reason).`,
-			),
-		);
-	}
+  if (typeof config.compatibility_date !== 'string') { return }
+  const userDate = config.compatibility_date
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(userDate)) {
+    throw stackless(
+      new Error(
+        `[flue] Your wrangler config's "compatibility_date" ("${userDate}") is not in YYYY-MM-DD format.`,
+      ),
+    )
+  }
+  if (userDate < MIN_COMPATIBILITY_DATE) {
+    throw stackless(
+      new Error(
+        `[flue] Your wrangler config's "compatibility_date" is "${userDate}". ` +
+        `Flue requires at least "${MIN_COMPATIBILITY_DATE}" for SQLite-backed Durable Object support, nodejs_compat v2, and AsyncLocalStorage. ` +
+        `Bump the date (set it to today unless you have a specific reason).`,
+      ),
+    )
+  }
 }
 
 /**
@@ -225,42 +225,42 @@ function validateCompatibilityDate(config: Record<string, unknown>): void {
  * generate (harmless duplication) rather than a conflicting redirection.
  */
 function mergeDurableObjectBindings(
-	config: Record<string, unknown>,
-	doBindings: readonly FlueDoBinding[],
+  config: Record<string, unknown>,
+  doBindings: readonly FlueDoBinding[],
 ): void {
-	const existingDo =
-		typeof config.durable_objects === 'object' && config.durable_objects !== null
-			? (config.durable_objects as Record<string, unknown>)
-			: {};
-	const existingBindings = Array.isArray(existingDo.bindings)
-		? (existingDo.bindings as unknown[]).filter(
-				(b): b is Record<string, unknown> => typeof b === 'object' && b !== null,
-			)
-		: [];
-	const existingByName = new Map(
-		existingBindings.filter((b) => typeof b.name === 'string').map((b) => [b.name as string, b]),
-	);
-	for (const binding of doBindings) {
-		const existing = existingByName.get(binding.name);
-		if (!existing) continue;
-		if (
-			existing.class_name !== binding.class_name ||
-			existing.script_name !== undefined ||
-			existing.environment !== undefined
-		) {
-			throw stackless(
-				new Error(
-					`[flue] wrangler config durable object binding "${binding.name}" is reserved by Flue. ` +
-						`Expected a local class_name "${binding.class_name}" binding without script_name or environment.`,
-				),
-			);
-		}
-	}
-	const bindingsToAdd = doBindings
-		.filter((binding) => !existingByName.has(binding.name))
-		.map((binding) => ({ name: binding.name, class_name: binding.class_name }));
-	config.durable_objects = {
-		...existingDo,
-		bindings: [...existingBindings, ...bindingsToAdd],
-	};
+  const existingDo =
+    typeof config.durable_objects === 'object' && config.durable_objects !== null
+      ? (config.durable_objects as Record<string, unknown>)
+      : {}
+  const existingBindings = Array.isArray(existingDo.bindings)
+    ? (existingDo.bindings as unknown[]).filter(
+        (b): b is Record<string, unknown> => typeof b === 'object' && b !== null,
+      )
+    : []
+  const existingByName = new Map(
+    existingBindings.filter(b => typeof b.name === 'string').map(b => [b.name as string, b]),
+  )
+  for (const binding of doBindings) {
+    const existing = existingByName.get(binding.name)
+    if (!existing) { continue }
+    if (
+      existing.class_name !== binding.class_name ||
+      existing.script_name !== undefined ||
+      existing.environment !== undefined
+    ) {
+      throw stackless(
+        new Error(
+          `[flue] wrangler config durable object binding "${binding.name}" is reserved by Flue. ` +
+          `Expected a local class_name "${binding.class_name}" binding without script_name or environment.`,
+        ),
+      )
+    }
+  }
+  const bindingsToAdd = doBindings
+    .filter(binding => !existingByName.has(binding.name))
+    .map(binding => ({ name: binding.name, class_name: binding.class_name }))
+  config.durable_objects = {
+    ...existingDo,
+    bindings: [...existingBindings, ...bindingsToAdd],
+  }
 }

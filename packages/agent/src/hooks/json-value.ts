@@ -9,22 +9,23 @@
  * the emitted text stays exactly what each hook already says today.
  */
 export function normalizeJsonValue(
-	value: unknown,
-	options: { label: string; name: string; undefinedMessage: string },
+  value: unknown,
+  options: { label: string, name: string, undefinedMessage: string },
 ): unknown {
-	if (value === undefined) {
-		throw new Error(options.undefinedMessage);
-	}
-	let text: string | undefined;
-	try {
-		text = JSON.stringify(value);
-	} catch (error) {
-		throw new Error(
-			`[flue] ${options.label} "${options.name}" value is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}.`,
-		);
-	}
-	if (text === undefined) {
-		throw new Error(`[flue] ${options.label} "${options.name}" value is not JSON-serializable.`);
-	}
-	return JSON.parse(text);
+  if (value === undefined) {
+    throw new Error(options.undefinedMessage)
+  }
+  let text: string | undefined
+  try {
+    text = JSON.stringify(value)
+  }
+  catch (error) {
+    throw new Error(
+      `[flue] ${options.label} "${options.name}" value is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}.`,
+    )
+  }
+  if (text === undefined) {
+    throw new Error(`[flue] ${options.label} "${options.name}" value is not JSON-serializable.`)
+  }
+  return JSON.parse(text)
 }

@@ -6,18 +6,18 @@
  * this through `local(...)`. `exec` shells out via `child_process.spawn`;
  * file methods call `node:fs/promises` directly.
  */
-import { spawn, spawnSync } from 'node:child_process';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process'
+import * as fs from 'node:fs/promises'
+import * as path from 'node:path'
 
-import { abortErrorFor, composeTimeoutSignal } from '../abort.ts';
-import { writeFileCreatingParents } from '../sandbox.ts';
-import type { FileStat, Sandbox, ShellResult } from '../types.ts';
+import { abortErrorFor, composeTimeoutSignal } from '../abort.ts'
+import { writeFileCreatingParents } from '../sandbox.ts'
+import type { FileStat, Sandbox, ShellResult } from '../types.ts'
 
-const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+const MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 
 /** Grace period between SIGTERM and SIGKILL when tearing down a process group. */
-const KILL_GRACE_MS = 2000;
+const KILL_GRACE_MS = 2000
 
 /**
  * Shell used for `exec()`. The model-facing tool is named `bash` and the
@@ -33,18 +33,19 @@ const KILL_GRACE_MS = 2000;
  * `/bin/sh` was absolute, and a sandbox with an overridden PATH must still
  * be able to run commands.
  */
-let resolvedShell: string | true | undefined;
+let resolvedShell: string | true | undefined
 function resolveShell(): string | true {
-	if (resolvedShell === undefined) {
-		if (process.platform === 'win32') {
-			resolvedShell = true;
-		} else {
-			const probe = spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' });
-			const found = probe.status === 0 ? probe.stdout.trim() : '';
-			resolvedShell = found.startsWith('/') ? found : true;
-		}
-	}
-	return resolvedShell;
+  if (resolvedShell === undefined) {
+    if (process.platform === 'win32') {
+      resolvedShell = true
+    }
+    else {
+      const probe = spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' })
+      const found = probe.status === 0 ? probe.stdout.trim() : ''
+      resolvedShell = found.startsWith('/') ? found : true
+    }
+  }
+  return resolvedShell
 }
 
 /**
@@ -59,96 +60,99 @@ function resolveShell(): string | true {
  * `exec`-based behavior for non-zero exits.
  */
 function execShell(
-	command: string,
-	opts: { cwd: string; env: NodeJS.ProcessEnv; signal?: AbortSignal },
+  command: string,
+  opts: { cwd: string, env: NodeJS.ProcessEnv, signal?: AbortSignal },
 ): Promise<ShellResult> {
-	return new Promise((resolve) => {
-		const child = spawn(command, {
-			cwd: opts.cwd,
-			env: opts.env,
-			shell: resolveShell(),
-			// POSIX: lead a new process group so abort can signal the whole
-			// tree via `process.kill(-pid)`. No-op grouping on Windows.
-			detached: process.platform !== 'win32',
-			stdio: ['ignore', 'pipe', 'pipe'],
-		});
+  return new Promise((resolve) => {
+    const child = spawn(command, {
+      cwd: opts.cwd,
+      env: opts.env,
+      shell: resolveShell(),
+      // POSIX: lead a new process group so abort can signal the whole
+      // tree via `process.kill(-pid)`. No-op grouping on Windows.
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
 
-		let stdout = '';
-		let stderr = '';
-		let truncated = false;
-		let settled = false;
+    let stdout = ''
+    let stderr = ''
+    let truncated = false
+    let settled = false
 
-		const killTree = (sig: NodeJS.Signals): void => {
-			if (child.pid === undefined) return;
-			try {
-				// Negative pid → signal the process group (POSIX).
-				process.kill(-child.pid, sig);
-			} catch {
-				try {
-					child.kill(sig);
-				} catch {
-					// Already gone.
-				}
-			}
-		};
+    const killTree = (sig: NodeJS.Signals): void => {
+      if (child.pid === undefined) { return }
+      try {
+        // Negative pid → signal the process group (POSIX).
+        process.kill(-child.pid, sig)
+      }
+      catch {
+        try {
+          child.kill(sig)
+        }
+        catch {
+          // Already gone.
+        }
+      }
+    }
 
-		const onAbort = (): void => {
-			killTree('SIGTERM');
-			setTimeout(() => killTree('SIGKILL'), KILL_GRACE_MS).unref();
-		};
+    const onAbort = (): void => {
+      killTree('SIGTERM')
+      setTimeout(() => killTree('SIGKILL'), KILL_GRACE_MS).unref()
+    }
 
-		const settle = (result: ShellResult): void => {
-			if (settled) return;
-			settled = true;
-			// A pending SIGKILL stays armed: a group member that ignores SIGTERM
-			// and holds none of the shell's pipes outlives the shell's exit.
-			opts.signal?.removeEventListener('abort', onAbort);
-			resolve(result);
-		};
+    const settle = (result: ShellResult): void => {
+      if (settled) { return }
+      settled = true
+      // A pending SIGKILL stays armed: a group member that ignores SIGTERM
+      // and holds none of the shell's pipes outlives the shell's exit.
+      opts.signal?.removeEventListener('abort', onAbort)
+      resolve(result)
+    }
 
-		if (opts.signal?.aborted) {
-			onAbort();
-		} else {
-			opts.signal?.addEventListener('abort', onAbort, { once: true });
-		}
+    if (opts.signal?.aborted) {
+      onAbort()
+    }
+    else {
+      opts.signal?.addEventListener('abort', onAbort, { once: true })
+    }
 
-		const onData = (chunk: string, target: 'stdout' | 'stderr'): void => {
-			if (target === 'stdout') stdout += chunk;
-			else stderr += chunk;
-			if (!truncated && stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
-				truncated = true;
-				killTree('SIGTERM');
-			}
-		};
-		child.stdout.setEncoding('utf8');
-		child.stdout.on('data', (chunk: string) => onData(chunk, 'stdout'));
-		child.stderr.setEncoding('utf8');
-		child.stderr.on('data', (chunk: string) => onData(chunk, 'stderr'));
+    const onData = (chunk: string, target: 'stdout' | 'stderr'): void => {
+      if (target === 'stdout') { stdout += chunk }
+      else { stderr += chunk }
+      if (!truncated && stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
+        truncated = true
+        killTree('SIGTERM')
+      }
+    }
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => onData(chunk, 'stdout'))
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => onData(chunk, 'stderr'))
 
-		child.once('error', (err) => {
-			// Spawn failure (no 'close' will follow) or post-spawn kill error.
-			killTree('SIGTERM');
-			settle({ stdout, stderr: stderr || String(err.message ?? err), exitCode: 1 });
-		});
+    child.once('error', (err) => {
+      // Spawn failure (no 'close' will follow) or post-spawn kill error.
+      killTree('SIGTERM')
+      settle({ stdout, stderr: stderr || String(err.message ?? err), exitCode: 1 })
+    })
 
-		child.once('close', (code) => {
-			if (truncated) {
-				settle({
-					stdout,
-					stderr: `${stderr}\n[flue] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`,
-					exitCode: 1,
-				});
-				return;
-			}
-			// `code` is null when the child died from a signal. A kill driven
-			// by this adapter's own abort resolves with the timeout(1)
-			// convention's exit code 124; callers only ever see it for
-			// `timeoutMs` kills, because the caller-abort path rethrows
-			// AbortError before the result surfaces. A signal death we did
-			// not initiate keeps the generic failure code.
-			settle({ stdout, stderr, exitCode: code ?? (opts.signal?.aborted ? 124 : 1) });
-		});
-	});
+    child.once('close', (code) => {
+      if (truncated) {
+        settle({
+          stdout,
+          stderr: `${stderr}\n[flue] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`,
+          exitCode: 1,
+        })
+        return
+      }
+      // `code` is null when the child died from a signal. A kill driven
+      // by this adapter's own abort resolves with the timeout(1)
+      // convention's exit code 124; callers only ever see it for
+      // `timeoutMs` kills, because the caller-abort path rethrows
+      // AbortError before the result surfaces. A signal death we did
+      // not initiate keeps the generic failure code.
+      settle({ stdout, stderr, exitCode: code ?? (opts.signal?.aborted ? 124 : 1) })
+    })
+  })
 }
 
 /**
@@ -161,41 +165,41 @@ function execShell(
  * anything else, callers opt in explicitly via `options.env`.
  */
 const DEFAULT_LOCAL_ENV_ALLOWLIST = [
-	'PATH',
-	'HOME',
-	'USER',
-	'LOGNAME',
-	'HOSTNAME',
-	'SHELL',
-	'LANG',
-	'LC_ALL',
-	'LC_CTYPE',
-	'TZ',
-	'TERM',
-	'TMPDIR',
-	'TMP',
-	'TEMP',
-] as const;
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'HOSTNAME',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TZ',
+  'TERM',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+] as const
 
 export interface LocalSandboxOptions {
-	/** Working directory. Defaults to `process.cwd()`. */
-	cwd?: string;
-	/**
-	 * Env vars layered on top of `DEFAULT_LOCAL_ENV_ALLOWLIST`. Set a key
-	 * to `undefined` to drop a default. Per-call `opts.env` on `exec()`
-	 * layers on top of this.
-	 *
-	 * Pass-through is intentionally explicit:
-	 *
-	 * ```ts
-	 * // Expose one host var.
-	 * local({ env: { GH_TOKEN: process.env.GH_TOKEN } });
-	 *
-	 * // Inherit everything (exposes host secrets to the model's bash tool).
-	 * local({ env: { ...process.env } });
-	 * ```
-	 */
-	env?: Record<string, string | undefined>;
+  /** Working directory. Defaults to `process.cwd()`. */
+  cwd?: string
+  /**
+   * Env vars layered on top of `DEFAULT_LOCAL_ENV_ALLOWLIST`. Set a key
+   * to `undefined` to drop a default. Per-call `opts.env` on `exec()`
+   * layers on top of this.
+   *
+   * Pass-through is intentionally explicit:
+   *
+   * ```ts
+   * // Expose one host var.
+   * local({ env: { GH_TOKEN: process.env.GH_TOKEN } });
+   *
+   * // Inherit everything (exposes host secrets to the model's bash tool).
+   * local({ env: { ...process.env } });
+   * ```
+   */
+  env?: Record<string, string | undefined>
 }
 
 /**
@@ -206,126 +210,128 @@ export interface LocalSandboxOptions {
  * after construction are NOT picked up).
  */
 function resolveBaseEnv(userEnv: LocalSandboxOptions['env']): NodeJS.ProcessEnv {
-	// Reject non-record shapes (notably `true` and arrays) at runtime so
-	// we keep the option's shape open for future shorthands like
-	// `env: true` meaning "pass through all of process.env". The TS type
-	// already forbids these; this guard is for JS callers and accidental
-	// `any`s.
-	if (userEnv !== undefined && (typeof userEnv !== 'object' || Array.isArray(userEnv))) {
-		throw new TypeError(
-			'[flue] local() `env` must be a Record<string, string | undefined>. ' +
-				'To inherit the full host env, pass `env: { ...process.env }`.',
-		);
-	}
+  // Reject non-record shapes (notably `true` and arrays) at runtime so
+  // we keep the option's shape open for future shorthands like
+  // `env: true` meaning "pass through all of process.env". The TS type
+  // already forbids these; this guard is for JS callers and accidental
+  // `any`s.
+  if (userEnv !== undefined && (typeof userEnv !== 'object' || Array.isArray(userEnv))) {
+    throw new TypeError(
+      '[flue] local() `env` must be a Record<string, string | undefined>. ' +
+      'To inherit the full host env, pass `env: { ...process.env }`.',
+    )
+  }
 
-	const base: NodeJS.ProcessEnv = {};
-	for (const key of DEFAULT_LOCAL_ENV_ALLOWLIST) {
-		const value = process.env[key];
-		if (value !== undefined) base[key] = value;
-	}
-	if (!userEnv) return base;
-	for (const [key, value] of Object.entries(userEnv)) {
-		if (value === undefined) {
-			delete base[key];
-		} else {
-			base[key] = value;
-		}
-	}
-	return base;
+  const base: NodeJS.ProcessEnv = {}
+  for (const key of DEFAULT_LOCAL_ENV_ALLOWLIST) {
+    const value = process.env[key]
+    if (value !== undefined) { base[key] = value }
+  }
+  if (!userEnv) { return base }
+  for (const [key, value] of Object.entries(userEnv)) {
+    if (value === undefined) {
+      delete base[key]
+    }
+    else {
+      base[key] = value
+    }
+  }
+  return base
 }
 
 export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
-	const cwd = path.resolve(options.cwd ?? process.cwd());
-	const baseEnv = resolveBaseEnv(options.env);
+  const cwd = path.resolve(options.cwd ?? process.cwd())
+  const baseEnv = resolveBaseEnv(options.env)
 
-	const resolvePath = (p: string): string => (path.isAbsolute(p) ? p : path.resolve(cwd, p));
+  const resolvePath = (p: string): string => (path.isAbsolute(p) ? p : path.resolve(cwd, p))
 
-	return {
-		async exec(command, opts): Promise<ShellResult> {
-			const signal = opts?.signal;
-			if (signal?.aborted) throw abortErrorFor(signal);
+  return {
+    async exec(command, opts): Promise<ShellResult> {
+      const signal = opts?.signal
+      if (signal?.aborted) { throw abortErrorFor(signal) }
 
-			// Compose timeoutMs with the caller's signal so signal-blind
-			// callers still observe deadlines and signal-aware ones can abort
-			// mid-flight. Mirrors the bashFactory adapter's behavior.
-			const { mergedSignal } = composeTimeoutSignal(opts?.timeoutMs, signal);
+      // Compose timeoutMs with the caller's signal so signal-blind
+      // callers still observe deadlines and signal-aware ones can abort
+      // mid-flight. Mirrors the bashFactory adapter's behavior.
+      const { mergedSignal } = composeTimeoutSignal(opts?.timeoutMs, signal)
 
-			const result = await execShell(command, {
-				cwd: opts?.cwd ? resolvePath(opts.cwd) : cwd,
-				// Per-call env layers on top of `baseEnv` (allowlist +
-				// sandbox `env` option). `process.env` is intentionally
-				// never read here.
-				env: opts?.env ? { ...baseEnv, ...opts.env } : baseEnv,
-				signal: mergedSignal,
-			});
-			if (signal?.aborted) throw abortErrorFor(signal);
-			return result;
-		},
+      const result = await execShell(command, {
+        cwd: opts?.cwd ? resolvePath(opts.cwd) : cwd,
+        // Per-call env layers on top of `baseEnv` (allowlist +
+        // sandbox `env` option). `process.env` is intentionally
+        // never read here.
+        env: opts?.env ? { ...baseEnv, ...opts.env } : baseEnv,
+        signal: mergedSignal,
+      })
+      if (signal?.aborted) { throw abortErrorFor(signal) }
+      return result
+    },
 
-		async readFile(p) {
-			return fs.readFile(resolvePath(p), 'utf8');
-		},
+    async readFile(p) {
+      return fs.readFile(resolvePath(p), 'utf8')
+    },
 
-		async readFileBuffer(p) {
-			const buf = await fs.readFile(resolvePath(p));
-			// Return a fresh Uint8Array view; Node Buffers are subclasses but
-			// downstream code shouldn't rely on Buffer-only methods.
-			return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-		},
+    async readFileBuffer(p) {
+      const buf = await fs.readFile(resolvePath(p))
+      // Return a fresh Uint8Array view; Node Buffers are subclasses but
+      // downstream code shouldn't rely on Buffer-only methods.
+      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+    },
 
-		async writeFile(p, content) {
-			const resolved = resolvePath(p);
-			// FlueFs.writeFile guarantees parents are created as needed in
-			// every sandbox mode; the shared lazy implementation keeps the
-			// happy path at a single fs call.
-			await writeFileCreatingParents(
-				() => fs.writeFile(resolved, content),
-				() => fs.mkdir(path.dirname(resolved), { recursive: true }),
-			);
-		},
+    async writeFile(p, content) {
+      const resolved = resolvePath(p)
+      // FlueFs.writeFile guarantees parents are created as needed in
+      // every sandbox mode; the shared lazy implementation keeps the
+      // happy path at a single fs call.
+      await writeFileCreatingParents(
+        () => fs.writeFile(resolved, content),
+        () => fs.mkdir(path.dirname(resolved), { recursive: true }),
+      )
+    },
 
-		async stat(p): Promise<FileStat> {
-			const resolved = resolvePath(p);
-			// fs.stat follows symlinks, so its Stats.isSymbolicLink() is always
-			// false. lstat the path itself for the symlink flag, then follow the
-			// link for type/size/mtime so they describe the target (matching
-			// cf-sandbox's `stat -L` semantics).
-			const l = await fs.lstat(resolved);
-			const s = l.isSymbolicLink() ? await fs.stat(resolved) : l;
-			return {
-				isFile: s.isFile(),
-				isDirectory: s.isDirectory(),
-				isSymbolicLink: l.isSymbolicLink(),
-				size: s.size,
-				mtime: s.mtime,
-			};
-		},
+    async stat(p): Promise<FileStat> {
+      const resolved = resolvePath(p)
+      // fs.stat follows symlinks, so its Stats.isSymbolicLink() is always
+      // false. lstat the path itself for the symlink flag, then follow the
+      // link for type/size/mtime so they describe the target (matching
+      // cf-sandbox's `stat -L` semantics).
+      const l = await fs.lstat(resolved)
+      const s = l.isSymbolicLink() ? await fs.stat(resolved) : l
+      return {
+        isFile: s.isFile(),
+        isDirectory: s.isDirectory(),
+        isSymbolicLink: l.isSymbolicLink(),
+        size: s.size,
+        mtime: s.mtime,
+      }
+    },
 
-		async readdir(p) {
-			return fs.readdir(resolvePath(p));
-		},
+    async readdir(p) {
+      return fs.readdir(resolvePath(p))
+    },
 
-		async exists(p) {
-			try {
-				await fs.access(resolvePath(p));
-				return true;
-			} catch {
-				return false;
-			}
-		},
+    async exists(p) {
+      try {
+        await fs.access(resolvePath(p))
+        return true
+      }
+      catch {
+        return false
+      }
+    },
 
-		async mkdir(p, opts) {
-			await fs.mkdir(resolvePath(p), { recursive: opts?.recursive ?? false });
-		},
+    async mkdir(p, opts) {
+      await fs.mkdir(resolvePath(p), { recursive: opts?.recursive ?? false })
+    },
 
-		async rm(p, opts) {
-			await fs.rm(resolvePath(p), {
-				recursive: opts?.recursive ?? false,
-				force: opts?.force ?? false,
-			});
-		},
+    async rm(p, opts) {
+      await fs.rm(resolvePath(p), {
+        recursive: opts?.recursive ?? false,
+        force: opts?.force ?? false,
+      })
+    },
 
-		cwd,
-		resolvePath,
-	};
+    cwd,
+    resolvePath,
+  }
 }

@@ -38,27 +38,27 @@
  * it conservatively repairs and lets the model proceed.
  */
 
-import type { AgentMessage } from '@earendil-works/pi-agent-core';
-import type { AssistantMessage } from '@earendil-works/pi-ai';
-import { isAssistantContextOverflow } from './compaction.ts';
-import { RETRYABLE_INTERRUPTION_MARKER } from './errors.ts';
+import type { AgentMessage } from '@earendil-works/pi-agent-core'
+import type { AssistantMessage } from '@earendil-works/pi-ai'
+import { isAssistantContextOverflow } from './compaction.ts'
+import { RETRYABLE_INTERRUPTION_MARKER } from './errors.ts'
 
 export type CanonicalSubmissionEntry =
-	| {
-			id: string;
-			type: 'message';
-			message: AgentMessage;
-			/** The submission that owns this entry, when one was active at record time. */
-			submissionId?: string;
-			/**
-			 * The durable loop-ending flag on a tool-result entry, carried from its
-			 * `tool_outcome` record (see conversation-reducer.ts). The batch it
-			 * closes is terminal iff every result in it carries the flag —
-			 * mirroring the engine's `shouldTerminateToolBatch` verdict.
-			 */
-			toolTerminate?: boolean;
-	  }
-	| { id: string; type: 'compaction' };
+  | {
+    id: string
+    type: 'message'
+    message: AgentMessage
+    /** The submission that owns this entry, when one was active at record time. */
+    submissionId?: string
+    /**
+     * The durable loop-ending flag on a tool-result entry, carried from its
+     * `tool_outcome` record (see conversation-reducer.ts). The batch it
+     * closes is terminal iff every result in it carries the flag —
+     * mirroring the engine's `shouldTerminateToolBatch` verdict.
+     */
+    toolTerminate?: boolean
+  }
+  | { id: string, type: 'compaction' }
 
 /**
  * How a `resume` state continues the interrupted submission:
@@ -92,24 +92,24 @@ export type CanonicalSubmissionEntry =
  *   `stream_continuation` via `upgradeAbortedPartialToContinuation`.
  */
 type SubmissionResumeMode =
-	| 'input_only'
-	| 'tool_results'
-	| 'tool_results_partial'
-	| 'stream_continuation'
-	| 'transient_retry'
-	| 'overflow'
-	| 'aborted_partial';
+  | 'input_only'
+  | 'tool_results'
+  | 'tool_results_partial'
+  | 'stream_continuation'
+  | 'transient_retry'
+  | 'overflow'
+  | 'aborted_partial'
 
 export type SubmissionState =
-	/** The persisted input entry was not found in session history. */
-	| { kind: 'absent' }
+/** The persisted input entry was not found in session history. */
+  | { kind: 'absent' }
 	/**
 	 * A later user input exists: the session moved on without settling this
 	 * input. User messages joined into this submission's own response by the
 	 * turn-boundary join protocol do not count — they are absorbed input, not
 	 * advancement (see `isJoinedDeliveryInput`).
 	 */
-	| { kind: 'advanced_past_input' }
+  | { kind: 'advanced_past_input' }
 	/**
 	 * The last assistant response is canonical (stopReason stop/length with no
 	 * pending tool batch), OR — with `terminalToolBatch: true` — a tool-call
@@ -121,28 +121,28 @@ export type SubmissionState =
 	 * `overflow` flags silent/truncation overflow on the response — see the
 	 * module doc for the consumer divergence it encodes.
 	 */
-	| {
-			kind: 'completed';
-			assistant: AssistantMessage;
-			overflow: boolean;
-			terminalToolBatch?: true;
-	  }
+  | {
+    kind: 'completed'
+    assistant: AssistantMessage
+    overflow: boolean
+    terminalToolBatch?: true
+  }
 	/** An assistant tool-call response with no persisted tool results. */
-	| { kind: 'tool_use_unresolved'; assistant: AssistantMessage }
+  | { kind: 'tool_use_unresolved', assistant: AssistantMessage }
 	/** A non-retryable error response. */
-	| { kind: 'terminal_error'; reason: string }
-	| {
-			kind: 'resume';
-			mode: 'input_only';
-			assistant?: undefined;
-			consecutiveRetryableErrors: number;
-	  }
-	| {
-			kind: 'resume';
-			mode: Exclude<SubmissionResumeMode, 'input_only'>;
-			assistant: AssistantMessage;
-			consecutiveRetryableErrors: number;
-	  };
+  | { kind: 'terminal_error', reason: string }
+  | {
+    kind: 'resume'
+    mode: 'input_only'
+    assistant?: undefined
+    consecutiveRetryableErrors: number
+  }
+  | {
+    kind: 'resume'
+    mode: Exclude<SubmissionResumeMode, 'input_only'>
+    assistant: AssistantMessage
+    consecutiveRetryableErrors: number
+  }
 
 /**
  * A user message absorbed into the classified submission's own response by
@@ -156,14 +156,14 @@ export type SubmissionState =
  * strict reading.
  */
 function isJoinedDeliveryInput(
-	entry: Extract<CanonicalSubmissionEntry, { type: 'message' }>,
-	ownSubmissionId: string | undefined,
+  entry: Extract<CanonicalSubmissionEntry, { type: 'message' }>,
+  ownSubmissionId: string | undefined,
 ): boolean {
-	return (
-		ownSubmissionId !== undefined &&
-		entry.submissionId !== undefined &&
-		entry.submissionId !== ownSubmissionId
-	);
+  return (
+    ownSubmissionId !== undefined &&
+    entry.submissionId !== undefined &&
+    entry.submissionId !== ownSubmissionId
+  )
 }
 
 /**
@@ -181,123 +181,123 @@ function isJoinedDeliveryInput(
  *   response, not the session advancing past the input.
  */
 export function classifySubmissionState(
-	following: readonly CanonicalSubmissionEntry[] | undefined,
-	opts: { contextWindow: number; ownSubmissionId?: string },
+  following: readonly CanonicalSubmissionEntry[] | undefined,
+  opts: { contextWindow: number, ownSubmissionId?: string },
 ): SubmissionState {
-	if (following === undefined) return { kind: 'absent' };
-	if (
-		following.some(
-			(entry) =>
-				entry.type === 'message' &&
-				entry.message.role === 'user' &&
-				!isJoinedDeliveryInput(entry, opts.ownSubmissionId),
-		)
-	) {
-		return { kind: 'advanced_past_input' };
-	}
-	const assistantIndex = following.findLastIndex(
-		(entry) => entry.type === 'message' && entry.message.role === 'assistant',
-	);
-	const assistantEntry = assistantIndex === -1 ? undefined : following[assistantIndex];
-	const assistant =
-		assistantEntry?.type === 'message' ? (assistantEntry.message as AssistantMessage) : undefined;
-	if (!assistant) {
-		return {
-			kind: 'resume',
-			mode: 'input_only',
-			consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-		};
-	}
-	const overflow = isAssistantContextOverflow(assistant, opts.contextWindow);
-	// Pi drives tool batches from assistant content, not only from `toolUse`.
-	// In particular, a `length` response with tool calls produces safe synthetic
-	// error results and continues so the model can retry with complete arguments.
-	if (isToolBatchAssistant(assistant)) {
-		if (
-			following.some((entry) => entry.type === 'message' && entry.message.role === 'toolResult')
-		) {
-			if (findTrailingPartialToolBatch(following)) {
-				return {
-					kind: 'resume',
-					mode: 'tool_results_partial',
-					assistant,
-					consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-				};
-			}
-			// A complete trailing batch that unanimously terminates is a FINISHED
-			// response, not a resume: the live engine ends the loop after such a
-			// batch, so driving another model turn here would diverge from the
-			// no-crash outcome.
-			if (isTerminalTrailingToolBatch(following, assistantIndex, assistant)) {
-				return { kind: 'completed', assistant, overflow, terminalToolBatch: true };
-			}
-			return {
-				kind: 'resume',
-				mode: 'tool_results',
-				assistant,
-				consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-			};
-		}
-		return { kind: 'tool_use_unresolved', assistant };
-	}
-	if (isCompletedAssistantResponse(assistant)) {
-		return { kind: 'completed', assistant, overflow };
-	}
-	if (overflow) {
-		return {
-			kind: 'resume',
-			mode: 'overflow',
-			assistant,
-			consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-		};
-	}
-	if (isRetryableModelError(assistant)) {
-		return {
-			kind: 'resume',
-			mode: 'transient_retry',
-			assistant,
-			consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-		};
-	}
-	if (
-		assistant.stopReason === 'aborted' &&
-		hasAdjacentStreamContinuation(following, assistantIndex)
-	) {
-		return {
-			kind: 'resume',
-			mode: 'stream_continuation',
-			assistant,
-			consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-		};
-	}
-	if (assistant.stopReason === 'aborted') {
-		// A turn interrupted mid-tool-batch leaves a trailing aborted
-		// assistant behind the partial batch: after the broken tool loop, the
-		// agent loop starts the next turn, which aborts at the provider and
-		// is checkpointed last. The batch — not the empty aborted partial —
-		// is the state that must drive resumption.
-		if (findTrailingPartialToolBatch(following)) {
-			return {
-				kind: 'resume',
-				mode: 'tool_results_partial',
-				assistant,
-				consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-			};
-		}
-		// An aborted partial without a recovered stream continuation. The
-		// abort itself is not a property of the work (graceful shutdown is
-		// the canonical producer), so the submission is resumable: the
-		// partial is excluded from model context and the turn replays from
-		// the last durable message.
-		return {
-			kind: 'resume',
-			mode: 'aborted_partial',
-			assistant,
-			consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
-		};
-	}
-	// stopReason 'error', non-retryable and non-overflow.
-	return { kind: 'terminal_error', reason: assistant.errorMessage ?? assistant.stopReason };
+  if (following === undefined) { return { kind: 'absent' } }
+  if (
+    following.some(
+      entry =>
+        entry.type === 'message' &&
+        entry.message.role === 'user' &&
+        !isJoinedDeliveryInput(entry, opts.ownSubmissionId),
+    )
+  ) {
+    return { kind: 'advanced_past_input' }
+  }
+  const assistantIndex = following.findLastIndex(
+    entry => entry.type === 'message' && entry.message.role === 'assistant',
+  )
+  const assistantEntry = assistantIndex === -1 ? undefined : following[assistantIndex]
+  const assistant =
+    assistantEntry?.type === 'message' ? (assistantEntry.message as AssistantMessage) : undefined
+  if (!assistant) {
+    return {
+      kind: 'resume',
+      mode: 'input_only',
+      consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+    }
+  }
+  const overflow = isAssistantContextOverflow(assistant, opts.contextWindow)
+  // Pi drives tool batches from assistant content, not only from `toolUse`.
+  // In particular, a `length` response with tool calls produces safe synthetic
+  // error results and continues so the model can retry with complete arguments.
+  if (isToolBatchAssistant(assistant)) {
+    if (
+      following.some(entry => entry.type === 'message' && entry.message.role === 'toolResult')
+    ) {
+      if (findTrailingPartialToolBatch(following)) {
+        return {
+          kind: 'resume',
+          mode: 'tool_results_partial',
+          assistant,
+          consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+        }
+      }
+      // A complete trailing batch that unanimously terminates is a FINISHED
+      // response, not a resume: the live engine ends the loop after such a
+      // batch, so driving another model turn here would diverge from the
+      // no-crash outcome.
+      if (isTerminalTrailingToolBatch(following, assistantIndex, assistant)) {
+        return { kind: 'completed', assistant, overflow, terminalToolBatch: true }
+      }
+      return {
+        kind: 'resume',
+        mode: 'tool_results',
+        assistant,
+        consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+      }
+    }
+    return { kind: 'tool_use_unresolved', assistant }
+  }
+  if (isCompletedAssistantResponse(assistant)) {
+    return { kind: 'completed', assistant, overflow }
+  }
+  if (overflow) {
+    return {
+      kind: 'resume',
+      mode: 'overflow',
+      assistant,
+      consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+    }
+  }
+  if (isRetryableModelError(assistant)) {
+    return {
+      kind: 'resume',
+      mode: 'transient_retry',
+      assistant,
+      consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+    }
+  }
+  if (
+    assistant.stopReason === 'aborted' &&
+    hasAdjacentStreamContinuation(following, assistantIndex)
+  ) {
+    return {
+      kind: 'resume',
+      mode: 'stream_continuation',
+      assistant,
+      consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+    }
+  }
+  if (assistant.stopReason === 'aborted') {
+    // A turn interrupted mid-tool-batch leaves a trailing aborted
+    // assistant behind the partial batch: after the broken tool loop, the
+    // agent loop starts the next turn, which aborts at the provider and
+    // is checkpointed last. The batch — not the empty aborted partial —
+    // is the state that must drive resumption.
+    if (findTrailingPartialToolBatch(following)) {
+      return {
+        kind: 'resume',
+        mode: 'tool_results_partial',
+        assistant,
+        consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+      }
+    }
+    // An aborted partial without a recovered stream continuation. The
+    // abort itself is not a property of the work (graceful shutdown is
+    // the canonical producer), so the submission is resumable: the
+    // partial is excluded from model context and the turn replays from
+    // the last durable message.
+    return {
+      kind: 'resume',
+      mode: 'aborted_partial',
+      assistant,
+      consecutiveRetryableErrors: countConsecutiveRetryableModelErrors(following),
+    }
+  }
+  // stopReason 'error', non-retryable and non-overflow.
+  return { kind: 'terminal_error', reason: assistant.errorMessage ?? assistant.stopReason }
 }
 
 /**
@@ -312,19 +312,19 @@ export function classifySubmissionState(
  * `stream_continued` anywhere else in the window is stale by definition.
  */
 function hasAdjacentStreamContinuation(
-	following: readonly CanonicalSubmissionEntry[],
-	abortedIndex: number,
+  following: readonly CanonicalSubmissionEntry[],
+  abortedIndex: number,
 ): boolean {
-	const next = following[abortedIndex + 1];
-	const afterNext = following[abortedIndex + 2];
-	return (
-		next?.type === 'message' &&
-		next.message.role === 'signal' &&
-		next.message.type === 'stream_interrupted' &&
-		afterNext?.type === 'message' &&
-		afterNext.message.role === 'signal' &&
-		afterNext.message.type === 'stream_continued'
-	);
+  const next = following[abortedIndex + 1]
+  const afterNext = following[abortedIndex + 2]
+  return (
+    next?.type === 'message' &&
+    next.message.role === 'signal' &&
+    next.message.type === 'stream_interrupted' &&
+    afterNext?.type === 'message' &&
+    afterNext.message.role === 'signal' &&
+    afterNext.message.type === 'stream_continued'
+  )
 }
 
 /**
@@ -340,31 +340,31 @@ function hasAdjacentStreamContinuation(
  * unanimity fails and the batch resumes — matching live semantics.
  */
 function isTerminalTrailingToolBatch(
-	following: readonly CanonicalSubmissionEntry[],
-	assistantIndex: number,
-	assistant: AssistantMessage,
+  following: readonly CanonicalSubmissionEntry[],
+  assistantIndex: number,
+  assistant: AssistantMessage,
 ): boolean {
-	const toolCallIds = assistant.content.flatMap((block) =>
-		block.type === 'toolCall' ? [block.id] : [],
-	);
-	if (toolCallIds.length === 0) return false;
-	const trailing = following.slice(assistantIndex + 1);
-	if (trailing.length !== toolCallIds.length) return false;
-	const terminated = new Set<string>();
-	for (const entry of trailing) {
-		if (entry.type !== 'message' || entry.message.role !== 'toolResult') return false;
-		if (entry.toolTerminate !== true) return false;
-		terminated.add(entry.message.toolCallId);
-	}
-	return toolCallIds.every((toolCallId) => terminated.has(toolCallId));
+  const toolCallIds = assistant.content.flatMap(block =>
+    block.type === 'toolCall' ? [block.id] : [],
+  )
+  if (toolCallIds.length === 0) { return false }
+  const trailing = following.slice(assistantIndex + 1)
+  if (trailing.length !== toolCallIds.length) { return false }
+  const terminated = new Set<string>()
+  for (const entry of trailing) {
+    if (entry.type !== 'message' || entry.message.role !== 'toolResult') { return false }
+    if (entry.toolTerminate !== true) { return false }
+    terminated.add(entry.message.toolCallId)
+  }
+  return toolCallIds.every(toolCallId => terminated.has(toolCallId))
 }
 
 export interface TrailingPartialToolBatch {
-	/** History entry id of the tool-call assistant whose batch is incomplete. */
-	entryId: string;
-	assistant: AssistantMessage;
-	/** The turn's full tool-call set, in original call order. */
-	toolCalls: Array<{ type: 'toolCall'; id: string; name: string }>;
+  /** History entry id of the tool-call assistant whose batch is incomplete. */
+  entryId: string
+  assistant: AssistantMessage
+  /** The turn's full tool-call set, in original call order. */
+  toolCalls: Array<{ type: 'toolCall', id: string, name: string }>
 }
 
 /**
@@ -393,44 +393,44 @@ export interface TrailingPartialToolBatch {
  * incomplete.
  */
 export function findTrailingPartialToolBatch(
-	following: readonly CanonicalSubmissionEntry[],
+  following: readonly CanonicalSubmissionEntry[],
 ): TrailingPartialToolBatch | undefined {
-	let end = following.length;
-	const lastEntry = following[end - 1];
-	if (
-		lastEntry?.type === 'message' &&
-		lastEntry.message.role === 'assistant' &&
-		(lastEntry.message as AssistantMessage).stopReason === 'aborted'
-	) {
-		end -= 1;
-	}
-	// Walk back over the trailing toolResult run to the assistant that owns it.
-	let index = end - 1;
-	const resultIds = new Set<string>();
-	while (index >= 0) {
-		const entry = following[index];
-		if (entry?.type !== 'message' || entry.message.role !== 'toolResult') break;
-		resultIds.add(entry.message.toolCallId);
-		index -= 1;
-	}
-	const assistantEntry = following[index];
-	if (
-		index < 0 ||
-		assistantEntry?.type !== 'message' ||
-		assistantEntry.message.role !== 'assistant'
-	) {
-		return undefined;
-	}
-	const assistant = assistantEntry.message as AssistantMessage;
-	if (!isToolBatchAssistant(assistant)) return undefined;
-	const toolCalls = assistant.content.flatMap((content) =>
-		content.type === 'toolCall'
-			? [{ type: 'toolCall' as const, id: content.id, name: content.name }]
-			: [],
-	);
-	if (toolCalls.length === 0) return undefined;
-	if (toolCalls.every((toolCall) => resultIds.has(toolCall.id))) return undefined;
-	return { entryId: assistantEntry.id, assistant, toolCalls };
+  let end = following.length
+  const lastEntry = following[end - 1]
+  if (
+    lastEntry?.type === 'message' &&
+    lastEntry.message.role === 'assistant' &&
+    (lastEntry.message as AssistantMessage).stopReason === 'aborted'
+  ) {
+    end -= 1
+  }
+  // Walk back over the trailing toolResult run to the assistant that owns it.
+  let index = end - 1
+  const resultIds = new Set<string>()
+  while (index >= 0) {
+    const entry = following[index]
+    if (entry?.type !== 'message' || entry.message.role !== 'toolResult') { break }
+    resultIds.add(entry.message.toolCallId)
+    index -= 1
+  }
+  const assistantEntry = following[index]
+  if (
+    index < 0 ||
+    assistantEntry?.type !== 'message' ||
+    assistantEntry.message.role !== 'assistant'
+  ) {
+    return undefined
+  }
+  const assistant = assistantEntry.message as AssistantMessage
+  if (!isToolBatchAssistant(assistant)) { return undefined }
+  const toolCalls = assistant.content.flatMap(content =>
+    content.type === 'toolCall'
+      ? [{ type: 'toolCall' as const, id: content.id, name: content.name }]
+      : [],
+  )
+  if (toolCalls.length === 0) { return undefined }
+  if (toolCalls.every(toolCall => resultIds.has(toolCall.id))) { return undefined }
+  return { entryId: assistantEntry.id, assistant, toolCalls }
 }
 
 /**
@@ -442,44 +442,44 @@ export function findTrailingPartialToolBatch(
  * best-effort heuristic for error messages Flue does not author.
  */
 export function isRetryableModelError(message: AssistantMessage): boolean {
-	if (message.stopReason !== 'error' || !message.errorMessage) return false;
-	if (message.errorMessage.includes(RETRYABLE_INTERRUPTION_MARKER)) return true;
-	// pi-ai's OpenAI-compatible layer stamps unrecognized wire finish_reasons
-	// as "Provider finish_reason: <reason>". Aggregators (e.g. OpenRouter)
-	// report an upstream provider dying mid-generation as the bare "error"
-	// reason, which is transient like a 5xx. The lookahead excludes qualified
-	// reasons (error_quota, error-content-filter, content_filter, …), which
-	// stay terminal.
-	return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost|error)|socket hang up|fetch failed|timed? out|timeout|terminated|provider finish_reason:\s*error(?![-\w])/i.test(
-		message.errorMessage,
-	);
+  if (message.stopReason !== 'error' || !message.errorMessage) { return false }
+  if (message.errorMessage.includes(RETRYABLE_INTERRUPTION_MARKER)) { return true }
+  // pi-ai's OpenAI-compatible layer stamps unrecognized wire finish_reasons
+  // as "Provider finish_reason: <reason>". Aggregators (e.g. OpenRouter)
+  // report an upstream provider dying mid-generation as the bare "error"
+  // reason, which is transient like a 5xx. The lookahead excludes qualified
+  // reasons (error_quota, error-content-filter, content_filter, …), which
+  // stay terminal.
+  return /overloaded|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|network.?error|connection.?(?:reset|refused|lost|error)|socket hang up|fetch failed|timed? out|timeout|terminated|provider finish_reason:\s*error(?![-\w])/i.test(
+    message.errorMessage,
+  )
 }
 
 function isToolBatchAssistant(message: AssistantMessage): boolean {
-	return (
-		message.stopReason === 'toolUse' ||
-		((message.stopReason === 'length' || message.stopReason === 'stop') &&
-			message.content.some((block) => block.type === 'toolCall'))
-	);
+  return (
+    message.stopReason === 'toolUse' ||
+    ((message.stopReason === 'length' || message.stopReason === 'stop') &&
+      message.content.some(block => block.type === 'toolCall'))
+  )
 }
 
 function isCompletedAssistantResponse(message: AssistantMessage): boolean {
-	return message.stopReason === 'stop' || message.stopReason === 'length';
+  return message.stopReason === 'stop' || message.stopReason === 'length'
 }
 
 export function countConsecutiveRetryableModelErrors(
-	entries: readonly CanonicalSubmissionEntry[],
+  entries: readonly CanonicalSubmissionEntry[],
 ): number {
-	let count = 0;
-	for (let i = entries.length - 1; i >= 0; i--) {
-		const entry = entries[i];
-		if (entry?.type !== 'message') continue;
-		// User messages mark an operation boundary: errors from a previous
-		// operation must not count against the current one.
-		if (entry.message.role === 'user') return count;
-		if (entry.message.role !== 'assistant') continue;
-		if (!isRetryableModelError(entry.message as AssistantMessage)) return count;
-		count += 1;
-	}
-	return count;
+  let count = 0
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i]
+    if (entry?.type !== 'message') { continue }
+    // User messages mark an operation boundary: errors from a previous
+    // operation must not count against the current one.
+    if (entry.message.role === 'user') { return count }
+    if (entry.message.role !== 'assistant') { continue }
+    if (!isRetryableModelError(entry.message as AssistantMessage)) { return count }
+    count += 1
+  }
+  return count
 }

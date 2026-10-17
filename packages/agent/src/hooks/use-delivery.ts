@@ -1,5 +1,5 @@
-import type { DeliveredMessage } from '../types.ts';
-import { requireRenderFrame } from './frame.ts';
+import type { DeliveredMessage } from '../types.ts'
+import { requireRenderFrame } from './frame.ts'
 
 /**
  * Read the message currently in front of the model — the latest input the
@@ -50,12 +50,12 @@ import { requireRenderFrame } from './frame.ts';
  *   the render-state context there.
  */
 export function useDelivery(): DeliveredMessage {
-	const frame = requireRenderFrame('useDelivery');
-	const delivery = frame.state?.delivery;
-	if (!delivery) {
-		throw new Error(
-			'[flue] useDelivery() found no delivered message behind this render. Every agent run in the runtime is triggered by one; a direct render outside the runtime (tests, tooling) must supply a `delivery` in its render-state context.',
-		);
-	}
-	return delivery;
+  const frame = requireRenderFrame('useDelivery')
+  const delivery = frame.state?.delivery
+  if (!delivery) {
+    throw new Error(
+      '[flue] useDelivery() found no delivered message behind this render. Every agent run in the runtime is triggered by one; a direct render outside the runtime (tests, tooling) must supply a `delivery` in its render-state context.',
+    )
+  }
+  return delivery
 }

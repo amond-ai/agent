@@ -5,6 +5,6 @@
  * message when a preview server fails to start and prints only the stack.)
  */
 export function stackless(error: Error): Error {
-	error.stack = error.message;
-	return error;
+  error.stack = error.message
+  return error
 }

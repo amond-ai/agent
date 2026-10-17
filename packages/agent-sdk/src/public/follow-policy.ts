@@ -11,7 +11,7 @@
  * the two loops in agreement without forcing either into the other's shape.
  */
 
-import type { ConversationChunkPosition } from './conversation-stream.ts';
+import type { ConversationChunkPosition } from './conversation-stream.ts'
 
 /**
  * How many *consecutive* 401/403 failures a stream follower retries before it
@@ -28,7 +28,7 @@ import type { ConversationChunkPosition } from './conversation-stream.ts';
  * Each follow episode (an `observe()` subscribe or `refresh()`, one
  * `wait()`/`read()` call) starts with a fresh budget.
  */
-export const AUTH_FAILURE_LIMIT = 3;
+export const AUTH_FAILURE_LIMIT = 3
 
 /**
  * How long an active stream may stay completely silent — no chunk and no
@@ -44,29 +44,29 @@ export const AUTH_FAILURE_LIMIT = 3;
  * stream from the admission offset (`wait()`/`read()`). A stall is not an
  * auth failure, so it never consumes the bounded auth-retry budget.
  */
-export const STALE_STREAM_TIMEOUT_MS = 90_000;
+export const STALE_STREAM_TIMEOUT_MS = 90_000
 
-export const HEALTHY_STREAM_MS = 30_000;
+export const HEALTHY_STREAM_MS = 30_000
 
 /**
  * Exponential retry backoff: 1s doubled per consecutive attempt, capped at
  * 30s. `attempt` is zero-based (attempt 0 → 1s).
  */
 export function retryBackoffMs(attempt: number): number {
-	return Math.min(1000 * 2 ** attempt, 30_000);
+  return Math.min(1000 * 2 ** attempt, 30_000)
 }
 
 /** HTTP status carried by an SDK or transport error, when there is one. */
 export function statusOf(error: unknown): number | undefined {
-	return error && typeof error === 'object' && 'status' in error && typeof error.status === 'number'
-		? error.status
-		: undefined;
+  return error && typeof error === 'object' && 'status' in error && typeof error.status === 'number'
+    ? error.status
+    : undefined
 }
 
 /** Lexicographic order on chunk positions: by `batch`, then `index`. */
 export function comparePosition(
-	a: ConversationChunkPosition,
-	b: ConversationChunkPosition,
+  a: ConversationChunkPosition,
+  b: ConversationChunkPosition,
 ): number {
-	return a.batch !== b.batch ? a.batch - b.batch : a.index - b.index;
+  return a.batch !== b.batch ? a.batch - b.batch : a.index - b.index
 }

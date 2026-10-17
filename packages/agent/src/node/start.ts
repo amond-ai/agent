@@ -10,63 +10,64 @@
  * work directly and no bootstrap is needed.
  */
 
-import type { Provider } from '@earendil-works/pi-ai';
-import type { PersistenceAdapter } from '../agent-execution-store.ts';
-import { registerDefaultProviders } from '../runtime/builtin-providers.ts';
-import { getFlueRuntime } from '../runtime/flue-app.ts';
-import { setProvider } from '../runtime/providers.ts';
-import { type FlueAgentRegistration, resolveAgentIdentity } from '../runtime/registration.ts';
-import type { Agent } from '../types.ts';
-import { sqlite } from './agent-execution-store.ts';
-import { assembleNodeAgentRuntime, connectPersistenceAdapter } from './assemble.ts';
+import type { Provider } from '@earendil-works/pi-ai'
+import type { PersistenceAdapter } from '../agent-execution-store.ts'
+import { registerDefaultProviders } from '../runtime/builtin-providers.ts'
+import { getFlueRuntime } from '../runtime/flue-app.ts'
+import { setProvider } from '../runtime/providers.ts'
+import { resolveAgentIdentity } from '../runtime/registration.ts'
+import type { FlueAgentRegistration } from '../runtime/registration.ts'
+import type { Agent } from '../types.ts'
+import { sqlite } from './agent-execution-store.ts'
+import { assembleNodeAgentRuntime, connectPersistenceAdapter } from './assemble.ts'
 
 /**
  * A configured `start()` entry, for when the bare function isn't enough:
  * an identity override (inline/anonymous functions in tests).
  */
 export interface StartAgentConfig {
-	/** The agent function. */
-	agent: Agent;
-	/**
-	 * Identity override; keys durable conversation storage. Defaults to the
-	 * agent's own identity (its `agentName` static, else the function name).
-	 * NEVER inferred positionally — positional names would silently reassign
-	 * conversations when the agents array is reordered.
-	 */
-	name?: string;
+  /** The agent function. */
+  agent: Agent
+  /**
+   * Identity override; keys durable conversation storage. Defaults to the
+   * agent's own identity (its `agentName` static, else the function name).
+   * NEVER inferred positionally — positional names would silently reassign
+   * conversations when the agents array is reordered.
+   */
+  name?: string
 }
 
-export type StartAgentEntry = Agent | StartAgentConfig;
+export type StartAgentEntry = Agent | StartAgentConfig
 
 export interface StartOptions {
-	/**
-	 * The agents this runtime serves: agent functions, or `{ agent, name? }`
-	 * entries when an identity override is needed.
-	 */
-	agents: readonly StartAgentEntry[];
-	/**
-	 * Persistence. Defaults to in-memory SQLite (process lifetime — nothing
-	 * survives exit). Pass an adapter (e.g. `sqlite('./run.db')`) to persist
-	 * conversations across runs.
-	 */
-	db?: PersistenceAdapter;
-	/** Runtime environment. Defaults to `process.env`. */
-	env?: Record<string, string | undefined>;
-	/**
-	 * The providers this runtime registers, replacing the default set. Pass pi
-	 * Provider objects — built-in factories (`anthropicProvider()` from
-	 * `@earendil-works/pi-ai/providers/anthropic`), `createProvider(...)`
-	 * customs, or a faux provider's `.provider` in tests. Omitted registers
-	 * every pi built-in; an empty array registers none.
-	 */
-	providers?: readonly Provider[];
+  /**
+   * The agents this runtime serves: agent functions, or `{ agent, name? }`
+   * entries when an identity override is needed.
+   */
+  agents: readonly StartAgentEntry[]
+  /**
+   * Persistence. Defaults to in-memory SQLite (process lifetime — nothing
+   * survives exit). Pass an adapter (e.g. `sqlite('./run.db')`) to persist
+   * conversations across runs.
+   */
+  db?: PersistenceAdapter
+  /** Runtime environment. Defaults to `process.env`. */
+  env?: Record<string, string | undefined>
+  /**
+   * The providers this runtime registers, replacing the default set. Pass pi
+   * Provider objects — built-in factories (`anthropicProvider()` from
+   * `@earendil-works/pi-ai/providers/anthropic`), `createProvider(...)`
+   * customs, or a faux provider's `.provider` in tests. Omitted registers
+   * every pi built-in; an empty array registers none.
+   */
+  providers?: readonly Provider[]
 }
 
 /** A started Flue runtime. Stop it when the script is done. */
 export interface Flue {
-	/** Graceful shutdown: drain in-flight work, then disconnect persistence. */
-	stop(): Promise<void>;
-	[Symbol.asyncDispose](): Promise<void>;
+  /** Graceful shutdown: drain in-flight work, then disconnect persistence. */
+  stop(): Promise<void>
+  [Symbol.asyncDispose](): Promise<void>
 }
 
 /**
@@ -102,78 +103,81 @@ export interface Flue {
  * throws there rather than split the process's registries.
  */
 export async function start(options: StartOptions): Promise<Flue> {
-	if (getFlueRuntime() !== undefined) {
-		throw new Error(
-			'[flue] start() found an already-configured Flue runtime in this process. ' +
-				'Inside a Flue server, init()/dispatch() work directly — start() is only for ' +
-				'standalone scripts and tests, and one process holds one runtime.',
-		);
-	}
-	if (!Array.isArray(options?.agents) || options.agents.length === 0) {
-		throw new Error('[flue] start() requires at least one agent: start({ agents: [MyAgent] }).');
-	}
-	const registrations: FlueAgentRegistration[] = options.agents.map((record) =>
-		normalizeStartAgentEntry(record),
-	);
+  if (getFlueRuntime() !== undefined) {
+    throw new Error(
+      '[flue] start() found an already-configured Flue runtime in this process. ' +
+      'Inside a Flue server, init()/dispatch() work directly — start() is only for ' +
+      'standalone scripts and tests, and one process holds one runtime.',
+    )
+  }
+  if (!Array.isArray(options?.agents) || options.agents.length === 0) {
+    throw new Error('[flue] start() requires at least one agent: start({ agents: [MyAgent] }).')
+  }
+  const registrations: FlueAgentRegistration[] = options.agents.map(record =>
+    normalizeStartAgentEntry(record),
+  )
 
-	// Same default provider set a generated server entry registers. Custom
-	// providers registered with setProvider() before start() are preserved.
-	// Passing `providers` replaces the default set entirely — even an empty
-	// array skips registerDefaultProviders(), registering nothing.
-	if (options.providers === undefined) {
-		registerDefaultProviders();
-	} else {
-		for (const provider of options.providers) setProvider(provider);
-	}
+  // Same default provider set a generated server entry registers. Custom
+  // providers registered with setProvider() before start() are preserved.
+  // Passing `providers` replaces the default set entirely — even an empty
+  // array skips registerDefaultProviders(), registering nothing.
+  if (options.providers === undefined) {
+    registerDefaultProviders()
+  }
+  else {
+    for (const provider of options.providers) { setProvider(provider) }
+  }
 
-	const adapter = options.db ?? sqlite();
-	const stores = await connectPersistenceAdapter(
-		adapter,
-		options.db !== undefined ? 'start({ db })' : 'the default in-memory sqlite adapter',
-	);
-	let assembled: Awaited<ReturnType<typeof assembleNodeAgentRuntime>>;
-	try {
-		assembled = await assembleNodeAgentRuntime({
-			agents: registrations,
-			adapter,
-			stores,
-			...(options.env !== undefined ? { env: options.env } : {}),
-		});
-	} catch (error) {
-		try {
-			await adapter.close?.();
-		} catch {
-			// Best-effort: surface the assembly failure, not the close failure.
-		}
-		throw error;
-	}
+  const adapter = options.db ?? sqlite()
+  const stores = await connectPersistenceAdapter(
+    adapter,
+    options.db !== undefined ? 'start({ db })' : 'the default in-memory sqlite adapter',
+  )
+  let assembled: Awaited<ReturnType<typeof assembleNodeAgentRuntime>>
+  try {
+    assembled = await assembleNodeAgentRuntime({
+      agents: registrations,
+      adapter,
+      stores,
+      ...(options.env !== undefined ? { env: options.env } : {}),
+    })
+  }
+  catch (error) {
+    try {
+      await adapter.close?.()
+    }
+    catch {
+      // Best-effort: surface the assembly failure, not the close failure.
+    }
+    throw error
+  }
 
-	return {
-		stop: () => assembled.close(),
-		[Symbol.asyncDispose]: () => assembled.close(),
-	};
+  return {
+    stop: () => assembled.close(),
+    [Symbol.asyncDispose]: () => assembled.close(),
+  }
 }
 
 function normalizeStartAgentEntry(record: StartAgentEntry): FlueAgentRegistration {
-	if (typeof record === 'function') {
-		return { identity: requireIdentity(record, undefined), agent: record };
-	}
-	if (!record || typeof record !== 'object' || typeof record.agent !== 'function') {
-		throw new Error(
-			'[flue] start() agents entries must be agent functions or { agent, name? } records.',
-		);
-	}
-	return { identity: requireIdentity(record.agent, record.name), agent: record.agent };
+  if (typeof record === 'function') {
+    return { identity: requireIdentity(record, undefined), agent: record }
+  }
+  if (!record || typeof record !== 'object' || typeof record.agent !== 'function') {
+    throw new Error(
+      '[flue] start() agents entries must be agent functions or { agent, name? } records.',
+    )
+  }
+  return { identity: requireIdentity(record.agent, record.name), agent: record.agent }
 }
 
 function requireIdentity(agent: Agent, override: string | undefined): string {
-	const identity = override ?? resolveAgentIdentity(agent);
-	if (identity === undefined) {
-		throw new Error(
-			'[flue] start() could not resolve an identity for an agents entry: the function is ' +
-				'anonymous and carries no agentName static. Name the function, assign ' +
-				"`fn.agentName = '<identity>'`, or use the { agent, name } entry form.",
-		);
-	}
-	return identity;
+  const identity = override ?? resolveAgentIdentity(agent)
+  if (identity === undefined) {
+    throw new Error(
+      '[flue] start() could not resolve an identity for an agents entry: the function is ' +
+      'anonymous and carries no agentName static. Name the function, assign ' +
+      '`fn.agentName = \'<identity>\'`, or use the { agent, name } entry form.',
+    )
+  }
+  return identity
 }
