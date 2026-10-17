@@ -1,7 +1,7 @@
 {
   "name": "@amond-ai/agent-sdk",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "Apache-2.0",
   "homepage": "https://github.com/amond-ai/agent/tree/main/packages/agent-sdk#readme",
   "repository": {
