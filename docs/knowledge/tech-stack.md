@@ -8,7 +8,7 @@ choices were made. Update this file before a change that adds or replaces any of
 | Item | Choice | Notes |
 | --- | --- | --- |
 | Language | TypeScript 5.9 | `strict`, ES modules, `moduleResolution: bundler` |
-| Package manager | Bun 1.4.2 | Pinned in `.mise.toml` and `packageManager` |
+| Package manager | Bun 1.4.3 | Pinned in `.mise.toml` and `packageManager` |
 | Node | 24 (dev), `>=22` (published `engines`) | Pinned in `.mise.toml` |
 | Tool versions | mise | `mise install` resolves the same toolchain locally and in CI |
 

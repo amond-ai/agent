@@ -2,7 +2,7 @@
   "name": "agent",
   "type": "module",
   "private": true,
-  "packageManager": "bun@1.4.2",
+  "packageManager": "bun@1.4.3",
   "author": "Passion Factory Corp.",
   "license": "Apache-2.0",
   "repository": {
@@ -47,7 +47,7 @@
     "@amond-ai/harness-transport": "0.1.0",
     "@pleaseai/eslint-config": "^0.0.4",
     "@vitest/coverage-istanbul": "^4.1.10",
-    "bun-types": "^1.4.2",
+    "bun-types": "^1.4.3",
     "eslint": "^10.7.0",
     "tsdown": "^0.23.0",
     "typescript": "^5.9.3",

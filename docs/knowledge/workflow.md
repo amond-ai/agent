@@ -62,7 +62,7 @@ Every command runs from the repository root. Turborepo fans each `bun run` task 
 ### Setup
 
 ```bash
-mise install        # bun 1.4.2 and node 24, pinned in .mise.toml
+mise install        # bun 1.4.3 and node 24, pinned in .mise.toml
 bun install         # dependencies and husky git hooks
 gh extension install github/gh-stack   # `gh stack`, used by the stacked PR workflow
 ```
