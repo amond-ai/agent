@@ -1,0 +1,37 @@
+packages/agent/src/telemetry/projection.ts
+  s_4bb86ebd636f39::t_ec922f9cb5684e 84,86,96-97
+packages/agent-sdk/package.json
+  s_4bb86ebd636f39::t_ec922f9cb5684e 26
+packages/agent-react/package.json
+  s_4bb86ebd636f39::t_ec922f9cb5684e 26
+packages/agent/tsconfig.json
+  s_4bb86ebd636f39::t_ec922f9cb5684e 24-25
+packages/agent-vite/package.json
+  s_4bb86ebd636f39::t_ec922f9cb5684e 32
+packages/cli/tsconfig.json
+  s_4bb86ebd636f39::t_6f41c15f59f2c2 24-25
+packages/agent/src/provider-diagnostics.ts
+  s_4bb86ebd636f39::t_ec922f9cb5684e 82
+packages/agent/package.json
+  s_4bb86ebd636f39::t_ec922f9cb5684e 82
+packages/agent-vite/tsconfig.json
+  s_4bb86ebd636f39::t_6f41c15f59f2c2 24-25
+packages/cli/package.json
+  s_4bb86ebd636f39::t_ec922f9cb5684e 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "273749cd1f686623317fecff9af4db0bcede3e88",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
