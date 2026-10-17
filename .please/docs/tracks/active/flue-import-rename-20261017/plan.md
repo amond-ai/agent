@@ -150,9 +150,16 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 ## Progress
 
+- [x] (2026-10-17 16:13 KST) T001 Import the five packages with history and retire packages/amond
+  Evidence: `git log --oneline -- packages/agent | wc -l` → 492 (oldest 96e13f8 "refactor: rename @flue/sdk to @flue/runtime ... (#121)", tip 90e9586 v2.3.0); `diff -r packages/<dir> vendor/flue/packages/<name>` → empty for all five; commits agent 492, agent-vite 27, cli 364, agent-sdk 267, agent-react 55
+
 ## Decision Log
 
 - 2026-10-17: the spec's first draft named a Cloudflare integration suite that does not exist in
   2.3.0; the spec now drops scripts that point at missing files.
 
 ## Surprises & Discoveries
+- Observation: `git subtree add` keeps the split commits at root-level paths, so `git log -- packages/agent`
+  shows only the merge commit, not Flue's commits.
+  Evidence: after subtree add, `git log --oneline -- packages/agent | wc -l` → 1 for every package; after rewriting
+  each split history under its prefix (filter-branch) and merging, the counts are 492/27/364/267/55.
