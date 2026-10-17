@@ -1,0 +1,61 @@
+packages/agent/LICENSE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-201
+packages/agent/README.md
+  s_4bb86ebd636f39::t_59b0832380d75b 1,3-9,12,14-15,27-28,32,34-40,42,44-48,50,52-53
+packages/agent-react/LICENSE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-201
+packages/agent-sdk/package.json
+  s_4bb86ebd636f39::t_41b45e048d6cff 21
+packages/agent/package.json
+  s_4bb86ebd636f39::t_41b45e048d6cff 73
+packages/cli/NOTICE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-8
+packages/cli/README.md
+  s_4bb86ebd636f39::t_ffe25a58631634 1,3-4,6-7,10-26,28-29,31-32,34,36-37
+packages/cli/package.json
+  s_4bb86ebd636f39::t_41b45e048d6cff 16
+packages/agent-sdk/README.md
+  s_4bb86ebd636f39::t_aefc0b99f5fbdc 1,3-4,6-7,10-11,13,18-19,21,23-27,29-30,32,34-36,38,40,42-43
+  s_4bb86ebd636f39::t_7e11f9167c627f 15-17
+packages/agent-sdk/LICENSE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-201
+packages/agent-vite/README.md
+  s_4bb86ebd636f39::t_f7651edde16f81 42
+  s_4bb86ebd636f39::t_0b620740bde4a1 1-41,43-47
+packages/agent-react/NOTICE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-8
+packages/agent-react/package.json
+  s_4bb86ebd636f39::t_41b45e048d6cff 21
+packages/agent-vite/LICENSE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-201
+NOTICE
+  s_4bb86ebd636f39::t_5b89d4e5f6277a 5-8
+packages/agent-vite/package.json
+  s_4bb86ebd636f39::t_41b45e048d6cff 25
+packages/agent-react/README.md
+  s_4bb86ebd636f39::t_1fa61ce07f49f8 1,3-4,7,10,12,14-16,19,22,28,30,32,37-41,44-45,50,58-64,68-72,74-75,79-80,84-86,90-97
+packages/agent/NOTICE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-8
+packages/agent-vite/NOTICE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-8
+packages/cli/LICENSE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-201
+packages/agent-sdk/NOTICE
+  s_4bb86ebd636f39::t_41b45e048d6cff 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a46574084ad7ba24fc82dfbba31ef25320295597",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
