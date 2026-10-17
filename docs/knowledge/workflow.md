@@ -41,7 +41,7 @@ Executed when all tasks in a phase are complete:
 2. **Run Full Test Suite**: Execute all tests, debug failures (max 2 fix attempts)
 3. **Manual Verification Plan**: Generate step-by-step verification instructions for the user
 4. **User Confirmation**: Wait for explicit user approval before proceeding
-5. **Create Checkpoint**: Commit with message `chore(checkpoint): complete phase {name}`. If the stacked PR workflow is enabled (`workflow.stacked_pr.enabled=true` AND `workflow.stacked_pr.tool=gh-stack` in `.please/config.yml`), `/please:implement` additionally runs `gh stack submit --auto` at this step to refresh all PRs in the stack.
+5. **Create Checkpoint**: Commit with message `chore(checkpoint): complete phase {name}`. If the stacked PR workflow is enabled (`workflow.stacked_pr.enabled=true` AND `workflow.stacked_pr.tool=gh-stack` in `.please/config.yml`), `/please:implement` additionally runs `gh stack submit --auto` at this step to refresh all PRs in the stack. The PRs it creates are drafts, gh-stack's default. Draft-first is intentional: Gemini Code Assist skips drafts (`include_drafts: false` in `.gemini/config.yaml`), and AI review starts when a PR is marked ready with `/github:mark-pr-ready`.
 6. **Update Plan**: Mark phase as complete in `plan.md`
 
 ## Quality gates
@@ -64,6 +64,7 @@ Every command runs from the repository root. Turborepo fans each one out to the 
 ```bash
 mise install        # bun 1.4.2 and node 24, pinned in .mise.toml
 bun install         # dependencies and husky git hooks
+gh extension install github/gh-stack   # `gh stack`, used by the stacked PR workflow
 ```
 
 ### Daily development
