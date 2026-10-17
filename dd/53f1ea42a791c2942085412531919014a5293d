@@ -1,0 +1,33 @@
+packages/cli/package.json
+  s_4bb86ebd636f39::t_6b7aca8935f7b9 4
+packages/agent-sdk/package.json
+  s_4bb86ebd636f39::t_6b7aca8935f7b9 4
+packages/agent/package.json
+  s_4bb86ebd636f39::t_6b7aca8935f7b9 4
+packages/agent-react/package.json
+  s_4bb86ebd636f39::t_6b7aca8935f7b9 4
+packages/agent-vite/package.json
+  s_4bb86ebd636f39::t_6b7aca8935f7b9 4
+release-please-config.json
+  s_4bb86ebd636f39::t_6b7aca8935f7b9 3,24-48
+.release-please-manifest.json
+  s_4bb86ebd636f39::t_6b7aca8935f7b9 5-10
+bun.lock
+  s_4bb86ebd636f39::t_d1967de0033f63 21,44,64,78,103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd53f1ea42a791c2942085412531919014a5293d",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
