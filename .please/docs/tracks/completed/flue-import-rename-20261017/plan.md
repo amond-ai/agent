@@ -119,7 +119,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] T011 Update README, ARCHITECTURE and tech-stack for the imported packages (file: ARCHITECTURE.md)
   Validation: the three documents describe the five packages and their build path, and none describes `packages/amond` as present.
   Method: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md`
-- [ ] T012 Record the reformat and rename commits in .git-blame-ignore-revs (file: .git-blame-ignore-revs)
+- [x] T012 Record the reformat and rename commits in .git-blame-ignore-revs (file: .git-blame-ignore-revs)
   Validation: the file lists T004's reformat commit and Phase 2's squash commit as they are on `main`, and `git blame` with it attributes a reformatted line to an upstream commit.
   Method: `git blame --ignore-revs-file .git-blame-ignore-revs packages/agent/src/session.ts | head`
   STOP: Phase 1 or Phase 2 is not merged, so the SHAs are not final.
@@ -183,6 +183,8 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] (2026-10-17 20:46 KST) T011 Update README, ARCHITECTURE and tech-stack for the imported packages
   Evidence: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → no matches; `bunx eslint README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → exit 0; commit 129c7fb (cherry-picked from the worktree's 67f2326). The lead wrote the T010 and T011 entries from the executors' sink records, which the merge script could not apply.
 - [x] (2026-10-18 01:35 KST) Review-stage commits (SHA: `5b0b523`, `2012d1d`, `50f38ab`, `dd929ca`, `a933810`)
+- [x] (2026-10-18 03:52 KST) T012 Record the reformat and rename commits in .git-blame-ignore-revs
+  Evidence: #24 merged as `fc67cdd` (merge commit) and #25 squash-merged as `b6e4652`; the file lists `135eed5` (T004's reformat) and `b6e4652` (Phase 2's squash) with their full SHAs. `git blame --ignore-revs-file .git-blame-ignore-revs packages/agent/src/session.ts` attributes 5850 lines that `git blame` gives to `135eed5` back to upstream Flue commits (line 1 → `b5b5cf7`, Fred K. Schott); 245 lines the reformat or rename created have no earlier source and stay on the ignored commits.
 
 ## Decision Log
 
@@ -244,7 +246,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - Flue's runtime, Vite plugin, CLI, SDK and React packages imported under `packages/` with their history (PR #24, merged with a merge commit so `git log -- packages/<pkg>` shows Flue's commits).
 - The packages renamed to `@amond-ai/agent`, `@amond-ai/agent-vite`, `amond`, `@amond-ai/agent-sdk` and `@amond-ai/agent-react` (0.1.0), moved onto this repo's Bun, turbo, ESLint and release-please toolchain; the old `amond` CLI package retired (PR #25).
 - `amond docs`, `amond add` and `amond update` report that no content is bundled and make no network request; Flue's default registry removed; `amond init` scaffolds point at `amond docs read` and this repository; NOTICE files, rewritten package READMEs and updated root docs (PR #27).
-- T012 (`.git-blame-ignore-revs`) is still open: it needs #24 and #25's SHAs on `main`.
+- `.git-blame-ignore-revs` lists the reformat (`135eed5`) and the rename squash (`b6e4652`), so `git blame` traces imported lines to Flue's authors (T012).
 
 ### What Went Well
 - Rewriting each split history under its prefix before merging kept per-package `git log` usable (Surprises & Discoveries).

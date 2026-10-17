@@ -1,0 +1,7 @@
+# Commits that only reformat or rename, skipped by `git blame` so lines keep their real author.
+# GitHub reads this file automatically. Locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: reformat the imported flue packages with eslint (#24)
+135eed542ac4366e595f6a77e86dc70e2efd4ab4
+# feat: rename the imported Flue packages to amond (#25)
+b6e46524fa2e8882dc3554c15417a89daf6b04f3
