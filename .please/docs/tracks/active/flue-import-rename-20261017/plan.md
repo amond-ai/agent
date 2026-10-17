@@ -154,6 +154,10 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Evidence: `git log --oneline -- packages/agent | wc -l` → 492 (oldest 96e13f8 "refactor: rename @flue/sdk to @flue/runtime ... (#121)", tip 90e9586 v2.3.0); `diff -r packages/<dir> vendor/flue/packages/<name>` → empty for all five; commits agent 492, agent-vite 27, cli 364, agent-sdk 267, agent-react 55
 - [x] (2026-10-17 17:00 KST) T002 Build and test the packages with Bun workspaces
   Evidence: `bun install --frozen-lockfile && bun run build && CI=true bun run test` → install clean (854 installs, no changes); build exit 0 (10/10 tasks, CLI built with no blueprints/ and no tsx); test exit 0 (20/20 tasks; @flue/react 2 files / 27 tests passed; agent, vite, sdk, cli: no test files, exit 0 via --passWithNoTests)
+- [x] (2026-10-17 18:00 KST) T004 Lint the packages with the repository's ESLint config
+  Evidence: `bun run lint` → exit 0 (10/10 tasks); `git show --stat 135eed5` → 209 files changed, 41818 insertions(+), 41438 deletions(-), nothing but the five packages; `bun run build` → exit 0; `CI=true bun run test` → exit 0 (20/20 tasks, @flue/react 2 files / 27 tests passed)
+  Reformat commit: 135eed5 (config commit 8750eef). T012 lists 135eed5 in `.git-blame-ignore-revs`.
+  Switched off for the five packages in `eslint.config.ts` (reason beside each there): perfectionist/sort-imports (moves `import 'virtual:flue/providers'`); behaviour-changing autofixes unicorn/prefer-type-error, unicorn/prefer-number-properties, unicorn/prefer-string-starts-ends-with, unicorn/no-new-array, e18e/prefer-timer-args, antfu/top-level-function, perfectionist/sort-exports, import/first, regexp/use-ignore-case, regexp/prefer-w, regexp/prefer-d, regexp/optimal-quantifier-concatenation; unfixable layout style/max-statements-per-line, style/no-tabs, style/no-mixed-spaces-and-tabs, style/no-trailing-spaces, style/operator-linebreak; Flue-style rules no-console, ts/no-use-before-define, node/prefer-global/process, antfu/no-top-level-await, no-fallthrough, no-unmodified-loop-condition, no-new, prefer-const, ts/no-this-alias, unused-imports/no-unused-vars, e18e/prefer-url-canparse, ts/method-signature-style, jsdoc/check-param-names, regexp/no-super-linear-backtracking, regexp/no-unused-capturing-group.
 
 ## Decision Log
 
@@ -167,8 +171,14 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Rationale: the pre-commit hook lints staged files and T004 has not landed; both are behaviour-neutral.
   Date/Author: 2026-10-17 / implement-executor
 
+- Decision: switched off the autofixes that change behaviour (error class, re-export or import evaluation order, expressions, regexes), not only the ones that cannot be fixed.
+  Rationale: the reformat commit has to stay mechanical; the first autofix run moved `import 'virtual:flue/providers'`, turned 26 `Error` throws into `TypeError` and reordered re-exports.
+  Date/Author: 2026-10-17 / implement-executor
+
 ## Surprises & Discoveries
 - Observation: `git subtree add` keeps the split commits at root-level paths, so `git log -- packages/agent`
   shows only the merge commit, not Flue's commits.
   Evidence: after subtree add, `git log --oneline -- packages/agent | wc -l` → 1 for every package; after rewriting
   each split history under its prefix (filter-branch) and merging, the counts are 492/27/364/267/55.
+- Observation: the lint rules switched off in T004 flag code worth a look in a later track: seven `regexp/no-super-linear-backtracking` hits (skill-frontmatter.ts:29, cli blueprint-index.ts:52, docs-pages.ts:48 and :108), `ts/no-this-alias` in session.ts, and `no-unmodified-loop-condition` in agent-coordinator.ts. None looked like a defect, so none was changed.
+  Evidence: `bunx eslint` on the pre-autofix tree listed them with the rules on.
