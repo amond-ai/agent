@@ -71,7 +71,8 @@ Planned by [ADR-0003](../adr/0003-build-on-flue-with-ai-sdk-harness.md), not yet
 
 Flue builds with pnpm, Biome, and TypeScript 7. Imported packages move onto this repository's bun,
 ESLint, tsdown, Vitest, and TypeScript 5.9 toolchain before they pass `check` and `lint`. Upstream
-changes are ported by cherry-pick.
+changes are ported by hand, because after the renames an upstream commit no longer applies
+directly.
 
 ## Deployment targets
 

@@ -109,7 +109,8 @@ automatically in the husky hooks.
 - Code imported from Flue keeps its own tests. Port them to Vitest together with the code.
 - A behaviour-preserving refactor of imported code, such as the agent-loop seam, lands as its own
   commit, separate from behaviour changes.
-- A ported upstream fix is a cherry-pick that names the upstream commit.
+- A ported upstream fix is a manual port that names the upstream commit. After the renames an
+  upstream commit no longer applies directly.
 
 ## Commit guidelines
 

@@ -32,7 +32,7 @@ Read it before writing documentation, an ADR, or a new package API.
 2. **What ships is what the source says.** Renames happen in source, never as a publish-time
    rewrite, so stack traces, source, and packages agree.
 3. **Keep upstream reachable.** Imported Flue code keeps its history. Keep changes to it focused,
-   so an upstream fix can still be judged and cherry-picked.
+   so an upstream fix can still be judged and ported by hand.
 4. **The harness is the agent.** Agent turns run through the AI SDK harness inside a sandbox. Do
    not add a host-side model loop.
 5. **One sandbox object.** Flue's tools and the harness share the same sandbox session. Extend the

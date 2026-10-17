@@ -47,8 +47,8 @@ and the `amond` CLI.
 ## Key product decisions
 
 - **Flue's code, our packages.** Flue's runtime, Vite plugin, CLI, SDK, and React packages move
-  into `packages/` with their history, renamed in source. Upstream changes are ported by
-  cherry-pick, and `vendor/flue` is a read-only reference to `withastro/flue`.
+  into `packages/` with their history, renamed in source. Upstream changes are ported by hand,
+  and `vendor/flue` is a read-only reference to `withastro/flue`.
 - **One brand in the API.** The `flue` command becomes `amond`, `flue.config.ts` becomes
   `amond.config.ts`, `FLUE_*` becomes `AMOND_*`, `virtual:flue/*` becomes `virtual:amond/*`, and
   `Flue<Name>Agent` becomes `Amond<Name>Agent`. Flue's name appears only in attribution.
