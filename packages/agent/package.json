@@ -70,6 +70,7 @@
   "main": "./dist/index.mjs",
   "types": "./types/index.d.ts",
   "files": [
+    "NOTICE",
     "dist",
     "docs",
     "types"

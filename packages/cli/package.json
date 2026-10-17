@@ -13,6 +13,7 @@
     "amond": "bin/amond.mjs"
   },
   "files": [
+    "NOTICE",
     "bin/amond.mjs",
     "dist",
     "docs"

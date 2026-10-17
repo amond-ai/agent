@@ -1,0 +1,8 @@
+agent
+Copyright 2026 Passion Factory Corp.
+
+Licensed under the Apache License, Version 2.0. See LICENSE for the full text.
+
+This product includes software derived from Flue (https://github.com/withastro/flue),
+which is licensed under the Apache License, Version 2.0. The Flue repository's LICENSE file
+is the unfilled Apache template and names no copyright holder, so this notice reproduces none.
