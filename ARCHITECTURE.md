@@ -104,7 +104,8 @@ conversation persistence, and the tools an agent calls. Subpath exports select t
 (#16–#18). Other dependencies are Hono with `@hono/node-server` for HTTP, valibot for schemas, and
 `@modelcontextprotocol/client` for MCP tools.
 
-**Status**: the base of the product. The Pi loop is replaced behind the seam; the rest stays.
+**Status**: the base of the product. The Pi loop will be replaced behind the seam in #16–#18;
+the rest stays.
 
 ### `packages/agent-vite/` — `@amond-ai/agent-vite`
 
