@@ -34,7 +34,7 @@ The overview presents four core concepts.
 
 - **Agent** — the model, instructions, tools, and MCP servers. The set of things the agent can use.
 - **Environment** — an optional sandbox or computer where file access, skill loading, and command execution happen.
-- **Session** — "A durable instance of an agent that works on tasks and responds to input." A **durable instance** of an agent that performs tasks and responds to input.
+- **Session** — "A durable instance of an agent that works on tasks and responds to input."
 - **Events and items** — the inputs sent to the agent and the output produced during the session.
 
 The architecture page splits the same picture three ways, by who executes what.
@@ -175,6 +175,9 @@ async function listItems(client, sessionId) {
   })
 }
 ```
+
+This returns one page of up to 100 items. A longer session needs every page before it counts as the
+saved work.
 
 ### 5. Clean up
 

@@ -429,7 +429,9 @@ constraints on the current design.
 
 1. **External validation that file-based agent definition is a first-class path for Anthropic itself.**
    `ant apply coding-assistant.md` applies frontmatter (`name`/`model`/`tools`) plus a body (the system
-   prompt) — exactly the shape ADR-0001 chose — while the environment is split out into
+   prompt) — close to the shape ADR-0001 chose, which differs in one place: ADR-0001 keeps the
+   instructions in a plain `instructions.md` with no frontmatter and puts the model and harness in
+   `agent.ts`. The environment is split out into
    `environment.yaml`. In other words, **"what it does" (markdown) and "where it runs" (YAML) live in
    separate files**, which is a precedent for not mixing instructions with runtime/sandbox config in a
    single file in our layout either.

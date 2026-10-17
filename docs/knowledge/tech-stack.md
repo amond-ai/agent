@@ -40,7 +40,8 @@ choices were made. Update this file before a change that adds or replaces any of
 
 ## Libraries
 
-Current dependencies of the packages in `packages/`:
+Current dependencies of the packages in `packages/`, and entries in the root `catalog` that no
+package uses yet:
 
 | Library | Purpose | Used by |
 | --- | --- | --- |
@@ -111,7 +112,7 @@ Packages imported from Flue in [#20](https://github.com/amond-ai/agent/issues/20
 | --- | --- |
 | CI | GitHub Actions `ci.yml`: lint, build, type check, test. Actions are SHA-pinned |
 | Workflow security | `zizmor.yml` |
-| Dependency updates | Dependabot for GitHub Actions only. npm `catalog` versions are bumped by hand in `package.json`, because Dependabot cannot read `bun.lock` v2 |
+| Dependency updates | Dependabot for GitHub Actions only. npm `catalog` versions are bumped by hand in `package.json`. `.github/dependabot.yml` records why |
 | Versioning | release-please with the `node-workspace` plugin, driven by Conventional Commits |
 | Publishing | npm trusted publishing with provenance |
 | Local worktrees | `orca.yaml` and `.worktreeinclude` |

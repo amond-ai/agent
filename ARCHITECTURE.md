@@ -52,8 +52,9 @@ session ──► agent-loop seam (#16) ──► HarnessV1 turn (#17)
                             one sandbox shared by Flue's tools and the harness
 ```
 
-The packages that predate ADR-0003 retire in #18. Read them to understand the current code, not
-as the place for new features.
+Four of the packages that predate ADR-0003 retire in #18: `amond`, `agent-core`, `agent-durable`,
+and `agent-durable-cloudflare`. The two harness adapters are reassessed once the agent-loop seam
+exists. Read all six to understand the current code, not as the place for new features.
 
 ## Entry points
 
@@ -199,7 +200,8 @@ workspace, and `agent-core` never depends on the CLI or on an adapter.
 placeholder, because a shaped fake would let a build look deployable, or a test pass, while
 proving nothing.
 
-**The loader never evaluates user code.** `loadAgentTree` stats paths and reads Markdown. It never
+**The loader never evaluates user code.** `loadAgentTree` stats paths, reads Markdown, and reads the
+source text of each entry module to check for a default export. It never
 imports a tool, schedule, channel, or `agent.ts`, so a build does not need the user's environment
 to report a misplaced file.
 

@@ -57,7 +57,7 @@ Before marking any task complete:
 
 ## Development commands
 
-Every command runs from the repository root. Turborepo fans each one out to the packages.
+Every command runs from the repository root. Turborepo fans each `bun run` task out to the packages.
 
 ### Setup
 
