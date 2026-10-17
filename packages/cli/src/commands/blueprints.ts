@@ -13,6 +13,7 @@ import { BLUEPRINTS, KIND_ROOTS } from '../generated/blueprints.ts'
  */
 
 const hasBlueprints = BLUEPRINTS.length > 0 || KIND_ROOTS.length > 0
+const NO_BLUEPRINTS_MESSAGE = 'No blueprints are bundled with this version of amond.'
 
 export function registerBlueprintCommands(cli: CAC): void {
   const add = cli
@@ -20,7 +21,7 @@ export function registerBlueprintCommands(cli: CAC): void {
       'add [kind] [name|url]',
       hasBlueprints
         ? 'Fetch a blueprint implementation guide (no args: list blueprints)'
-        : 'No blueprints are bundled with this version of amond',
+        : NO_BLUEPRINTS_MESSAGE,
     )
     .usage('add [<kind> <name|url>] [options]')
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
@@ -39,7 +40,7 @@ export function registerBlueprintCommands(cli: CAC): void {
       'update <kind> <name|url>',
       hasBlueprints
         ? 'Fetch an updated blueprint implementation guide'
-        : 'No blueprints are bundled with this version of amond',
+        : NO_BLUEPRINTS_MESSAGE,
     )
     .usage('update <kind> <name|url> [options]')
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
@@ -120,17 +121,14 @@ async function blueprintAction(
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
-const NO_BLUEPRINTS_MESSAGE = 'No blueprints are bundled with this version of amond.'
-
-// The registry base comes only from AMOND_REGISTRY_URL (internal-only, used
-// for local development against a locally served registry); there is no
-// default registry.
-
 // Bound on one registry fetch — a blackholed connection must fail with a
 // diagnosis, not hold the command until the OS gives up on the socket.
 // AMOND_REGISTRY_TIMEOUT_MS is an internal-only override used by tests.
 const REGISTRY_FETCH_TIMEOUT_MS = 30_000
 
+// The registry base comes only from AMOND_REGISTRY_URL (internal-only, used
+// for local development against a locally served registry); there is no
+// default registry.
 function registryUrlFor(slug: string): string {
   const registry = process.env.AMOND_REGISTRY_URL
   if (!registry) {

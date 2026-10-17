@@ -39,8 +39,9 @@ describe('amond init', () => {
     expect(files.length).toBeGreaterThan(0)
     expect(fs.existsSync(path.join(dir, 'amond.config.ts'))).toBe(true)
     for (const file of files) {
-      expect(fs.readFileSync(file, 'utf8'), path.relative(dir, file)).not.toMatch(/flue/i)
-      expect(path.relative(dir, file)).not.toMatch(/flue/i)
+      const rel = path.relative(dir, file)
+      expect(fs.readFileSync(file, 'utf8'), rel).not.toMatch(/flue/i)
+      expect(rel).not.toMatch(/flue/i)
     }
     const pkg = fs.readFileSync(path.join(dir, 'package.json'), 'utf8')
     expect(pkg).toContain('@amond-ai/agent')

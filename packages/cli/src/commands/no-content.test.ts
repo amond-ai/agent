@@ -5,14 +5,15 @@ import { describe, expect, it } from 'vitest'
 const BIN = fileURLToPath(new URL('../../bin/amond.mjs', import.meta.url))
 const UNREACHABLE_REGISTRY = 'http://127.0.0.1:9'
 
+// Drop any inherited override so the "no registry override" case really has none.
+const { AMOND_REGISTRY_URL: _inherited, ...baseEnv } = process.env
+
 function runAmond(args: string[], env: Record<string, string> = {}) {
-  const started = Date.now()
-  const result = spawnSync(process.execPath, [BIN, ...args], {
+  return spawnSync(process.execPath, [BIN, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, AMOND_REGISTRY_TIMEOUT_MS: '30000', ...env },
+    env: { ...baseEnv, ...env },
     timeout: 20_000,
   })
-  return { ...result, elapsedMs: Date.now() - started }
 }
 
 describe('commands that need bundled content', () => {
