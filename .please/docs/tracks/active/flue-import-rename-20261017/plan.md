@@ -86,7 +86,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] T002 Build and test the packages with Bun workspaces (depends on T001, file: packages/cli/package.json)
   Validation: `bun install --frozen-lockfile`, `bun run build` and `bun run test` pass at the root with pnpm, Biome and Prettier files gone. The CLI builds with no `blueprints/` directory and no `tsx`. The two React tests run in the root test command.
   Method: `bun install --frozen-lockfile && bun run build && bun run test`
-- [ ] T003 Type-check the packages under the repository's TypeScript (depends on T002, file: packages/agent/tsconfig.json)
+- [x] T003 Type-check the packages under the repository's TypeScript (depends on T002, file: packages/agent/tsconfig.json)
   Validation: `bun run check` passes at the root, with only tsconfig and type-level edits, each listed in the commit body.
   Method: `bun run check`
 - [x] T004 Lint the packages with the repository's ESLint config (depends on T002, file: eslint.config.ts)
