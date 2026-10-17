@@ -4,7 +4,7 @@
  * For every agent of a scanned module (each exported capitalized function),
  * appends a call to `__amondBindAgentModule(agentFn, { identity })` — the
  * identity-binding contract defined by `@amond-ai/agent` (see
- * packages/runtime/src/runtime/registration.ts). The binding runs at
+ * packages/agent/src/runtime/registration.ts). The binding runs at
  * module-evaluation time, so `app.ts` can call `createAgentRouter(agent)`
  * during its own evaluation, before the generated bootstrap registers the
  * scanned set — and the identity rides as a build-time string literal, so

@@ -231,7 +231,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - Observation: After `bun run build`, `bun run lint` fails on the gitignored generated `packages/cli/src/generated/blueprints.ts` (7 style errors: member-delimiter, semi).
   Evidence: `bun run lint` → @flue/cli:lint 7 errors; with `src/generated` moved away → 10/10 tasks pass. Not caused by T003; needs an ESLint ignore for generated files (T004 follow-up).
 
-- Decision: corrected T005's Validation and Review Focus to the config behaviour Flue has: no config file is optional, so a stray `flue.config.ts` is ignored, and only a missing explicit config file errors (naming `amond.config.ts`).
+- Decision: corrected T005's Validation and Review Focus to the config behaviour Flue has: a config file is optional, so a stray `flue.config.ts` is ignored, and only a missing explicit config file errors (naming `amond.config.ts`).
   Rationale: the plan's original clause assumed an error that would be a behaviour change, which the spec's Constraints rule out.
   Date/Author: 2026-10-17 / lead
 - Decision: T004 ran before T003.
