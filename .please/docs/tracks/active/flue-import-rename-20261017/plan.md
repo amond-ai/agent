@@ -83,7 +83,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Validation: `git log -- packages/agent` lists Flue commits, and each subtree merge message names `deee93b`. Each imported tree matches `vendor/flue/packages/<name>`. `packages/amond` and its release-please and manifest entries are gone.
   Method: `git log --oneline -- packages/agent | head`; `diff -r` against `vendor/flue/packages/<name>`
   STOP: a package's split tree differs from `vendor/flue/packages/<name>`.
-- [ ] T002 Build and test the packages with Bun workspaces (depends on T001, file: packages/cli/package.json)
+- [x] T002 Build and test the packages with Bun workspaces (depends on T001, file: packages/cli/package.json)
   Validation: `bun install --frozen-lockfile`, `bun run build` and `bun run test` pass at the root with pnpm, Biome and Prettier files gone. The CLI builds with no `blueprints/` directory and no `tsx`. The two React tests run in the root test command.
   Method: `bun install --frozen-lockfile && bun run build && bun run test`
 - [ ] T003 Type-check the packages under the repository's TypeScript (depends on T002, file: packages/agent/tsconfig.json)
