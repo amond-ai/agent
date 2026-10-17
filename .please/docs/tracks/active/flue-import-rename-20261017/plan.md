@@ -152,11 +152,20 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 - [x] (2026-10-17 16:13 KST) T001 Import the five packages with history and retire packages/amond
   Evidence: `git log --oneline -- packages/agent | wc -l` → 492 (oldest 96e13f8 "refactor: rename @flue/sdk to @flue/runtime ... (#121)", tip 90e9586 v2.3.0); `diff -r packages/<dir> vendor/flue/packages/<name>` → empty for all five; commits agent 492, agent-vite 27, cli 364, agent-sdk 267, agent-react 55
+- [x] (2026-10-17 17:00 KST) T002 Build and test the packages with Bun workspaces
+  Evidence: `bun install --frozen-lockfile && bun run build && CI=true bun run test` → install clean (854 installs, no changes); build exit 0 (10/10 tasks, CLI built with no blueprints/ and no tsx); test exit 0 (20/20 tasks; @flue/react 2 files / 27 tests passed; agent, vite, sdk, cli: no test files, exit 0 via --passWithNoTests)
 
 ## Decision Log
 
 - 2026-10-17: the spec's first draft named a Cloudflare integration suite that does not exist in
   2.3.0; the spec now drops scripts that point at missing files.
+
+- Decision: pinned `react` to 19.2.8 in packages/agent-react (Flue declares ^19.1.1).
+  Rationale: bun resolved ^19.1.1 to 19.3.1 while react-dom is pinned to 19.2.8, so both React tests failed with "Incompatible React versions"; Flue's pnpm lock had both at 19.2.8.
+  Date/Author: 2026-10-17 / implement-executor
+- Decision: packages/cli/scripts/generate-blueprint-index.ts got two lint-driven edits (block body on the ENOENT `if`, `import process from 'node:process'`).
+  Rationale: the pre-commit hook lints staged files and T004 has not landed; both are behaviour-neutral.
+  Date/Author: 2026-10-17 / implement-executor
 
 ## Surprises & Discoveries
 - Observation: `git subtree add` keeps the split commits at root-level paths, so `git log -- packages/agent`
