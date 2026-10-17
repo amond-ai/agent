@@ -28,7 +28,9 @@ Read it before writing documentation, an ADR, or a new package API.
 
 1. **One brand in the public surface.** Users install, import, configure, and run amond names
    only: `@amond-ai/*`, the `amond` command, `amond.config.ts`, `AMOND_*`, `virtual:amond/*`, and
-   `Amond<Name>Agent`. Flue's name appears only in `NOTICE` and in each imported package's README.
+   `Amond<Name>Agent`. In code and published packages, Flue's name appears only in `NOTICE` and in
+   each imported package's README. Repository docs that explain the upstream relationship, such as
+   the README and the ADRs, name Flue as needed.
 2. **What ships is what the source says.** Renames happen in source, never as a publish-time
    rewrite, so stack traces, source, and packages agree.
 3. **Keep upstream reachable.** Imported Flue code keeps its history. Keep changes to it focused,
@@ -48,11 +50,13 @@ Read it before writing documentation, an ADR, or a new package API.
   `eslint.rules.ts` so package configs cannot drift apart.
 - A comment explains *why*, including measured runtime quirks (see `vitest.shared.ts`). It does not
   restate the code.
-- Every package publishes from `dist/` with a `NOTICE` file and the Apache-2.0 license.
+- Every publishable package publishes from `dist/` with a `NOTICE` file and the Apache-2.0 license.
 
 ## Developer experience
 
-- `amond dev` runs agents locally on Node, the development target.
+- `amond dev` runs agents locally on Node, the development target. It is not implemented yet: the
+  current `amond dev` exits with "not implemented", and the working command arrives with Flue's CLI
+  in #20.
 - Error messages name the file, option, or environment variable at fault, using its amond name.
 - Documentation and examples are our own. Flue's docs use Flue's names and do not apply as written.
 

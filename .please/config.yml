@@ -48,7 +48,7 @@ review:
   greptile:
     enabled: true # tracking marker; review runs the greptile CLI via review-greptile-reviewer
 
-# GitHub App review bots installed on this repository (ADR-0023)
+# GitHub App review bots installed on this repository
 pr_review_bots:
   codex: {trigger: auto}
   gemini: {trigger: auto, max-reviews-per-pr: 3}

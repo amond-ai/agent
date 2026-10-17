@@ -36,7 +36,7 @@ and the `amond` CLI.
 
 | Feature | Source | Status |
 | --- | --- | --- |
-| Agent modules (`'use agent'`), routing, durable submissions, persistence | Flue runtime, shipped as `@amond-ai/agent` | Planned: import and rename ([#20](https://github.com/amond-ai/agent/issues/20)) |
+| Agent modules (`'use agent'`), routing, durable submissions, Durable Object SQLite persistence | Flue runtime, shipped as `@amond-ai/agent` | Planned: import and rename ([#20](https://github.com/amond-ai/agent/issues/20)) |
 | Vite build to Cloudflare Durable Objects | Flue Vite plugin, shipped as `@amond-ai/agent-vite` | Planned: import and rename (#20) |
 | `amond` CLI and `amond.config.ts` | Flue CLI, shipped as `amond` | Planned: import and rename (#20) |
 | One sandbox for Flue's tools and the harness, plus a Cloudflare provider | Flue `Sandbox` extending `Experimental_SandboxSession` | Planned ([#15](https://github.com/amond-ai/agent/issues/15)) |

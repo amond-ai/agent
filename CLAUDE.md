@@ -17,8 +17,6 @@ For full file listing with workspace artifacts, use `Skill("please:project-knowl
 - `product-guidelines.md` — Prose style, ADR format, API design principles
 - `tech-stack.md` — Technology choices with rationale
 - `workflow.md` — Task lifecycle, testing policy, quality gates, dev commands
-- `ubiquitous-language.md` — Domain terms glossary (DDD Ubiquitous Language)
-- `gotchas.md` — Known project pitfalls and workarounds
 
 ### Decision Records
 - `docs/adr/` — Architecture Decision Records (ADR)

@@ -28,7 +28,7 @@ Track tasks follow a strict lifecycle within `/please:implement`:
 5. **Refactor (Optional)**:
    - Improve clarity, remove duplication, enhance performance
    - Rerun tests to ensure they still pass
-6. **Verify Coverage**: Run coverage reports. Target: >80% for new code
+6. **Verify Coverage**: Run coverage reports once coverage is wired (see `tech-stack.md`). Target: >80% for new code
 7. **Document Deviations**: If implementation differs from tech stack, update `tech-stack.md` first
 8. **Commit**: Stage and commit with conventional commit message
 9. **Update Progress**: Mark the task as completed in `## Progress` with a timestamp
@@ -49,7 +49,7 @@ Executed when all tasks in a phase are complete:
 Before marking any task complete:
 
 - [ ] All tests pass
-- [ ] Code coverage meets requirements (>80%)
+- [ ] Code coverage meets the >80% target for new code (see Guiding principles)
 - [ ] Code follows project style guidelines
 - [ ] No linting or static analysis errors
 - [ ] No security vulnerabilities introduced
@@ -81,9 +81,11 @@ A package's `exports` point at `dist/`, so a package has to be built before anyt
 
 ```bash
 CI=true bun run test           # vitest under bun; builds each package first
-CI=true bun run test:coverage  # istanbul coverage, lcov output per package
 bunx turbo run test --filter=@amond-ai/agent-durable  # one package
 ```
+
+The root `test:coverage` script has no package scripts to run yet. Coverage is not wired; see
+`tech-stack.md`.
 
 ### Before committing
 
@@ -133,7 +135,7 @@ A task is complete when:
 
 1. All code implemented to specification
 2. Unit tests written and passing
-3. Code coverage meets project requirements
+3. Code coverage meets the >80% target for new code
 4. Code passes all configured checks
 5. Progress updated in `plan.md`
 6. Changes committed with proper message

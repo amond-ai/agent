@@ -26,7 +26,7 @@ choices were made. Update this file before a change that adds or replaces any of
 | Bundler | tsdown 0.23 | `tsdown src/index.ts --dts` emits `dist/index.mjs` and `dist/index.d.mts` |
 | Type check | `tsc --noEmit` | Composite project config in the root `tsconfig.json` |
 | Tests | Vitest 4.1 | Run under Bun (`bun --bun vitest run`) |
-| Coverage | `@vitest/coverage-istanbul` | Istanbul, not V8, because Bun's JavaScriptCore emits no V8 profile. `lcovonly` with repo-root-relative paths for Sonar |
+| Coverage | `@vitest/coverage-istanbul` (not wired yet) | Configured in `vitest.shared.ts`: Istanbul, not V8, because Bun's JavaScriptCore emits no V8 profile, and `lcovonly` with repo-root-relative paths for Sonar. The package is only in the root `catalog`, and no package defines `test:coverage` yet |
 | Shared test config | `vitest.shared.ts` | `sharedCoverage`, and `sharedInlineDeps` (`zod`) for a Bun namespace re-export quirk |
 
 ## Code quality
@@ -111,7 +111,7 @@ Packages imported from Flue in [#20](https://github.com/amond-ai/agent/issues/20
 | --- | --- |
 | CI | GitHub Actions `ci.yml`: lint, build, type check, test. Actions are SHA-pinned |
 | Workflow security | `zizmor.yml` |
-| Dependency updates | Dependabot |
+| Dependency updates | Dependabot for GitHub Actions only. npm `catalog` versions are bumped by hand in `package.json`, because Dependabot cannot read `bun.lock` v2 |
 | Versioning | release-please with the `node-workspace` plugin, driven by Conventional Commits |
 | Publishing | npm trusted publishing with provenance |
 | Local worktrees | `orca.yaml` and `.worktreeinclude` |

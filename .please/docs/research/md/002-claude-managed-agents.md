@@ -238,11 +238,12 @@ server-side."*
 
 - Event type strings follow a `{domain}.{action}` convention. The exceptions are the stream-only delta
   preview events `event_start` and `event_delta`.
-- **Outbound (what you send)**: `user.*` events start and steer the session. `system.message` appends
+- **Outbound (what you send)**: `user.*` events, such as `user.message` and `user.interrupt`, start
+  and steer the session. `system.message` appends
   system-level context that applies to the accompanying turn and all subsequent turns.
 - **Inbound (what you receive)**: session events, span events, and agent events. Concrete types
   confirmed in the body text: `agent.message`, `agent.tool_use`, `agent.tool_result` (which carries an
-  `is_error` field), `session.status_idle`, `session.error`, and `user.interrupt`.
+  `is_error` field), `session.status_idle`, and `session.error`.
 - Every persisted event carries a `processed_at` timestamp. On events you send, `processed_at` is null
   while the event is still queued behind earlier events. The exceptions are `user.define_outcome`,
   `user.custom_tool_result`, and `user.tool_result`, which are processed on receipt and echoed back
@@ -423,7 +424,8 @@ navigation.
 ## 7. Implications for `amond-ai/agent`
 
 From the perspective of ADR-0001 (filesystem-first agent definition) and ADR-0002 (durable execution
-contract).
+contract). ADR-0003 has since superseded both, so read these points as inputs to that decision, not as
+constraints on the current design.
 
 1. **External validation that file-based agent definition is a first-class path for Anthropic itself.**
    `ant apply coding-assistant.md` applies frontmatter (`name`/`model`/`tools`) plus a body (the system

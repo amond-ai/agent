@@ -331,7 +331,7 @@ The statement that a self_hosted environment does not confer ZDR eligibility is 
 
 ## Implications for amond-ai/agent
 
-We have already settled ADR-0001 (filesystem-first agent definition) and ADR-0002 (durable execution contract). Against that backdrop, here is what this documentation offers.
+This section was written against ADR-0001 (filesystem-first agent definition) and ADR-0002 (durable execution contract). ADR-0003 has since superseded both, so read the points below as inputs to that decision, not as constraints on the current design.
 
 **1. Separating "agent configuration" from "session" maps precisely onto our loader structure.**
 OpenAI separates the saved agent (reusable settings) from the session (conversation + work). Our `agent/` directory tree corresponds to the saved agent; durable turn state corresponds to the session. The override rule in particular — "supplied arrays **replace** the entire field rather than merging" — is a semantic we need to settle in advance for mixing typed settings in `agent.ts` with runtime overrides. Merge semantics get especially ambiguous in a structure where a file *is* the registration, as with `tools/*.ts`, so making "replace" the default is easier to explain.
