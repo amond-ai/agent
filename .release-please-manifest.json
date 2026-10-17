@@ -1,5 +1,4 @@
 {
-  "packages/amond": "0.1.0",
   "packages/core": "0.1.0",
   "packages/durable": "0.1.0",
   "packages/durable-cloudflare": "0.1.0",

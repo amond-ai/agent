@@ -1,0 +1,41 @@
+{
+  "name": "@flue/sdk",
+  "type": "module",
+  "version": "2.3.0",
+  "license": "Apache-2.0",
+  "homepage": "https://flueframework.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/withastro/flue",
+    "directory": "packages/sdk"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "bun --bun vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@durable-streams/client": "^0.2.6"
+  },
+  "devDependencies": {
+    "@flue/runtime": "workspace:*",
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
