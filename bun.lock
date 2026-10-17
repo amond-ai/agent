@@ -18,7 +18,7 @@
     },
     "packages/agent": {
       "name": "@amond-ai/agent",
-      "version": "2.3.0",
+      "version": "0.1.0",
       "dependencies": {
         "@earendil-works/pi-agent-core": "^1.1.0",
         "@earendil-works/pi-ai": "^1.1.0",
@@ -41,7 +41,7 @@
     },
     "packages/agent-react": {
       "name": "@amond-ai/agent-react",
-      "version": "2.3.0",
+      "version": "0.1.0",
       "devDependencies": {
         "@amond-ai/agent-sdk": "workspace:*",
         "@testing-library/react": "^16.3.0",
@@ -61,7 +61,7 @@
     },
     "packages/agent-sdk": {
       "name": "@amond-ai/agent-sdk",
-      "version": "2.3.0",
+      "version": "0.1.0",
       "dependencies": {
         "@durable-streams/client": "^0.2.6",
       },
@@ -75,7 +75,7 @@
     },
     "packages/agent-vite": {
       "name": "@amond-ai/agent-vite",
-      "version": "2.3.0",
+      "version": "0.1.0",
       "dependencies": {
         "@amond-ai/agent": "workspace:*",
         "@hono/node-server": "^2.0.3",
@@ -100,7 +100,7 @@
     },
     "packages/cli": {
       "name": "amond",
-      "version": "2.3.0",
+      "version": "0.1.0",
       "bin": {
         "amond": "bin/amond.mjs",
       },
