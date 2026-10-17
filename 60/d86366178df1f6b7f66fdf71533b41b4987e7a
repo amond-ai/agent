@@ -1,0 +1,19 @@
+eslint.config.ts
+  s_4bb86ebd636f39::t_2cee58602595d5 11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60d86366178df1f6b7f66fdf71533b41b4987e7a",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "unknown"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
