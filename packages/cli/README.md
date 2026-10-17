@@ -1,7 +1,7 @@
 # amond
 
-The command-line interface for amond agent projects: scaffold a project, run an agent locally,
-fetch implementation guides, and read the bundled docs.
+The command-line interface for amond agent projects: scaffold a project and run an agent locally.
+Blueprint and documentation commands exist but are not usable yet. See [Commands](#commands).
 
 ```sh
 npm install --save-dev amond
@@ -19,13 +19,16 @@ npm install --save-dev amond
 | `amond docs read <page>`             | Print one documentation page.                               |
 | `amond docs search <query>`          | Search the documentation.                                   |
 
+`amond docs`, `amond add`, and `amond update` currently exit with an error. This version bundles
+no documentation and no blueprints. A later release adds that content.
+
 ```sh
 amond init ./my-agent-app
 amond run src/agents/hello.ts -m "Hi there"
 amond run src/agents/hello.ts -m "And then?" --id support-4821
 ```
 
-`amond run` accepts `--name`, `--id`, `--uid`, `--new`, `--json`, and `--env`.
+`amond run` accepts `--name`, `--id`, `--uid`, `--new`, `--data`, `--json`, and `--env`.
 Run `amond --help` for the full list.
 
 Dev servers and production builds belong to Vite. Use `vite dev` and `vite build` with the
