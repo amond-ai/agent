@@ -53,6 +53,12 @@ async function blueprintAction(
   rejectDoubleDashArgs(options, command)
   const print = booleanOption(options, 'print')
 
+  // Checked before kind resolution and any fetch, so an empty index never
+  // reaches the registry.
+  if (BLUEPRINTS.length === 0 && KIND_ROOTS.length === 0) {
+    throw new Error(NO_BLUEPRINTS_MESSAGE)
+  }
+
   if (command === 'add' && kind === undefined) {
     printListing(process.stderr)
     return
@@ -100,9 +106,11 @@ async function blueprintAction(
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
-// Default blueprint registry base. AMOND_REGISTRY_URL is an internal-only
-// override used for local development against a locally served registry.
-const DEFAULT_REGISTRY_URL = 'https://flueframework.com/cli/blueprints'
+const NO_BLUEPRINTS_MESSAGE = 'No blueprints are bundled with this version of amond.'
+
+// The registry base comes only from AMOND_REGISTRY_URL (internal-only, used
+// for local development against a locally served registry); there is no
+// default registry.
 
 // Bound on one registry fetch — a blackholed connection must fail with a
 // diagnosis, not hold the command until the OS gives up on the socket.
@@ -110,7 +118,11 @@ const DEFAULT_REGISTRY_URL = 'https://flueframework.com/cli/blueprints'
 const REGISTRY_FETCH_TIMEOUT_MS = 30_000
 
 function registryUrlFor(slug: string): string {
-  const base = (process.env.AMOND_REGISTRY_URL ?? DEFAULT_REGISTRY_URL).replace(/\/+$/, '')
+  const registry = process.env.AMOND_REGISTRY_URL
+  if (!registry) {
+    throw new Error('No blueprint registry is configured. Set AMOND_REGISTRY_URL.')
+  }
+  const base = registry.replace(/\/+$/, '')
   return `${base}/${slug}.md`
 }
 
