@@ -80,67 +80,47 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 ### Phase 1: Import with history onto the toolchain
 
 - [ ] T001 Import the five packages with history and retire packages/amond (file: packages/agent/package.json)
-  Validation: `git log -- packages/agent` lists Flue commits, and each subtree merge message names
-  `deee93b`. Each imported tree matches `vendor/flue/packages/<name>`. `packages/amond` and its
-  release-please and manifest entries are gone.
+  Validation: `git log -- packages/agent` lists Flue commits, and each subtree merge message names `deee93b`. Each imported tree matches `vendor/flue/packages/<name>`. `packages/amond` and its release-please and manifest entries are gone.
   Method: `git log --oneline -- packages/agent | head`; `diff -r` against `vendor/flue/packages/<name>`
   STOP: a package's split tree differs from `vendor/flue/packages/<name>`.
 - [ ] T002 Build and test the packages with Bun workspaces (depends on T001, file: packages/cli/package.json)
-  Validation: `bun install --frozen-lockfile`, `bun run build` and `bun run test` pass at the root
-  with pnpm, Biome and Prettier files gone. The CLI builds with no `blueprints/` directory and no
-  `tsx`. The two React tests run in the root test command.
+  Validation: `bun install --frozen-lockfile`, `bun run build` and `bun run test` pass at the root with pnpm, Biome and Prettier files gone. The CLI builds with no `blueprints/` directory and no `tsx`. The two React tests run in the root test command.
   Method: `bun install --frozen-lockfile && bun run build && bun run test`
 - [ ] T003 Type-check the packages under the repository's TypeScript (depends on T002, file: packages/agent/tsconfig.json)
-  Validation: `bun run check` passes at the root, with only tsconfig and type-level edits, each
-  listed in the commit body.
+  Validation: `bun run check` passes at the root, with only tsconfig and type-level edits, each listed in the commit body.
   Method: `bun run check`
 - [ ] T004 Lint the packages with the repository's ESLint config (depends on T002, file: eslint.config.ts)
-  Validation: `bun run lint` passes. The autofix is one commit containing nothing else. Each rule
-  switched off for the imported packages carries its reason in `eslint.config.ts`.
+  Validation: `bun run lint` passes. The autofix is one commit containing nothing else. Each rule switched off for the imported packages carries its reason in `eslint.config.ts`.
   Method: `bun run lint`; `git show --stat` on the reformat commit
 
 ### Phase 2: Rename to amond
 
 - [ ] T005 Rename the packages and every brand surface in source (depends on T003, T004, file: packages/agent-vite/src/amond-plugin.ts)
-  Validation: names, bin and directories match the spec's table, and `amond --help` lists `init`,
-  `run`, `docs`, `add` and `update`. The SC-2 search returns only attribution lines and
-  `flueframework.com` links (Phase 3's). A project with only `flue.config.ts` gets an error naming
-  `amond.config.ts`. Build, check, lint and test pass.
+  Validation: names, bin and directories match the spec's table, and `amond --help` lists `init`, `run`, `docs`, `add` and `update`. The SC-2 search returns only attribution lines and `flueframework.com` links (Phase 3's). A project with only `flue.config.ts` gets an error naming `amond.config.ts`. Build, check, lint and test pass.
   Method: `grep -rniE "@flue/|\bflue\b|FLUE_" packages/` plus the root commands
 - [ ] T006 Prove the Worker build on a minimal 'use agent' fixture (depends on T005, file: packages/agent-vite/src/worker-build.test.ts)
-  Validation: `vite build` with `@amond-ai/agent-vite` on a one-agent fixture emits a Worker that
-  exports `Amond<Name>Agent`, binds it as `AMOND_<NAME>_AGENT`, and contains no `@flue/` or
-  `virtual:flue/` string.
+  Validation: `vite build` with `@amond-ai/agent-vite` on a one-agent fixture emits a Worker that exports `Amond<Name>Agent`, binds it as `AMOND_<NAME>_AGENT`, and contains no `@flue/` or `virtual:flue/` string.
   Method: `bun run --filter @amond-ai/agent-vite test`
 - [ ] T007 Wire the packages into release-please at 0.1.0 (depends on T005, file: release-please-config.json)
-  Validation: config and manifest list the five directories at 0.1.0, matching each package
-  version. `scripts/publish.ts` orders the CLI after the runtime and the plugin.
+  Validation: config and manifest list the five directories at 0.1.0, matching each package version. `scripts/publish.ts` orders the CLI after the runtime and the plugin.
   Method: `jq` over both files; a dry-run listing from `scripts/publish.ts`
 
 ### Phase 3: Website, content, attribution
 
 - [ ] T008 Make docs, add and update fail cleanly with no bundled content (file: packages/cli/src/commands/blueprints.ts)
-  Validation: `amond docs`, `amond docs read guide/tools`, `amond add` and `amond update channel
-  slack` each exit non-zero saying no content is bundled, with no network request, including when
-  `AMOND_REGISTRY_URL` names an unreachable host.
+  Validation: `amond docs`, `amond docs read guide/tools`, `amond add` and `amond update channel slack` each exit non-zero saying no content is bundled, with no network request, including when `AMOND_REGISTRY_URL` names an unreachable host.
   Method: a CLI test that runs the built binary (`bun run --filter amond test`)
 - [ ] T009 Replace links to Flue's website in code, scaffolds and package metadata (file: packages/cli/src/lib/init.ts)
-  Validation: no `flueframework.com` remains in the five packages. Docs links read
-  `amond docs read <page>`, except links to pages mostly about a package left in Flue, which are
-  dropped. `homepage` and `repository` point at amond-ai/agent. `amond init` writes files that
-  name amond, not Flue.
+  Validation: no `flueframework.com` remains in the five packages. Docs links read `amond docs read <page>`, except links to pages mostly about a package left in Flue, which are dropped. `homepage` and `repository` point at amond-ai/agent. `amond init` writes files that name amond, not Flue.
   Method: `grep -rn flueframework.com packages/`; a CLI test running `amond init` in a temp dir
 - [ ] T010 Add Flue's notice to NOTICE and rewrite the package READMEs (file: NOTICE)
-  Validation: `NOTICE` carries Flue's copyright and license notice. Each imported README describes
-  the amond package and states that it is derived from Flue.
+  Validation: `NOTICE` carries Flue's copyright and license notice. Each imported README describes the amond package and states that it is derived from Flue.
   Method: read the files; the SC-2 search over `packages/`
 - [ ] T011 Update README, ARCHITECTURE and tech-stack for the imported packages (file: ARCHITECTURE.md)
-  Validation: the three documents describe the five packages and their build path, and none
-  describes `packages/amond` as present.
+  Validation: the three documents describe the five packages and their build path, and none describes `packages/amond` as present.
   Method: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md`
 - [ ] T012 Record the reformat and rename commits in .git-blame-ignore-revs (file: .git-blame-ignore-revs)
-  Validation: the file lists T004's reformat commit and Phase 2's squash commit as they are on
-  `main`, and `git blame` with it attributes a reformatted line to an upstream commit.
+  Validation: the file lists T004's reformat commit and Phase 2's squash commit as they are on `main`, and `git blame` with it attributes a reformatted line to an upstream commit.
   Method: `git blame --ignore-revs-file .git-blame-ignore-revs packages/agent/src/session.ts | head`
   STOP: Phase 1 or Phase 2 is not merged, so the SHAs are not final.
 
