@@ -3,11 +3,11 @@
   "type": "module",
   "version": "0.1.0",
   "license": "Apache-2.0",
-  "homepage": "https://flueframework.com/",
+  "homepage": "https://github.com/amond-ai/agent/tree/main/packages/agent#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/withastro/flue",
-    "directory": "packages/runtime"
+    "url": "git+https://github.com/amond-ai/agent.git",
+    "directory": "packages/agent"
   },
   "exports": {
     ".": {
