@@ -1,0 +1,21 @@
+.please/docs/tracks.jsonl
+  s_4bb86ebd636f39::t_18715fd3b4a7e7 1
+.please/docs/tracks/active/flue-import-rename-20261017/metadata.json
+  s_4bb86ebd636f39::t_18715fd3b4a7e7 4,6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d6b030f7cc23361c1609722fd0a8719d7ce44b45",
+  "prompts": {},
+  "sessions": {
+    "s_4bb86ebd636f39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb394818-de97-40f4-a5a6-2cf2186eb6bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Minsu Lee <amond@amond.net>"
+    }
+  }
+}
