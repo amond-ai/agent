@@ -4,9 +4,9 @@
 
 Run coding-agent harnesses as Flue agents, in sandbox containers, on Cloudflare.
 
-`amond/agent` is being derived from [Flue](https://github.com/withastro/flue) and built on
+`amond/agent` is derived from [Flue](https://github.com/withastro/flue) and built on
 [`amond/harness`](https://github.com/amond-ai/harness), which already runs a coding-agent turn
-inside a sandbox and survives a dropped socket. Flue's code will supply what an agent *is*, how a
+inside a sandbox and survives a dropped socket. Flue's code supplies what an agent *is*, how a
 request, schedule or event starts one, and how a session stays durable. The harness supplies the
 turn itself.
 
@@ -14,10 +14,10 @@ Five decisions shape it, recorded in
 [ADR-0003](./docs/adr/0003-build-on-flue-with-ai-sdk-harness.md) and
 [ADR-0004](./docs/adr/0004-ship-flue-as-amond-packages.md):
 
-- **Flue's code, our packages.** Flue's runtime, Vite plugin and CLI will move into this
-  repository, be renamed in source and be published as `@amond-ai/agent`, `@amond-ai/agent-vite`
-  and `amond`. Upstream changes will be ported by hand; `vendor/flue` is a read-only
-  reference.
+- **Flue's code, our packages.** Flue's runtime, Vite plugin, CLI, client SDK and React hooks
+  live in this repository with their history, renamed in source to `@amond-ai/agent`,
+  `@amond-ai/agent-vite`, `amond`, `@amond-ai/agent-sdk` and `@amond-ai/agent-react`. Upstream
+  changes are ported by hand; `vendor/flue` is a read-only reference.
 - **Flue's agent model.** Agents are `'use agent'` modules built with the Vite plugin. Flue's
   durable submissions and persistence replace the filesystem layout and durable contract from
   ADR-0001 and ADR-0002, which are superseded.
@@ -32,23 +32,36 @@ Five decisions shape it, recorded in
 
 ## Status
 
-**Pre-alpha — the direction is decided, the migration has not started.** The work is tracked
-phase by phase: the sandbox extension and a Cloudflare provider
-([#15](https://github.com/amond-ai/agent/issues/15)), the agent-loop seam
-([#16](https://github.com/amond-ai/agent/issues/16)), harness-driven turns
+**Pre-alpha — Flue's packages are imported, the migration has not finished.** The five packages
+are in `packages/` at version 0.1.0, renamed and building on this repository's toolchain
+([#20](https://github.com/amond-ai/agent/issues/20)). They are imported, not published: nothing
+is on npm yet, and release-please versions them with the rest of the workspace. The runtime still
+runs turns through Flue's Pi agent loop. The remaining work is tracked phase by phase: the sandbox
+extension and a Cloudflare provider ([#15](https://github.com/amond-ai/agent/issues/15)), the
+agent-loop seam ([#16](https://github.com/amond-ai/agent/issues/16)), harness-driven turns
 ([#17](https://github.com/amond-ai/agent/issues/17)), and removing Pi with a Cloudflare
-end-to-end example ([#18](https://github.com/amond-ai/agent/issues/18)). Nothing is published to
-npm yet.
+end-to-end example ([#18](https://github.com/amond-ai/agent/issues/18)).
 
 ## Packages
 
-The packages below predate ADR-0003. Those marked *retiring* overlap with Flue and are removed in
-[#18](https://github.com/amond-ai/agent/issues/18); the harness adapters are reassessed once the
-agent-loop seam exists.
+Five packages come from Flue v2.3.0, imported with their history and renamed in source
+([ADR-0004](./docs/adr/0004-ship-flue-as-amond-packages.md)).
+
+| Package | Imported from | What it does |
+| --- | --- | --- |
+| `@amond-ai/agent` | `@flue/runtime` | The runtime: agents, sessions, durable submissions, and the Node and Cloudflare adapters. It runs the agent loop on Pi until [#16](https://github.com/amond-ai/agent/issues/16)–[#18](https://github.com/amond-ai/agent/issues/18) replace it. |
+| `@amond-ai/agent-vite` | `@flue/vite` | The Vite plugin. `amond()` turns `'use agent'` modules into a server; on Cloudflare it pairs with `cloudflare({ config: amondWorkerConfig() })`. |
+| `amond` | `@flue/cli` | The CLI. `init` and `run` work; `docs`, `add` and `update` report that no bundled content exists until a later track ships it. |
+| `@amond-ai/agent-sdk` | `@flue/sdk` | The client for calling a deployed agent. |
+| `@amond-ai/agent-react` | `@flue/react` | React hooks over the SDK, such as `useAmondAgent`. |
+
+Packages that predate ADR-0003 remain beside them. Those marked *retiring* overlap with Flue and
+are removed in [#18](https://github.com/amond-ai/agent/issues/18); the harness adapters are
+reassessed once the agent-loop seam exists. The ADR-0001 CLI is retired, and the
+`amond` name belongs to the imported CLI.
 
 | Package | What it does |
 | --- | --- |
-| `amond` | *Retiring.* The CLI that resolves an ADR-0001 `agent/` tree into a manifest; Flue's Vite build replaces it. The `amond` name then passes to the CLI imported from Flue (ADR-0004). |
 | `@amond-ai/agent-core` | *Retiring.* The ADR-0001 contract — filesystem layout, harness seam, platform handlers. |
 | `@amond-ai/agent-durable` | *Retiring.* The ADR-0002 durable contract and its in-memory runtime. |
 | `@amond-ai/agent-durable-cloudflare` | *Retiring.* Cloudflare Workflows behind that contract, never implemented. |
@@ -57,12 +70,13 @@ agent-loop seam exists.
 
 ## What an agent looks like
 
-An agent is a Flue module whose first statement is `'use agent'`. Every exported capitalised
-function is an agent; its body calls Flue hooks and returns its instructions. On Cloudflare,
-`flue()` and `cloudflare({ config: flueWorkerConfig() })` in `vite.config.ts` turn each agent into
-a Durable Object class, and `vite build && wrangler deploy` ships it. `wrangler.jsonc`, including
-the Sandbox container, stays yours. See Flue's
-[building agents](https://flueframework.com/docs/guide/building-agents/) guide for the hooks.
+An agent is a module whose first statement is `'use agent'`. Every exported capitalised
+function is an agent; its body calls hooks from `@amond-ai/agent` and returns its instructions.
+On Cloudflare, `amond()` and `cloudflare({ config: amondWorkerConfig() })` in `vite.config.ts`
+turn each agent into a Durable Object class, and `vite build && wrangler deploy` ships it.
+`wrangler.jsonc`, including the Sandbox container, stays yours. Flue's
+[building agents](https://flueframework.com/docs/guide/building-agents/) guide, the upstream
+source of this model, describes the hooks; `amond docs` replaces it once the bundled docs land.
 
 ## Development
 
@@ -74,6 +88,9 @@ bun run check      # tsc across the workspace
 bun run lint
 bun run test
 ```
+
+An agent project builds with `vite build`, through the `amond()` plugin from
+`@amond-ai/agent-vite`. The workspace packages build with tsdown, as above.
 
 A package's `exports` point at `dist/`, so a package has to be built before anything resolves it.
 `test` depends on its own package's `build`; `check` depends only on its **dependencies'**
