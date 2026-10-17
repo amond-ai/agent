@@ -100,7 +100,7 @@ For releases:
 The runtime, imported from `@flue/runtime`. It defines agents, sessions, durable submissions,
 conversation persistence, and the tools an agent calls. Subpath exports select the platform:
 `./node` for development and `./cloudflare` for Durable Objects. Turns run through Pi
-(`@earendil-works/pi-agent-core` and `pi-ai`) until the agent-loop seam replaces it
+(`@earendil-works/pi-agent-core` and `@earendil-works/pi-ai`) until the agent-loop seam replaces it
 (#16–#18). Other dependencies are Hono with `@hono/node-server` for HTTP, valibot for schemas, and
 `@modelcontextprotocol/client` for MCP tools.
 

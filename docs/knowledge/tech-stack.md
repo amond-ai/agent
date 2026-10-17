@@ -48,10 +48,10 @@ package uses yet:
 | --- | --- | --- |
 | Hono, `@hono/node-server` | HTTP routing and the Node server | `agent`, `agent-vite` |
 | valibot, `@valibot/to-json-schema` | Schema validation and JSON Schema output | `agent` |
-| `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai` | Pi agent loop and model client. Removed in [#16](https://github.com/amond-ai/agent/issues/16)–[#18](https://github.com/amond-ai/agent/issues/18) | `agent` |
+| `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai` | Pi agent loop and model client. Removal planned in [#16](https://github.com/amond-ai/agent/issues/16)–[#18](https://github.com/amond-ai/agent/issues/18) | `agent` |
 | `@modelcontextprotocol/client` | MCP tools | `agent` |
 | Cloudflare `agents` SDK | Durable Object agent base on Cloudflare | `agent-vite` |
-| Vite 8, `@cloudflare/vite-plugin` | The build that turns `'use agent'` modules into a Node server or Worker | `agent-vite` (`vite` peer), `cli` |
+| Vite 8, `@cloudflare/vite-plugin` | The build that turns `'use agent'` modules into a Node server or Worker | `agent-vite` (`vite` peer); `cli` uses Vite only |
 | `@durable-streams/client` | Streams conversation state to clients | `agent-sdk` |
 | React 18 or later | Hooks runtime | `agent-react` (peer) |
 | `@amond-ai/harness-claude-code` 0.1.0 | Claude Code turn execution | `agent-harness-claude-code` |

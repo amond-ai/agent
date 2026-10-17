@@ -40,10 +40,11 @@ export default defineConfig({
 ## Exports
 
 - `amond` — the plugin.
-- `amondWorkerConfig` — builds the Cloudflare Worker config.
+- `amondWorkerConfig` — creates the callback you pass as `cloudflare({ config })`, which customizes the
+  Cloudflare plugin's resolved Worker config.
 - Types for the plugin API, the resolved project info, and the Node server helpers.
 
-Run `amond init --deploy` to scaffold a project with this setup already in place.
+Run `npx amond init --deploy` to scaffold a project with this setup already in place.
 
 ## Attribution
 

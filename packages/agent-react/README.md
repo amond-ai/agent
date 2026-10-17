@@ -61,7 +61,7 @@ type AgentStatus = 'idle' | 'connecting' | 'submitted' | 'streaming' | 'error'
 | `connecting` | The hook is making its initial connection or retrying. `error` holds the latest failure. |
 | `submitted`  | A local prompt is being admitted or awaits activity in the observed conversation.        |
 | `streaming`  | A submission is active in the observed conversation, including out-of-band work.         |
-| `error`      | The latest local submission failed, or a failed send is retained.                        |
+| `error`      | A submission failed, a failed send is retained, or live observation failed.               |
 
 ### `sendMessage()`
 

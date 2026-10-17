@@ -24,6 +24,7 @@ no documentation and no blueprints. A later release adds that content.
 
 ```sh
 amond init ./my-agent-app
+cd my-agent-app
 amond run src/agents/hello.ts -m "Hi there"
 amond run src/agents/hello.ts -m "And then?" --id support-4821
 ```
