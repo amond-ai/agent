@@ -110,13 +110,13 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] T008 Make docs, add and update fail cleanly with no bundled content (file: packages/cli/src/commands/blueprints.ts)
   Validation: `amond docs`, `amond docs read guide/tools`, `amond add` and `amond update channel slack` each exit non-zero saying no content is bundled, with no network request, including when `AMOND_REGISTRY_URL` names an unreachable host.
   Method: a CLI test that runs the built binary (`bun run --filter amond test`)
-- [ ] T009 Replace links to Flue's website in code, scaffolds and package metadata (file: packages/cli/src/lib/init.ts)
+- [x] T009 Replace links to Flue's website in code, scaffolds and package metadata (file: packages/cli/src/lib/init.ts)
   Validation: no `flueframework.com` remains in the five packages. Docs links read `amond docs read <page>`, except links to pages mostly about a package left in Flue, which are dropped. `homepage` and `repository` point at amond-ai/agent. `amond init` writes files that name amond, not Flue.
   Method: `grep -rn flueframework.com packages/`; a CLI test running `amond init` in a temp dir
-- [ ] T010 Add Flue's notice to NOTICE and rewrite the package READMEs (file: NOTICE)
+- [x] T010 Add Flue's notice to NOTICE and rewrite the package READMEs (file: NOTICE)
   Validation: `NOTICE` carries Flue's copyright and license notice. Each imported README describes the amond package and states that it is derived from Flue.
   Method: read the files; the SC-2 search over `packages/`
-- [ ] T011 Update README, ARCHITECTURE and tech-stack for the imported packages (file: ARCHITECTURE.md)
+- [x] T011 Update README, ARCHITECTURE and tech-stack for the imported packages (file: ARCHITECTURE.md)
   Validation: the three documents describe the five packages and their build path, and none describes `packages/amond` as present.
   Method: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md`
 - [ ] T012 Record the reformat and rename commits in .git-blame-ignore-revs (file: .git-blame-ignore-revs)
@@ -178,6 +178,10 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Evidence: `bun run build && cd packages/cli && bun --bun vitest run src/commands` → 2 files, 14 tests passed; init.test.ts spawns `bin/amond.mjs init <dir> --target node|cloudflare [--deploy]` (3 cases) and asserts no `/flue/i` in any written file, path or output, plus `amond.config.ts` and `@amond-ai/agent` present. Mutation check: README line changed to `[Flue](https://flueframework.com)` failed all 3 cases (`README.md ... not to match /flue/i`); reverted. Root build, check, lint, `CI=true bun run test` → all exit 0. `git grep -n flueframework -- packages/ ':!**/README.md'` → no matches.
   Commit: 2743445. Beyond Files: packages/cli/package.json (already had the right directory). The `directory` fields use the real folder names (packages/agent, not Flue's packages/runtime); `homepage` is `https://github.com/amond-ai/agent/tree/main/packages/<dir>#readme`, matching core. READMEs still carry flueframework.com until T010 merges.
 
+- [x] (2026-10-17 20:47 KST) T010 Add Flue's notice to NOTICE and rewrite the package READMEs
+  Evidence: `git grep -niE "@flue/|\bflue\b|FLUE_|flueframework"` over packages/*/README.md, NOTICE and packages/*/NOTICE → only the README attribution lines and NOTICE lines 6-7; `bunx eslint` on the five READMEs → 0 errors; commit a465740 (cherry-picked from the worktree's d289fad). Each package also gets a NOTICE and a LICENSE copy, with NOTICE in `files`, matching packages/core.
+- [x] (2026-10-17 20:46 KST) T011 Update README, ARCHITECTURE and tech-stack for the imported packages
+  Evidence: `grep -n "packages/amond" README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → no matches; `bunx eslint README.md ARCHITECTURE.md docs/knowledge/tech-stack.md` → exit 0; commit 129c7fb (cherry-picked from the worktree's 67f2326). The lead wrote the T010 and T011 entries from the executors' sink records, which the merge script could not apply.
 ## Decision Log
 
 - 2026-10-17: the spec's first draft named a Cloudflare integration suite that does not exist in
@@ -210,6 +214,10 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - Decision: link keep/drop calls for init.ts. guide/database kept (the page is mostly about db.ts, the in-memory default and the built-in sqlite(), all in the runtime; the Postgres/libSQL adapter names were removed from the comment since those packages stay in Flue). guide/cloudflare-target (entrypoint, migrations) kept: Cloudflare target is runtime and vite. guide/observability `#cloudflare` kept: the section describes the built-in Workers Traces adapter (createCloudflareTracing in the runtime), not OpenTelemetry/Sentry. guide/models `#cloudflare-workers-ai` kept: built-in `cloudflare` provider. Site links `[amond](flueframework.com)` now link this repo; `[amond docs](.../docs/)` became "Read the amond docs from the terminal: `amond docs`".
   Rationale: the spec drops only links to pages mostly about packages left in Flue; none of these pages is.
   Date/Author: 2026-10-17 / implement-executor
+
+- Decision: NOTICE names Flue, its repository and Apache-2.0 but no copyright holder.
+  Rationale: Flue's LICENSE is the unfilled Apache template, and Flue has no NOTICE file and no package author, so there is no holder to carry forward; inventing one would be wrong.
+  Date/Author: 2026-10-17 / implement-executor (T010)
 
 ## Surprises & Discoveries
 - Observation: `git subtree add` keeps the split commits at root-level paths, so `git log -- packages/agent`
