@@ -1,0 +1,57 @@
+schema_version: 8 # from hooks/lib/workspace-defaults.ts; do not edit manually
+
+language: en # Output language (ko | en)
+
+# GitHub integration (optional)
+# github:
+#   project: 5              # GitHub Project number (from URL: /orgs/{org}/projects/5)
+#   owner: {org_name}       # GitHub org or user owning the project
+#   issue_required: true     # Deprecated and ignored: /please:new-track always creates the Issue
+
+# Workflow policies (optional)
+# Populated by /please:setup when a stack tool is detected and user opts in.
+# The `tool` field selects which CLI drives the stack. `gh-stack` (GitHub's
+# native stacked PRs) is the recommended default.
+workflow:
+  stacked_pr:
+    enabled: true # Use stacked PR workflow (one PR per branch in stack)
+    tool: gh-stack # gh-stack | git-spice | none
+    split_phases: true # If plan.md has `### Phase N:` headings, create a stacked branch per phase
+    branch_prefix: tracks/ # Branch prefix (single-phase: tracks/{track_id}; multi-phase: tracks/{track_id}-phase-N-{slug})
+
+# Document path overrides (optional — defaults shown)
+docs:
+  tracks: .please/docs/tracks
+  product-specs: docs/specs
+  decisions: docs/adr
+  investigations: .please/docs/investigations
+  research: .please/docs/research
+  references: docs/references
+  knowledge: docs/knowledge
+  brainstorms: .please/docs/brainstorms
+  ideation: .please/docs/ideation
+  review: .please/docs/review
+
+# Review plugin settings (/review:setup). default-driver, pre-pr-check, and ocr use their defaults.
+review:
+  in-house:
+    enabled: true # the Claude finder set in an ACTIVE SET; opt-in. Does not gate /review:code-review
+  builtin:
+    enabled: true # built-in read-only /code-review medium; no CLI or external service auth
+  cubic:
+    enabled: true
+    default-flags: --json -b
+  agy:
+    enabled: false
+  coderabbit:
+    enabled: false # tracking marker; review delegates to Skill("coderabbit:code-review")
+  greptile:
+    enabled: true # tracking marker; review runs the greptile CLI via review-greptile-reviewer
+
+# GitHub App review bots installed on this repository
+pr_review_bots:
+  codex: {trigger: auto}
+  gemini: {trigger: auto, max-reviews-per-pr: 3}
+  cubic: {trigger: auto}
+  greptile: false
+  coderabbit: false

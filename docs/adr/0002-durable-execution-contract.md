@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by ADR-0003 (0003-build-on-flue-with-ai-sdk-harness.md)
 
 ## Date
 
@@ -113,4 +113,4 @@ escape hatch rather than being lifted into the contract.
 
 **Created**: 2026-09-15
 **Author**: Minsu Lee
-**Last Updated**: 2026-09-15
+**Last Updated**: 2026-10-16

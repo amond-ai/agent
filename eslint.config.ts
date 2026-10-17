@@ -7,6 +7,7 @@ export default pleaseai({
     '**/dist',
     '**/node_modules',
     '**/coverage',
+    'vendor/**',
   ],
 }, {
   rules: sharedRules,
