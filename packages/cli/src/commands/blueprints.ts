@@ -12,29 +12,43 @@ import { BLUEPRINTS, KIND_ROOTS } from '../generated/blueprints.ts'
  * requires an explicit kind + name.
  */
 
+const hasBlueprints = BLUEPRINTS.length > 0 || KIND_ROOTS.length > 0
+
 export function registerBlueprintCommands(cli: CAC): void {
-  cli
+  const add = cli
     .command(
       'add [kind] [name|url]',
-      'Fetch a blueprint implementation guide (no args: list blueprints)',
+      hasBlueprints
+        ? 'Fetch a blueprint implementation guide (no args: list blueprints)'
+        : 'No blueprints are bundled with this version of amond',
     )
     .usage('add [<kind> <name|url>] [options]')
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
-    .example('  $ amond add')
-    .example('  $ amond add sandbox daytona | claude')
-    .example('  $ amond add channel https://developers.notion.com/reference/webhooks | codex')
-    .action((kind: string | undefined, name: string | undefined, options: CliOptions) =>
-      blueprintAction('add', kind, name, options),
-    )
+  if (hasBlueprints) {
+    add
+      .example('  $ amond add')
+      .example('  $ amond add sandbox daytona | claude')
+      .example('  $ amond add channel https://developers.notion.com/reference/webhooks | codex')
+  }
+  add.action((kind: string | undefined, name: string | undefined, options: CliOptions) =>
+    blueprintAction('add', kind, name, options),
+  )
 
-  cli
-    .command('update <kind> <name|url>', 'Fetch an updated blueprint implementation guide')
+  const update = cli
+    .command(
+      'update <kind> <name|url>',
+      hasBlueprints
+        ? 'Fetch an updated blueprint implementation guide'
+        : 'No blueprints are bundled with this version of amond',
+    )
     .usage('update <kind> <name|url> [options]')
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
-    .example('  $ amond update channel slack | claude')
-    .action((kind: string, name: string, options: CliOptions) =>
-      blueprintAction('update', kind, name, options),
-    )
+  if (hasBlueprints) {
+    update.example('  $ amond update channel slack | claude')
+  }
+  update.action((kind: string, name: string, options: CliOptions) =>
+    blueprintAction('update', kind, name, options),
+  )
 }
 
 interface BlueprintArgs {
@@ -55,7 +69,7 @@ async function blueprintAction(
 
   // Checked before kind resolution and any fetch, so an empty index never
   // reaches the registry.
-  if (BLUEPRINTS.length === 0 && KIND_ROOTS.length === 0) {
+  if (!hasBlueprints) {
     throw new Error(NO_BLUEPRINTS_MESSAGE)
   }
 
