@@ -107,7 +107,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 ### Phase 3: Website, content, attribution
 
-- [ ] T008 Make docs, add and update fail cleanly with no bundled content (file: packages/cli/src/commands/blueprints.ts)
+- [x] T008 Make docs, add and update fail cleanly with no bundled content (file: packages/cli/src/commands/blueprints.ts)
   Validation: `amond docs`, `amond docs read guide/tools`, `amond add` and `amond update channel slack` each exit non-zero saying no content is bundled, with no network request, including when `AMOND_REGISTRY_URL` names an unreachable host.
   Method: a CLI test that runs the built binary (`bun run --filter amond test`)
 - [ ] T009 Replace links to Flue's website in code, scaffolds and package metadata (file: packages/cli/src/lib/init.ts)
