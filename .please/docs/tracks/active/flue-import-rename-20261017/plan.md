@@ -79,7 +79,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 ### Phase 1: Import with history onto the toolchain
 
-- [ ] T001 Import the five packages with history and retire packages/amond (file: packages/agent/package.json)
+- [x] T001 Import the five packages with history and retire packages/amond (file: packages/agent/package.json)
   Validation: `git log -- packages/agent` lists Flue commits, and each subtree merge message names `deee93b`. Each imported tree matches `vendor/flue/packages/<name>`. `packages/amond` and its release-please and manifest entries are gone.
   Method: `git log --oneline -- packages/agent | head`; `diff -r` against `vendor/flue/packages/<name>`
   STOP: a package's split tree differs from `vendor/flue/packages/<name>`.
