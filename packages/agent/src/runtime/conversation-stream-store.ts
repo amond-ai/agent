@@ -2,7 +2,7 @@ import { clampLimit } from '../adapter-helpers.ts'
 import type { AgentSubmissionStore } from '../agent-execution-store.ts'
 import type { ConversationRecord } from '../conversation-records.ts'
 import { ConversationStreamStoreError } from '../errors.ts'
-import { migrateFlueSqlSchema } from '../format-version.ts'
+import { migrateAmondSqlSchema } from '../format-version.ts'
 import { parseSessionStorageKey } from '../session-identity.ts'
 import type { SqlStorage } from '../sql-storage.ts'
 import { generateIncarnationId } from './ids.ts'
@@ -115,7 +115,7 @@ export interface ConversationStreamStore {
 }
 
 const CREATE_STREAMS_TABLE = `
-CREATE TABLE IF NOT EXISTS flue_conversation_streams (
+CREATE TABLE IF NOT EXISTS amond_conversation_streams (
   path TEXT PRIMARY KEY,
   identity_json TEXT NOT NULL,
   next_offset INTEGER NOT NULL DEFAULT 0,
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS flue_conversation_streams (
 )`
 
 const CREATE_BATCHES_TABLE = `
-CREATE TABLE IF NOT EXISTS flue_conversation_stream_batches (
+CREATE TABLE IF NOT EXISTS amond_conversation_stream_batches (
   path TEXT NOT NULL,
   seq INTEGER NOT NULL,
   producer_id TEXT NOT NULL,
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS flue_conversation_stream_batches (
 )`
 
 const CREATE_BATCH_CHUNKS_TABLE = `
-CREATE TABLE IF NOT EXISTS flue_conversation_stream_batch_chunks (
+CREATE TABLE IF NOT EXISTS amond_conversation_stream_batch_chunks (
   path TEXT NOT NULL,
   seq INTEGER NOT NULL,
   chunk_index INTEGER NOT NULL CHECK (chunk_index >= 0),
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS flue_conversation_stream_batch_chunks (
 
 /**
  * Serialized batches longer than this (in UTF-16 code units) spill into
- * `flue_conversation_stream_batch_chunks` instead of the batch row's `data`
+ * `amond_conversation_stream_batch_chunks` instead of the batch row's `data`
  * column: Cloudflare Durable Object SQLite caps an individual value at ~2MB.
  */
 export const CONVERSATION_BATCH_SPILL_THRESHOLD = 1024 * 1024
@@ -240,7 +240,7 @@ export class StreamListenerRegistry {
 // store unreadable and needs no version event. An older runtime ignores
 // them; a newer one lazily creates them at open.
 const CREATE_FOLD_CHECKPOINTS_TABLE = `
-CREATE TABLE IF NOT EXISTS flue_conversation_fold_checkpoints (
+CREATE TABLE IF NOT EXISTS amond_conversation_fold_checkpoints (
   path TEXT PRIMARY KEY,
   head_offset TEXT NOT NULL,
   incarnation TEXT NOT NULL,
@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS flue_conversation_fold_checkpoints (
 )`
 
 const CREATE_FOLD_CHECKPOINT_CHUNKS_TABLE = `
-CREATE TABLE IF NOT EXISTS flue_conversation_fold_checkpoint_chunks (
+CREATE TABLE IF NOT EXISTS amond_conversation_fold_checkpoint_chunks (
   path TEXT NOT NULL,
   chunk_index INTEGER NOT NULL CHECK (chunk_index >= 0),
   data TEXT NOT NULL,
@@ -258,7 +258,7 @@ CREATE TABLE IF NOT EXISTS flue_conversation_fold_checkpoint_chunks (
 )`
 
 export function ensureSqlConversationStreamTables(sql: SqlStorage): void {
-  migrateFlueSqlSchema(sql, () => {
+  migrateAmondSqlSchema(sql, () => {
     sql.exec(CREATE_STREAMS_TABLE)
     sql.exec(CREATE_BATCHES_TABLE)
     sql.exec(CREATE_BATCH_CHUNKS_TABLE)
@@ -568,14 +568,14 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     const data = JSON.stringify(identity)
     this.runTransaction(() => {
       const existing = this.sql
-        .exec('SELECT identity_json FROM flue_conversation_streams WHERE path = ?', path)
+        .exec('SELECT identity_json FROM amond_conversation_streams WHERE path = ?', path)
         .toArray()[0]
       if (existing) {
         if (existing.identity_json !== data) { this.fail('create', path, 'Stream identity conflicts.') }
         return
       }
       this.sql.exec(
-        'INSERT INTO flue_conversation_streams (path, identity_json, incarnation) VALUES (?, ?, ?)',
+        'INSERT INTO amond_conversation_streams (path, identity_json, incarnation) VALUES (?, ?, ?)',
         path,
         data,
         generateIncarnationId(),
@@ -587,7 +587,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     return this.runTransaction(() => {
       const row = this.sql
         .exec(
-          `UPDATE flue_conversation_streams
+          `UPDATE amond_conversation_streams
 					 SET producer_id = ?, producer_epoch = producer_epoch + 1, next_producer_sequence = 0
 					 WHERE path = ?
 					 RETURNING producer_epoch, next_offset, incarnation`,
@@ -624,7 +624,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
       const meta = this.sql
         .exec(
           `SELECT next_offset, producer_id, producer_epoch, next_producer_sequence, incarnation
-					 FROM flue_conversation_streams WHERE path = ?`,
+					 FROM amond_conversation_streams WHERE path = ?`,
           input.path,
         )
         .toArray()[0]
@@ -638,7 +638,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
       }
       const retry = this.sql
         .exec(
-          `SELECT seq, data, submission_id, attempt_id FROM flue_conversation_stream_batches
+          `SELECT seq, data, submission_id, attempt_id FROM amond_conversation_stream_batches
 					 WHERE path = ? AND producer_id = ? AND producer_epoch = ? AND producer_sequence = ?`,
           input.path,
           input.producerId,
@@ -672,7 +672,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
           ? this.spillBatchData(input.path, seq, data)
           : data
       this.sql.exec(
-        `INSERT INTO flue_conversation_stream_batches
+        `INSERT INTO amond_conversation_stream_batches
 				 (path, seq, producer_id, producer_epoch, producer_sequence, data, submission_id, attempt_id)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         input.path,
@@ -685,7 +685,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
         input.submission?.attemptId ?? null,
       )
       this.sql.exec(
-        `UPDATE flue_conversation_streams
+        `UPDATE amond_conversation_streams
 				 SET next_offset = next_offset + 1, next_producer_sequence = next_producer_sequence + 1
 				 WHERE path = ?`,
         input.path,
@@ -714,7 +714,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     const limit = clampLimit(options?.limit, DEFAULT_READ_LIMIT, MAX_READ_LIMIT)
     const rows = this.sql
       .exec(
-        `SELECT seq, data FROM flue_conversation_stream_batches
+        `SELECT seq, data FROM amond_conversation_stream_batches
 				 WHERE path = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
         path,
         startAfter,
@@ -743,7 +743,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     const parts = splitChunks(data)
     for (const [index, part] of parts.entries()) {
       this.sql.exec(
-        `INSERT INTO flue_conversation_stream_batch_chunks
+        `INSERT INTO amond_conversation_stream_batch_chunks
 				 (path, seq, chunk_index, chunk_count, data) VALUES (?, ?, ?, ?, ?)`,
         path,
         seq,
@@ -752,12 +752,12 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
         part,
       )
     }
-    return JSON.stringify({ $flueChunkCount: parts.length })
+    return JSON.stringify({ $amondChunkCount: parts.length })
   }
 
   /**
    * Returns the full serialized batch for a stored `data` value. A spilled
-   * batch row stores the sentinel `{"$flueChunkCount":N}` instead of the
+   * batch row stores the sentinel `{"$amondChunkCount":N}` instead of the
    * serialized records; the two shapes cannot collide because real batch
    * data is `JSON.stringify` of a records array and always starts with `[`,
    * so a stored value starting with `{` is always the sentinel.
@@ -769,13 +769,13 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     stored: string,
   ): string {
     if (!stored.startsWith('{')) { return stored }
-    const chunkCount = (JSON.parse(stored) as { $flueChunkCount?: unknown }).$flueChunkCount
+    const chunkCount = (JSON.parse(stored) as { $amondChunkCount?: unknown }).$amondChunkCount
     if (typeof chunkCount !== 'number' || !Number.isSafeInteger(chunkCount) || chunkCount <= 0) {
       this.fail(operation, path, 'Spilled batch sentinel is malformed.')
     }
     const rows = this.sql
       .exec(
-        `SELECT chunk_index, chunk_count, data FROM flue_conversation_stream_batch_chunks
+        `SELECT chunk_index, chunk_count, data FROM amond_conversation_stream_batch_chunks
 				 WHERE path = ? AND seq = ? ORDER BY chunk_index`,
         path,
         seq,
@@ -798,7 +798,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     const row = this.sql
       .exec(
         `SELECT identity_json, next_offset, producer_id, producer_epoch, next_producer_sequence, incarnation
-				 FROM flue_conversation_streams WHERE path = ?`,
+				 FROM amond_conversation_streams WHERE path = ?`,
         path,
       )
       .toArray()[0]
@@ -822,14 +822,14 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     // (or a crash) never observes a half-written checkpoint: the head row
     // is the commit point, exactly like a spilled batch's row.
     this.runTransaction(() => {
-      this.sql.exec('DELETE FROM flue_conversation_fold_checkpoint_chunks WHERE path = ?', path)
+      this.sql.exec('DELETE FROM amond_conversation_fold_checkpoint_chunks WHERE path = ?', path)
       const spill = checkpoint.data.length > CONVERSATION_BATCH_SPILL_THRESHOLD
       let chunkCount: number | null = null
       if (spill) {
         const parts = splitChunks(checkpoint.data)
         for (const [index, part] of parts.entries()) {
           this.sql.exec(
-            `INSERT INTO flue_conversation_fold_checkpoint_chunks (path, chunk_index, data)
+            `INSERT INTO amond_conversation_fold_checkpoint_chunks (path, chunk_index, data)
 						 VALUES (?, ?, ?)`,
             path,
             index,
@@ -839,7 +839,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
         chunkCount = parts.length
       }
       this.sql.exec(
-        `INSERT INTO flue_conversation_fold_checkpoints
+        `INSERT INTO amond_conversation_fold_checkpoints
 				 (path, head_offset, incarnation, format_version, data, chunk_count)
 				 VALUES (?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(path) DO UPDATE SET
@@ -866,7 +866,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
       const row = this.sql
         .exec(
           `SELECT head_offset, incarnation, format_version, data, chunk_count
-					 FROM flue_conversation_fold_checkpoints WHERE path = ?`,
+					 FROM amond_conversation_fold_checkpoints WHERE path = ?`,
           path,
         )
         .toArray()[0]
@@ -885,7 +885,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
         }
         const chunks = this.sql
           .exec(
-            `SELECT chunk_index, data FROM flue_conversation_fold_checkpoint_chunks
+            `SELECT chunk_index, data FROM amond_conversation_fold_checkpoint_chunks
 						 WHERE path = ? ORDER BY chunk_index`,
             path,
           )
@@ -944,7 +944,7 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
       if (record.attemptId === submission.attemptId && record.submissionId !== undefined) {
         const delivery = this.sql
           .exec(
-            'SELECT status, joined_into FROM flue_agent_submissions WHERE submission_id = ?',
+            'SELECT status, joined_into FROM amond_agent_submissions WHERE submission_id = ?',
             record.submissionId,
           )
           .toArray()[0]
@@ -964,14 +964,14 @@ export class SqliteConversationStreamStore implements ConversationStreamStore {
     const row = this.sql
       .exec(
         `SELECT status, attempt_id, session_key, settlement_record_id, settlement_record
-				 FROM flue_agent_submissions WHERE submission_id = ?`,
+				 FROM amond_agent_submissions WHERE submission_id = ?`,
         submission.submissionId,
       )
       .toArray()[0]
     const sessionIdentity =
       typeof row?.session_key === 'string' ? parseSessionStorageKey(row.session_key) : undefined
     const streamIdentityRow = this.sql
-      .exec('SELECT identity_json FROM flue_conversation_streams WHERE path = ?', path)
+      .exec('SELECT identity_json FROM amond_conversation_streams WHERE path = ?', path)
       .toArray()[0]
     const streamIdentity = streamIdentityRow
       ? (JSON.parse(streamIdentityRow.identity_json as string) as ConversationStreamIdentity)

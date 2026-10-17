@@ -2,14 +2,14 @@
  * Per-agent Durable Object class factory.
  *
  * The generated Cloudflare entry point collapses to
- * `export const FlueTriageAgent = createFlueAgentClass({...})` for each agent.
+ * `export const AmondTriageAgent = createAmondAgentClass({...})` for each agent.
  *
  * Semantics:
  * - `runtime.prepare(...)` runs BEFORE `super(ctx, env)` so the coordinator's
  *   stores exist before the Agents SDK constructor can schedule work, then
  *   `runtime.attach(this, prepared)` binds the coordinator to the instance.
  * - `onStart` / `onRequest` / `onFiberRecovered` / the
- *   `__flueWakeAgentSubmissions` schedule target delegate to the shared
+ *   `__amondWakeAgentSubmissions` schedule target delegate to the shared
  *   Cloudflare agent runtime; `onStart`/`onFiberRecovered` forward to an
  *   inherited implementation when the (possibly extended) base defines one.
  * - The module's `extend({ base, wrap })` export is resolved via
@@ -27,21 +27,21 @@ interface DurableObjectStateLike {
   readonly storage: CloudflareAgentStorage
 }
 
-export interface CreateFlueAgentClassOptions {
+export interface CreateAmondAgentClassOptions {
   /**
    * The Cloudflare Agents SDK `Agent` class (the generated entry imports it
-   * from the user's `agents` package; `@flue/runtime` does not depend on it).
+   * from the user's `agents` package; `@amond-ai/agent` does not depend on it).
    */
   readonly AgentBase: ExtensionClass<any>
   /** The shared per-Worker Cloudflare agent runtime (`createCloudflareAgentRuntime`). */
   readonly runtime: CloudflareAgentRuntime
-  /** Generated Durable Object class name, e.g. `FlueTriageAgent`. */
+  /** Generated Durable Object class name, e.g. `AmondTriageAgent`. */
   readonly className: string
   /** The agent's identity (file basename), e.g. `triage`. */
   readonly agentName: string
   /**
    * The agent module's `cloudflare` named export, if any — must be created
-   * with `extend({ base, wrap })` from `@flue/runtime/cloudflare`.
+   * with `extend({ base, wrap })` from `@amond-ai/agent/cloudflare`.
    */
   readonly extension?: unknown
 }
@@ -50,7 +50,7 @@ export interface CreateFlueAgentClassOptions {
  * Build the final (possibly extension-wrapped) Durable Object class for one
  * agent module.
  */
-export function createFlueAgentClass(options: CreateFlueAgentClassOptions): ExtensionClass<any> {
+export function createAmondAgentClass(options: CreateAmondAgentClassOptions): ExtensionClass<any> {
   const { AgentBase, runtime, className, agentName, extension } = options
   const resolved = resolveCloudflareExtension(
     extension === undefined ? {} : { cloudflare: extension },
@@ -59,7 +59,7 @@ export function createFlueAgentClass(options: CreateFlueAgentClassOptions): Exte
   )
   const Base = resolved.base(AgentBase)
 
-  class FlueGeneratedAgent extends Base {
+  class AmondGeneratedAgent extends Base {
     constructor(ctx: DurableObjectStateLike, env: unknown) {
       // prepare() must run before super(): the Agents SDK constructor can
       // synchronously schedule callbacks that reach the coordinator's
@@ -84,7 +84,7 @@ export function createFlueAgentClass(options: CreateFlueAgentClassOptions): Exte
      * attempt fibers detached — the fibers outlive the invocation on the
      * SDK's runFiber keepAlive/recovery machinery.
      */
-    __flueWakeAgentSubmissions() {
+    __amondWakeAgentSubmissions() {
       return runtime.drainSubmissions(this as unknown as CloudflareAgentInstance)
     }
 
@@ -109,9 +109,9 @@ export function createFlueAgentClass(options: CreateFlueAgentClassOptions): Exte
     }
   }
 
-  // The codegen named each class `Flue<PascalCase>Agent`; preserve that for
+  // The codegen named each class `amond<PascalCase>Agent`; preserve that for
   // diagnostics and platform wrappers that read `constructor.name`.
-  Object.defineProperty(FlueGeneratedAgent, 'name', { value: className, configurable: true })
+  Object.defineProperty(AmondGeneratedAgent, 'name', { value: className, configurable: true })
 
-  return resolved.wrap(FlueGeneratedAgent as ExtensionClass<any>)
+  return resolved.wrap(AmondGeneratedAgent as ExtensionClass<any>)
 }

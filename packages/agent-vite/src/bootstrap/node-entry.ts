@@ -4,15 +4,15 @@
  * bootstrap's server on PORT (default 3000) and shuts down gracefully on
  * SIGINT/SIGTERM/disconnect.
  */
-import { startFlueNodeServer } from 'virtual:flue/server'
+import { startAmondNodeServer } from 'virtual:amond/server'
 
-const lifecycle = await startFlueNodeServer({
+const lifecycle = await startAmondNodeServer({
   port: Number.parseInt(process.env.PORT || '3000', 10),
 })
 
 async function stop(exitCode: number) {
   setTimeout(() => {
-    console.error('[flue] Shutdown timed out, exiting.')
+    console.error('[amond] Shutdown timed out, exiting.')
     process.exit(exitCode)
   }, 60_000).unref()
   await lifecycle.stop()

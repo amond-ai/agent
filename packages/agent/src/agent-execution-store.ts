@@ -143,7 +143,7 @@ export type AgentDispatchAdmission =
  * described as atomic, concurrent callers must never both observe success;
  * whether that is achieved with transactions, conditional updates, or
  * unique indexes is the adapter's choice. Verify an implementation with
- * `defineStoreContractTests` from `@flue/runtime/test-utils`.
+ * `defineStoreContractTests` from `@amond-ai/agent/test-utils`.
  *
  * Stability: the lease method group mirrors the durable-execution engine and
  * is subject to change until 1.0. This applies to every backend equally.
@@ -400,7 +400,7 @@ export interface PersistenceStores {
  * file in their source root and default-exporting an adapter.
  *
  * Adapter packages export a factory function that returns this interface.
- * The built-in `sqlite()` adapter is available from `@flue/runtime/node`.
+ * The built-in `sqlite()` adapter is available from `@amond-ai/agent/node`.
  *
  * Lifecycle: the framework calls `migrate()` (if present) once at startup
  * to bring the store to the current format version, then awaits
@@ -412,8 +412,8 @@ export interface PersistenceStores {
  * format version when it first creates the store, and fails loudly —
  * before reading or writing any data — when opened against a store recorded
  * with an unknown or newer version (e.g. throw
- * `PersistedFormatVersionError`, exported from `@flue/runtime/adapter`).
- * The built-in SQL adapters implement this with a one-row `flue_meta`
+ * `PersistedFormatVersionError`, exported from `@amond-ai/agent/adapter`).
+ * The built-in SQL adapters implement this with a one-row `amond_meta`
  * key/value table (key `'format_version'`); non-SQL adapters implement the
  * same obligation natively (a key, a meta document, etc.).
  */

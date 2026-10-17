@@ -2,10 +2,10 @@
  * Document attachments (PDFs) on user messages.
  *
  * pi-ai's content protocol has exactly one binary carrier — `ImageContent`
- * (`{ type: 'image', data, mimeType }`) — and no document block. Flue therefore
+ * (`{ type: 'image', data, mimeType }`) — and no document block. amond therefore
  * carries a document through the model context as an `ImageContent` whose
  * `mimeType` is a supported document type, and rewrites it into the
- * provider's native document block at the one seam Flue owns on every model
+ * provider's native document block at the one seam amond owns on every model
  * request: the agent loop's `StreamFn`, via pi's `onPayload` hook.
  *
  * Everything durable is already media-type agnostic (`AttachmentRef` carries
@@ -51,7 +51,7 @@ const DEFAULT_DOCUMENT_FILENAME = 'document.pdf'
 /**
  * A document as it rides the pi model context: pi's `ImageContent` carrier
  * with a document `mimeType`, plus the uploader's filename when known (pi
- * ignores the extra field; Flue's payload rewrite reads it).
+ * ignores the extra field; amond's payload rewrite reads it).
  */
 type DocumentContextBlock = ImageContent & { filename?: string }
 
@@ -76,7 +76,7 @@ function assertSupportedDocuments(documents: readonly PromptDocument[] | undefin
   for (const document of documents ?? []) {
     if (!isDocumentMimeType(document.mimeType)) {
       throw new Error(
-        `[flue] Unsupported document mimeType "${document.mimeType}". ` +
+        `[amond] Unsupported document mimeType "${document.mimeType}". ` +
         `Supported: ${DOCUMENT_MIME_TYPES.join(', ')}.`,
       )
     }
@@ -130,7 +130,7 @@ function warnDocumentsOmitted(api: string): void {
   if (warnedApis.has(api)) { return }
   warnedApis.add(api)
   console.warn(
-    `[flue] Model API "${api}" does not support native document input; ` +
+    `[amond] Model API "${api}" does not support native document input; ` +
     'document attachments are replaced with a text placeholder in the model context. ' +
     `Native document input is supported on: ${[...NATIVE_DOCUMENT_APIS].join(', ')}.`,
   )

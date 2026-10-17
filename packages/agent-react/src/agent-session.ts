@@ -2,11 +2,11 @@ import type {
   AgentConversationObservation,
   AgentPromptOptions,
   AgentSendResult,
+  AmondClient,
   ConversationLiveMode,
   DeliveredAttachment,
   DeliveredDocumentAttachment,
-  FlueClient,
-} from '@flue/sdk'
+} from '@amond-ai/agent-sdk'
 import {
   
   emptyAgentState,
@@ -40,7 +40,7 @@ export class AgentSession {
   private localId = 0
 
   constructor(
-    private client: FlueClient,
+    private client: AmondClient,
     private live: ConversationLiveMode = 'sse',
   ) {}
 

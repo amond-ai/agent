@@ -1,4 +1,4 @@
-import type { ConversationStreamChunk } from '@flue/sdk'
+import type { ConversationStreamChunk } from '@amond-ai/agent-sdk'
 
 export interface LineEventPresenterOptions {
   write(line: string): void

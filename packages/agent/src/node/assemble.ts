@@ -1,23 +1,23 @@
 /**
  * The shared Node runtime assembly — the transport-free core of what a
- * generated Flue server entry does at boot. `start()` (public, `./start.ts`)
- * and the CLI's `flue run` bootstrap are its consumers.
+ * generated amond server entry does at boot. `start()` (public, `./start.ts`)
+ * and the CLI's `amond run` bootstrap are its consumers.
  *
  * Kept free of `node:sqlite` (no default-adapter import) so it can sit in
- * `@flue/runtime/internal`'s module graph, which Workers builds also load.
+ * `@amond-ai/agent/internal`'s module graph, which Workers builds also load.
  */
 
 import type { PersistenceAdapter } from '../agent-execution-store.ts'
-import { createFlueContext } from '../client.ts'
-import type { FlueRuntime } from '../runtime/flue-app.ts'
+import { createAmondContext } from '../client.ts'
+import type { AmondRuntime } from '../runtime/amond-app.ts'
 import {
-  configureFlueRuntime,
-  getFlueRuntime,
-  resetFlueRuntimeForTests,
-} from '../runtime/flue-app.ts'
+  configureAmondRuntime,
+  getAmondRuntime,
+  resetAmondRuntimeForTests,
+} from '../runtime/amond-app.ts'
 import { resolveModel } from '../runtime/providers.ts'
-import type { FlueAgentRegistration } from '../runtime/registration.ts'
-import { getRegisteredFlueAgents, registerFlueAgents } from '../runtime/registration.ts'
+import type { AmondAgentRegistration } from '../runtime/registration.ts'
+import { getRegisteredAmondAgents, registerAmondAgents } from '../runtime/registration.ts'
 import type { RuntimeActivityGate } from '../runtime/runtime-activity-gate.ts'
 import { createRuntimeActivityGate } from '../runtime/runtime-activity-gate.ts'
 import { createNodeAgentCoordinator, createNodeDispatchQueue } from './agent-coordinator.ts'
@@ -29,12 +29,12 @@ const SHUTDOWN_TIMEOUT_MS = 30_000
 // db.ts module) — so a closing assembly may only close an adapter no live
 // configuration still uses, and a failed replacement hands the runtime back
 // to the assembly it displaced instead of leaving it unconfigured.
-const configurationAdapters = new WeakMap<FlueRuntime, PersistenceAdapter>()
-const closedConfigurations = new WeakSet<FlueRuntime>()
+const configurationAdapters = new WeakMap<AmondRuntime, PersistenceAdapter>()
+const closedConfigurations = new WeakSet<AmondRuntime>()
 
 /** Whether `adapter` belongs to the currently live runtime configuration. */
 export function adapterInUseByLiveRuntime(adapter: PersistenceAdapter): boolean {
-  const live = getFlueRuntime()
+  const live = getAmondRuntime()
   return live !== undefined && configurationAdapters.get(live) === adapter
 }
 
@@ -52,7 +52,7 @@ export async function connectPersistenceAdapter(
 ): Promise<ConnectedStores> {
   if (!adapter || typeof adapter.connect !== 'function') {
     throw new Error(
-      `[flue] ${sourceLabel} must provide a PersistenceAdapter with a connect() method.`,
+      `[amond] ${sourceLabel} must provide a PersistenceAdapter with a connect() method.`,
     )
   }
   try {
@@ -84,7 +84,7 @@ export async function connectPersistenceAdapter(
   }
   catch (error) {
     throw new Error(
-      `[flue] Failed to initialize persistence from ${sourceLabel}: ${ 
+      `[amond] Failed to initialize persistence from ${sourceLabel}: ${ 
         error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     )
@@ -93,7 +93,7 @@ export async function connectPersistenceAdapter(
 
 export interface AssembleNodeAgentRuntimeOptions {
   /** The application's agent set; registered wholesale (identity keyed). */
-  agents: readonly FlueAgentRegistration[]
+  agents: readonly AmondAgentRegistration[]
   /** Connected persistence; close() disconnects it (see `connectPersistenceAdapter`). */
   adapter: PersistenceAdapter
   stores: ConnectedStores
@@ -115,7 +115,7 @@ export interface AssembledNodeAgentRuntime {
  * The shared Node runtime assembly: registration → coordinator → dispatch
  * queue → runtime seed → startup reconciliation. Exactly the wiring the
  * generated Node server entry performs, without HTTP: no Hono app, no
- * listener, no channels. `flue run` and `start()` are its consumers.
+ * listener, no channels. `amond run` and `start()` are its consumers.
  */
 export async function assembleNodeAgentRuntime(
   options: AssembleNodeAgentRuntimeOptions,
@@ -123,17 +123,17 @@ export async function assembleNodeAgentRuntime(
   const runtimeEnv = options.env ?? process.env
   // Captured before this assembly takes over, so a failed load can hand the
   // runtime back to the application that is still serving.
-  const displacedConfiguration = getFlueRuntime()
-  const displacedAgents = getRegisteredFlueAgents()
-  registerFlueAgents(options.agents)
+  const displacedConfiguration = getAmondRuntime()
+  const displacedAgents = getRegisteredAmondAgents()
+  registerAmondAgents(options.agents)
 
   const { submissionStore, conversationStreamStore, attachmentStore } = options.stores
   if (!conversationStreamStore || !attachmentStore) {
-    throw new Error('[flue] Persistence adapter did not provide conversation stores.')
+    throw new Error('[amond] Persistence adapter did not provide conversation stores.')
   }
 
   // The coordinator's working set; app membership itself lives in the
-  // agent registry seeded by registerFlueAgents above.
+  // agent registry seeded by registerAmondAgents above.
   const agents = options.agents.map(registration => ({
     name: registration.identity,
     agent: registration.agent,
@@ -144,7 +144,7 @@ export async function assembleNodeAgentRuntime(
     submissions: submissionStore,
     agents,
     createContext: ({ id, agentName, request, submissionId }) =>
-      createFlueContext({
+      createAmondContext({
         id,
         agentName,
         submissionId,
@@ -159,7 +159,7 @@ export async function assembleNodeAgentRuntime(
   })
   const dispatchQueue = createNodeDispatchQueue(coordinator)
 
-  const runtimeConfiguration: FlueRuntime = {
+  const runtimeConfiguration: AmondRuntime = {
     target: 'node',
     devMode: options.devMode ?? false,
     dispatchQueue,
@@ -171,7 +171,7 @@ export async function assembleNodeAgentRuntime(
     attachmentStore,
   }
   configurationAdapters.set(runtimeConfiguration, options.adapter)
-  configureFlueRuntime(runtimeConfiguration)
+  configureAmondRuntime(runtimeConfiguration)
 
   // Reconcile work a previous process left interrupted (durable adapters
   // persist across invocations by design; a fresh store is a no-op).
@@ -179,7 +179,7 @@ export async function assembleNodeAgentRuntime(
     await coordinator.reconcileSubmissions()
   }
   catch (error) {
-    console.error('[flue] Startup submission reconciliation failed:', error)
+    console.error('[amond] Startup submission reconciliation failed:', error)
   }
 
   let closing: Promise<void> | undefined
@@ -203,13 +203,13 @@ export async function assembleNodeAgentRuntime(
         // If the assembly this one displaced is still serving (this load
         // failed after taking over), hand the runtime back to it;
         // otherwise clear it.
-        if (getFlueRuntime() === runtimeConfiguration) {
+        if (getAmondRuntime() === runtimeConfiguration) {
           if (displacedConfiguration && !closedConfigurations.has(displacedConfiguration)) {
-            registerFlueAgents(displacedAgents)
-            configureFlueRuntime(displacedConfiguration)
+            registerAmondAgents(displacedAgents)
+            configureAmondRuntime(displacedConfiguration)
           }
           else {
-            resetFlueRuntimeForTests()
+            resetAmondRuntimeForTests()
           }
         }
         try {
@@ -225,7 +225,7 @@ export async function assembleNodeAgentRuntime(
           errors.push(error)
         }
         if (errors.length === 1) { throw errors[0] }
-        if (errors.length > 1) { throw new AggregateError(errors, '[flue] Flue shutdown failed.') }
+        if (errors.length > 1) { throw new AggregateError(errors, '[amond] amond shutdown failed.') }
       })()
       return closing
     },

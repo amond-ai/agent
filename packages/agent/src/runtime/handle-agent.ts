@@ -1,6 +1,6 @@
 /** Shared per-agent HTTP dispatcher for the Node and Cloudflare targets. */
 
-import type { FlueContextInternal } from '../client.ts'
+import type { AmondContextInternal } from '../client.ts'
 import { InvalidRequestError, parseJsonBody, toHttpResponse } from '../errors.ts'
 import { extractTraceCarrier } from '../execution-interceptor.ts'
 import type { AttachedAgentSubmissionAdmission } from './agent-submissions.ts'
@@ -8,7 +8,7 @@ import type { DispatchInput } from './dispatch-queue.ts'
 import { parseDeliveredInput } from './schemas.ts'
 
 export function assertAgentDispatchAdmissionInput(input: unknown): asserts input is DispatchInput {
-  if (!isDispatchInput(input)) { throw new Error('[flue] Internal dispatch admission received an invalid payload.') }
+  if (!isDispatchInput(input)) { throw new Error('[amond] Internal dispatch admission received an invalid payload.') }
 }
 
 function isDispatchInput(value: unknown): value is DispatchInput {
@@ -41,7 +41,7 @@ export interface CreateAgentContextOptions {
   submissionId?: string
 }
 
-export type CreateAgentContextFn = (options: CreateAgentContextOptions) => FlueContextInternal
+export type CreateAgentContextFn = (options: CreateAgentContextOptions) => AmondContextInternal
 
 export interface HandleAgentOptions {
   request: Request

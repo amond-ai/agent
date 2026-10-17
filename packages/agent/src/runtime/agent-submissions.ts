@@ -10,13 +10,13 @@ import type {
 import { DURABILITY_DEFAULT_TIMEOUT_MS } from '../agent-execution-store.ts'
 import { assertDurability } from '../agent-tuning.ts'
 import { decodeBase64 } from '../base64.ts'
-import type { FlueContextInternal } from '../client.ts'
+import type { AmondContextInternal } from '../client.ts'
 import type { ConversationRecordWriter } from '../conversation-writer.ts'
 import {
   AgentInstanceExistsError,
   AgentInstanceNotFoundError,
+  AmondError,
   classifyError,
-  FlueError,
   InvalidRequestError,
   SubmissionAbortedError,
   SubmissionConflictError,
@@ -25,7 +25,7 @@ import {
   SubmissionTimeoutError,
 } from '../errors.ts'
 import { interceptExecution } from '../execution-interceptor.ts'
-import type { FlueTraceCarrier } from '../execution-interceptor.ts'
+import type { AmondTraceCarrier } from '../execution-interceptor.ts'
 import { getInternalSession } from '../session.ts'
 import type { Agent, CallHandle, DeliveredMessage } from '../types.ts'
 import { createAttachmentRef } from './attachment-store.ts'
@@ -61,7 +61,7 @@ export interface AgentSubmissionInput {
    */
   readonly initialData?: unknown
   readonly acceptedAt: string
-  readonly traceCarrier?: FlueTraceCarrier
+  readonly traceCarrier?: AmondTraceCarrier
 }
 
 export interface AgentSubmissionInterruption {
@@ -154,7 +154,7 @@ interface AttachedAgentSubmissionReceipt {
 /** Options accompanying one attached (direct) submission admission. */
 export interface AttachedAgentSubmissionOptions {
   /** Distributed-trace continuation extracted from the caller's context. */
-  readonly traceCarrier?: FlueTraceCarrier
+  readonly traceCarrier?: AmondTraceCarrier
   /** Instance-creation data; the seed, consulted only when this send creates. */
   readonly initialData?: unknown
   /**
@@ -242,7 +242,7 @@ export async function admitInstanceContact(options: {
   }
   if (condition === null && exists) {
     if (reduced.uid === undefined) {
-      throw new Error('[flue] invariant: an existing instance\'s birth record must carry a uid.')
+      throw new Error('[amond] invariant: an existing instance\'s birth record must carry a uid.')
     }
     throw new AgentInstanceExistsError({ id: options.id, uid: reduced.uid })
   }
@@ -301,7 +301,7 @@ export async function ensureInstanceIdentity(
   if (existing) {
     const { uid } = await writer.loadReducedState()
     if (uid === undefined) {
-      throw new Error('[flue] invariant: an existing instance\'s birth record must carry a uid.')
+      throw new Error('[amond] invariant: an existing instance\'s birth record must carry a uid.')
     }
     return { conversationId: existing.conversationId, uid }
   }
@@ -338,7 +338,7 @@ export async function createDirectAgentSubmissionInput(options: {
   id: string
   message: DeliveredMessage
   initialData?: unknown
-  traceCarrier?: FlueTraceCarrier
+  traceCarrier?: AmondTraceCarrier
   /** When present, the submission id is derived from it instead of minted. */
   idempotencyKey?: string
 }): Promise<AgentSubmissionInput> {
@@ -469,7 +469,7 @@ export function createAgentSubmissionSessionHandler(
   agent: Agent,
   input: AgentSubmissionInput,
   execute: (session: AgentSubmissionSession) => Promise<unknown> | unknown,
-): (ctx: FlueContextInternal) => Promise<unknown> {
+): (ctx: AmondContextInternal) => Promise<unknown> {
   return async (ctx) => {
     const session = await openAgentSubmissionSession(ctx, agent, input)
     return execute(session)
@@ -486,7 +486,7 @@ export function createAgentSubmissionSessionHandler(
  * because all durable side effects have already been applied inside this
  * function and the coordinator needs no further action.
  *
- * The `createContext` callback builds a `FlueContextInternal` for handler
+ * The `createContext` callback builds an `AmondContextInternal` for handler
  * execution. Submission input is delivered through the session handler rather
  * than context construction.
  */
@@ -494,7 +494,7 @@ export async function reconcileInterruptedSubmission(
   submissions: AgentSubmissionStore,
   submission: AgentSubmission,
   agent: Agent,
-  createContext: (submissionId: string) => FlueContextInternal,
+  createContext: (submissionId: string) => AmondContextInternal,
   lease?: { ownerId: string, leaseExpiresAt: number },
   conversationWriter?: ConversationRecordWriter,
   emitCoordinatorEvent?: CoordinatorEventEmitter,
@@ -778,11 +778,11 @@ export async function settleUnclaimableSubmission(
 export function submissionSyntheticRequest(input: AgentSubmissionInput): Request {
   if (input.kind === 'direct') {
     return new Request(
-      `https://flue.invalid/agents/${encodeURIComponent(input.agent)}/${encodeURIComponent(input.id)}`,
+      `https://amond.invalid/agents/${encodeURIComponent(input.agent)}/${encodeURIComponent(input.id)}`,
       { method: 'POST' },
     )
   }
-  return new Request('https://flue.invalid/_dispatch', { method: 'POST' })
+  return new Request('https://amond.invalid/_dispatch', { method: 'POST' })
 }
 
 // ─── Shared submission processing ────────────────────────────────────────────
@@ -795,7 +795,7 @@ export interface ProcessSubmissionOptions {
   /** Resolve an agent definition by name. Must throw if absent. */
   resolveAgent: (name: string) => Agent
   /** Build a context for this submission. */
-  createContext: (submissionId: string) => FlueContextInternal
+  createContext: (submissionId: string) => AmondContextInternal
   conversationWriter?: ConversationRecordWriter
   /**
    * Context-free coordinator emitter for `submission_recovery` signals from
@@ -865,7 +865,7 @@ export async function processSubmission(opts: ProcessSubmissionOptions): Promise
         onInputApplied: async (durability: SubmissionDurability) => {
           if (!(await submissions.markSubmissionInputApplied(attempt, durability))) {
             throw new Error(
-              '[flue] Agent submission attempt lost ownership before input application.',
+              '[amond] Agent submission attempt lost ownership before input application.',
             )
           }
           if (submission.kind === 'direct') {
@@ -874,7 +874,7 @@ export async function processSubmission(opts: ProcessSubmissionOptions): Promise
             }
             catch (callbackError) {
               console.error(
-                '[flue:event-stream] Direct user event persistence failed before provider execution:',
+                '[amond:event-stream] Direct user event persistence failed before provider execution:',
                 callbackError,
               )
             }
@@ -1019,7 +1019,7 @@ async function failInterruptedSubmission(
   agent: Agent,
   reason: AgentSubmissionInterruption['reason'],
   createError: (interruptedTools?: ReadonlyArray<InterruptedToolCallRef>) => Error,
-  createContext: (submissionId: string) => FlueContextInternal,
+  createContext: (submissionId: string) => AmondContextInternal,
   conversationWriter?: ConversationRecordWriter,
   emitCoordinatorEvent?: CoordinatorEventEmitter,
 ): Promise<void> {
@@ -1044,7 +1044,7 @@ async function failInterruptedSubmission(
   }
   catch (terminalError) {
     console.error(
-      '[flue:submission-reconciliation] Failed to record terminal message for submission',
+      '[amond:submission-reconciliation] Failed to record terminal message for submission',
       submission.submissionId,
       terminalError,
     )
@@ -1091,7 +1091,7 @@ async function settleAbortedWithContext(
   submission: AgentSubmission,
   attempt: SubmissionAttemptRef,
   agent: Agent,
-  ctx: FlueContextInternal,
+  ctx: AmondContextInternal,
   conversationWriter?: ConversationRecordWriter,
   emitCoordinatorEvent?: CoordinatorEventEmitter,
 ): Promise<void> {
@@ -1108,7 +1108,7 @@ async function settleAbortedWithContext(
   }
   catch (advisoryError) {
     console.error(
-      '[flue:submission-abort] Failed to record abort advisory for submission',
+      '[amond:submission-abort] Failed to record abort advisory for submission',
       submission.submissionId,
       advisoryError,
     )
@@ -1155,7 +1155,7 @@ async function settleAbortedWithContext(
 async function settleJoinedSubmissions(
   submissions: AgentSubmissionStore,
   hostAttempt: SubmissionAttemptRef,
-  ctx: FlueContextInternal,
+  ctx: AmondContextInternal,
   outcome: 'completed' | 'failed' | 'aborted',
   error?: unknown,
   conversationWriter?: ConversationRecordWriter,
@@ -1178,12 +1178,12 @@ async function settleSubmissionWithRecord(
   submissions: AgentSubmissionStore,
   kind: AgentSubmission['kind'],
   attempt: SubmissionAttemptRef,
-  ctx: FlueContextInternal,
+  ctx: AmondContextInternal,
   outcome: 'completed' | 'failed' | 'aborted',
   error?: unknown,
   conversationWriter?: ConversationRecordWriter,
 ): Promise<void> {
-  // Payload-wins decoration (see createFlueContext's createEvent) keeps this
+  // Payload-wins decoration (see createAmondContext's createEvent) keeps this
   // submissionId intact even when a joined delivery settles under the host's
   // context.
   const event = ctx.createEvent({
@@ -1203,7 +1203,7 @@ async function settleSubmissionWithRecord(
       await ctx.flushEventCallbacks()
     }
     catch (callbackError) {
-      console.error('[flue:subscriber] Terminal event subscriber failed:', callbackError)
+      console.error('[amond:subscriber] Terminal event subscriber failed:', callbackError)
     }
   }
   // No canonical stream to record against, or no conversation to anchor the
@@ -1263,7 +1263,7 @@ async function settleSubmissionWithRecord(
     // re-emission at wake cadence is the alerting signal.
     const row = await submissions.getSubmission(attempt.submissionId).catch(() => null)
     if (row && row.status !== 'settled') {
-      console.error('[flue:submission-settlement]', {
+      console.error('[amond:submission-settlement]', {
         submissionId: attempt.submissionId,
         attemptId: attempt.attemptId,
         operation: 'reserve_settlement',
@@ -1302,7 +1302,7 @@ async function settleSubmissionWithRecord(
     // refusing would wedge reconciliation in an unterminable loop. Surface it
     // loudly for diagnosis instead of swallowing it.
     console.error(
-      '[flue:submission-settlement] Canonical settlement conflict; the existing durable record is authoritative.',
+      '[amond:submission-settlement] Canonical settlement conflict; the existing durable record is authoritative.',
       { submissionId: attempt.submissionId, recordId: eventKey },
     )
   }
@@ -1344,7 +1344,7 @@ export async function finalizePendingSettlement(
   if (!canonical) { await writer.append([pending.record], { submission: attempt }) }
   else if (JSON.stringify(canonical) !== JSON.stringify(pending.record)) {
     throw new Error(
-      '[flue] Pending settlement does not match its canonical record. Clear incompatible beta persistence.',
+      '[amond] Pending settlement does not match its canonical record. Clear incompatible beta persistence.',
     )
   }
   emitCoordinatorEvent?.({
@@ -1361,7 +1361,7 @@ export async function finalizePendingSettlement(
 /**
  * The durable-shaped, stackless error projection shared by the settlement
  * record, the live `submission_settled` event, and `submission_recovery`
- * payloads. Non-`FlueError` failures are replaced wholesale — internal
+ * payloads. Non-`AmondError` failures are replaced wholesale — internal
  * messages never ride event or record error fields; the live observation's
  * `errorInfo` detail carries the classified error (with throw-site stack)
  * instead.
@@ -1374,7 +1374,7 @@ export function serializeSubmissionError(error: unknown): {
   dev?: string
   meta?: Record<string, unknown>
 } {
-  if (error instanceof FlueError) {
+  if (error instanceof AmondError) {
     return {
       name: error.name,
       message: error.message,
@@ -1399,7 +1399,7 @@ function submissionAttemptRef(submission: AgentSubmission): SubmissionAttemptRef
 }
 
 async function openAgentSubmissionSession(
-  ctx: FlueContextInternal,
+  ctx: AmondContextInternal,
   agent: Agent,
   input: AgentSubmissionInput,
 ): Promise<AgentSubmissionSession> {
@@ -1410,7 +1410,7 @@ async function openAgentSubmissionSession(
   // birth record admission wrote is the only creation data renders see.
   const harness = await ctx.initializeRootHarness(agent, input.message, input.initialData)
   // External submissions always target the default session of the default
-  // harness. `harness.session()` hands out the public FlueSession facade;
+  // harness. `harness.session()` hands out the public AmondSession facade;
   // unwrap it to reach the internal durable submission executor surface.
   // Non-facade objects (test fakes injected through this seam) are used
   // directly via the same structural contract.

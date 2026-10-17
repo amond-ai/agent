@@ -7,7 +7,7 @@ export interface SkillPackageInput {
   files: ReadonlyArray<{ path: string, content: Uint8Array }>
 }
 
-const directoryKey = Symbol.for('@flue/runtime/packaged-skill/v1')
+const directoryKey = Symbol.for('@amond-ai/agent/packaged-skill/v1')
 const encoder = new TextEncoder()
 
 export function buildPackagedSkill(input: SkillPackageInput): PackagedSkillDirectory {
@@ -40,7 +40,7 @@ export function buildPackagedSkill(input: SkillPackageInput): PackagedSkillDirec
 
 export function createSkillReference(directory: PackagedSkillDirectory): SkillReference {
   const reference: SkillReference = {
-    __flueSkillReference: true,
+    __amondSkillReference: true,
     id: directory.id,
     name: directory.name,
     description: directory.description,

@@ -1,47 +1,47 @@
 /**
- * The `flue()` Vite plugin — makes a Vite project a Flue application.
+ * The `amond()` Vite plugin — makes a Vite project an amond application.
  *
  * ```ts
  * // vite.config.ts
  * import { defineConfig } from 'vite';
- * import { flue } from '@flue/vite';
- * export default defineConfig({ plugins: [flue()] });
+ * import { amond } from '@amond-ai/agent-vite';
+ * export default defineConfig({ plugins: [amond()] });
  * ```
  *
- * The plugin options ARE the Flue config: `flue(config?: FlueConfig)` merges
- * inline values over a discovered `flue.config.*` (inline wins). The target
+ * The plugin options ARE the amond config: `amond(config?: AmondConfig)` merges
+ * inline values over a discovered `amond.config.*` (inline wins). The target
  * defaults to `'cloudflare'` when `@cloudflare/vite-plugin` is present in the
  * resolved plugin array, `'node'` otherwise; an explicit `target` overrides
  * detection.
  *
  * On the Cloudflare target, the user wires `cloudflare({ config:
- * flueWorkerConfig() })` and `flue()` must precede `cloudflare()` in the
- * plugin array: the sibling's `config` hook invokes Flue's worker-config
- * customizer (see cloudflare-worker-config.ts), which needs flue's completed
+ * amondWorkerConfig() })` and `amond()` must precede `cloudflare()` in the
+ * plugin array: the sibling's `config` hook invokes amond's worker-config
+ * customizer (see cloudflare-worker-config.ts), which needs amond's completed
  * project resolution and agent scan. The sibling owns the wrangler config,
  * workerd dev, build output, and preview.
  *
  * Virtual modules (resolved only inside graphs this plugin serves):
  *
- * - `virtual:flue/app`    → the resolved app entry (REQUIRED to exist)
- * - `virtual:flue/db`     → the resolved db entry, or a default-adapter stub
- * - `virtual:flue/agents` → the scanned `'use agent'` module set
- * - `virtual:flue/server` → the Node bootstrap (real code in this package)
- * - `virtual:flue/worker` → the generated Cloudflare Worker entry (wrangler
+ * - `virtual:amond/app`    → the resolved app entry (REQUIRED to exist)
+ * - `virtual:amond/db`     → the resolved db entry, or a default-adapter stub
+ * - `virtual:amond/agents` → the scanned `'use agent'` module set
+ * - `virtual:amond/server` → the Node bootstrap (real code in this package)
+ * - `virtual:amond/worker` → the generated Cloudflare Worker entry (wrangler
  *   `main`; per-agent Durable Object classes)
  */
 import * as fs from 'node:fs'
 import { builtinModules } from 'node:module'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { FlueConfig, ResolvedFlueProject } from '@flue/runtime/config'
+import type { AmondConfig, ResolvedAmondProject } from '@amond-ai/agent/config'
 import {
-  FLUE_CONFIG_BASENAMES,
-  loadFlueConfig,
-  mergeFlueConfig,
-  parseFlueConfig,
-  resolveFlueProject,
-} from '@flue/runtime/config'
+  AMOND_CONFIG_BASENAMES,
+  loadAmondConfig,
+  mergeAmondConfig,
+  parseAmondConfig,
+  resolveAmondProject,
+} from '@amond-ai/agent/config'
 import {
   defaultAllowedOrigins,
   normalizePath,
@@ -60,13 +60,13 @@ import { generateCloudflareEntry } from './cloudflare-entry.ts'
 import {
   cloudflareOrderingError,
   
-  registerFlueWorkerConfigSource,
+  registerAmondWorkerConfigSource,
   VIRTUAL_WORKER_ENTRY,
 } from './cloudflare-worker-config.ts'
-import type { FlueWorkerConfigSource } from './cloudflare-worker-config.ts'
+import type { AmondWorkerConfigSource } from './cloudflare-worker-config.ts'
 import {
   
-  flueDependencyResolverPlugin,
+  amondDependencyResolverPlugin,
   getUserExternals,
 } from './dependency-resolver.ts'
 import type { DependencyResolverState } from './dependency-resolver.ts'
@@ -82,14 +82,14 @@ import { transformUseAgentModule } from './use-agent-transform.ts'
 import { createWatchQueue } from './watch-queue.ts'
 import type { WatchQueue } from './watch-queue.ts'
 
-/** The resolved Flue project, exposed on the core plugin's `api` field. */
-export interface FlueResolvedProjectInfo {
-  /** The merged Flue config (discovered file + inline `flue()` options). */
-  readonly config: FlueConfig
-  /** Absolute path of the discovered `flue.config.*`, if any. */
+/** The resolved amond project, exposed on the core plugin's `api` field. */
+export interface AmondResolvedProjectInfo {
+  /** The merged amond config (discovered file + inline `amond()` options). */
+  readonly config: AmondConfig
+  /** Absolute path of the discovered `amond.config.*`, if any. */
   readonly configPath: string | undefined
   /** The resolved filesystem layout (root, source root, entries). */
-  readonly project: ResolvedFlueProject
+  readonly project: ResolvedAmondProject
   /** The selected target (explicit config, or plugin-array auto-detection). */
   readonly target: 'node' | 'cloudflare'
   /**
@@ -101,21 +101,21 @@ export interface FlueResolvedProjectInfo {
 
 /**
  * The core plugin's `api` field — a stable read surface for other tools
- * (`flue run` may consume this later). `resolved` is `undefined` until Vite
+ * (`amond run` may consume this later). `resolved` is `undefined` until Vite
  * config resolution completes.
  */
-export interface FlueVitePluginApi {
-  readonly resolved: FlueResolvedProjectInfo | undefined
+export interface AmondVitePluginApi {
+  readonly resolved: AmondResolvedProjectInfo | undefined
 }
 
-const VIRTUAL_APP = 'virtual:flue/app'
-const VIRTUAL_DB = 'virtual:flue/db'
-const VIRTUAL_AGENTS = 'virtual:flue/agents'
-const VIRTUAL_SERVER = 'virtual:flue/server'
-const VIRTUAL_PROVIDERS = 'virtual:flue/providers'
-const RESOLVED_DB_STUB = '\0virtual:flue/db'
-const RESOLVED_AGENTS = '\0virtual:flue/agents'
-const RESOLVED_PROVIDERS = '\0virtual:flue/providers'
+const VIRTUAL_APP = 'virtual:amond/app'
+const VIRTUAL_DB = 'virtual:amond/db'
+const VIRTUAL_AGENTS = 'virtual:amond/agents'
+const VIRTUAL_SERVER = 'virtual:amond/server'
+const VIRTUAL_PROVIDERS = 'virtual:amond/providers'
+const RESOLVED_DB_STUB = '\0virtual:amond/db'
+const RESOLVED_AGENTS = '\0virtual:amond/agents'
+const RESOLVED_PROVIDERS = '\0virtual:amond/providers'
 const RESOLVED_WORKER_ENTRY = `\0${VIRTUAL_WORKER_ENTRY}`
 
 /** Externals the Node target always keeps out of the bundle (optional native deps). */
@@ -123,15 +123,15 @@ const NODE_TARGET_EXTERNALS = ['node-liblzma', '@mongodb-js/zstd']
 
 /**
  * Packages that must resolve to exactly one copy in every module graph:
- * `@flue/runtime` holds module-scoped registries, and a second `hono` splits
+ * `@amond-ai/agent` holds module-scoped registries, and a second `hono` splits
  * middleware/context identity. Declarative belt alongside the dependency
  * resolver, and the only single-instance guard on the Cloudflare target
  * (where the resolver stays inert).
  */
-const RUNTIME_DEDUPE = ['@flue/runtime', 'hono']
+const RUNTIME_DEDUPE = ['@amond-ai/agent', 'hono']
 
 /**
- * Vite config paths flue's `config` hook forces (scalars returned from the
+ * Vite config paths amond's `config` hook forces (scalars returned from the
  * hook override the user's values silently). User-set values are collected at
  * config time and warned about in `configResolved` instead of erroring —
  * matching how established Vite frameworks treat conflicting config.
@@ -170,11 +170,11 @@ const DEV_CORS = {
   maxAge: 86400,
 }
 
-interface FluePluginState {
+interface AmondPluginState {
   root: string
   configPath: string | undefined
-  mergedConfig: FlueConfig
-  project: ResolvedFlueProject
+  mergedConfig: AmondConfig
+  project: ResolvedAmondProject
   agents: AgentScanResult[]
   /** Scan results grouped by normalized (posix) absolute file path. */
   agentsByPath: Map<string, AgentScanResult[]>
@@ -186,20 +186,20 @@ interface FluePluginState {
   cloudflarePrepared: boolean
   /** Serializes and coalesces watcher-driven re-scans. */
   watchQueue: WatchQueue
-  resolved: FlueResolvedProjectInfo | undefined
+  resolved: AmondResolvedProjectInfo | undefined
   /** Warnings collected during the `config` hook, logged in `configResolved`. */
   pendingWarnings: string[]
 }
 
-export function flue(config: FlueConfig = {}): Plugin[] {
-  const inlineConfig = parseFlueConfig(config, 'inline flue() options')
+export function amond(config: AmondConfig = {}): Plugin[] {
+  const inlineConfig = parseAmondConfig(config, 'inline amond() options')
   const bootstrap = resolveBootstrapPaths()
 
-  const state: FluePluginState = {
+  const state: AmondPluginState = {
     root: '',
     configPath: undefined,
     mergedConfig: {},
-    project: undefined as unknown as ResolvedFlueProject,
+    project: undefined as unknown as ResolvedAmondProject,
     agents: [],
     agentsByPath: new Map(),
     explicitTarget: undefined,
@@ -216,11 +216,11 @@ export function flue(config: FlueConfig = {}): Plugin[] {
     importers: undefined,
   }
 
-  // The link between this flue() instance and a flueWorkerConfig() created
+  // The link between this amond() instance and an amondWorkerConfig() created
   // after it in the same vite.config evaluation. The `config` hook keeps
   // `configReady`/`isPreview` current; the customizer reads the live agent
   // scan through the getter and reports back via `customizerInvoked`.
-  const workerConfigSource: FlueWorkerConfigSource = {
+  const workerConfigSource: AmondWorkerConfigSource = {
     configReady: false,
     isPreview: false,
     get doBindings() {
@@ -231,7 +231,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
     },
     customizerInvoked: false,
   }
-  registerFlueWorkerConfigSource(workerConfigSource)
+  registerAmondWorkerConfigSource(workerConfigSource)
 
   // Records import edges on the Node target so wrong-environment failures
   // (a `cloudflare:*` import reaching the Node graph) can print the chain
@@ -253,7 +253,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
     state.agentsByPath = byPath
   }
 
-  const api: FlueVitePluginApi = {
+  const api: AmondVitePluginApi = {
     get resolved() {
       return state.resolved
     },
@@ -267,7 +267,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
 
   // Serialized dev-server restarts. Vite's server.restart() returns the
   // in-flight promise when one is already running, which would silently drop
-  // a flue.config edit landing mid-restart; queueing at plugin scope (the
+  // an amond.config edit landing mid-restart; queueing at plugin scope (the
   // plugin instances survive restarts) guarantees a follow-up restart runs.
   let restartQueue = Promise.resolve()
   let restartPending = false
@@ -282,20 +282,20 @@ export function flue(config: FlueConfig = {}): Plugin[] {
       })
       .catch((error) => {
         server.config.logger.error(
-          `[flue] Dev server restart failed: ${error instanceof Error ? error.message : String(error)}`,
+          `[amond] Dev server restart failed: ${error instanceof Error ? error.message : String(error)}`,
         )
       })
   }
 
   const corePlugin: Plugin = {
-    name: 'flue',
+    name: 'amond',
     api,
 
     async config(userConfig, env) {
       const root = path.resolve(userConfig.root ?? process.cwd())
-      const loaded = await loadFlueConfig({ cwd: root })
-      const merged = mergeFlueConfig(loaded.config, inlineConfig)
-      const project = resolveFlueProject({
+      const loaded = await loadAmondConfig({ cwd: root })
+      const merged = mergeAmondConfig(loaded.config, inlineConfig)
+      const project = resolveAmondProject({
         root,
         config: merged,
         configPath: loaded.configPath,
@@ -312,7 +312,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
       workerConfigSource.isPreview = state.isPreview
       workerConfigSource.customizerInvoked = false
 
-      const ambiguityWarning = flueConfigAmbiguityWarning(loaded.configPath)
+      const ambiguityWarning = amondConfigAmbiguityWarning(loaded.configPath)
       if (ambiguityWarning) { state.pendingWarnings.push(ambiguityWarning) }
 
       // Preliminary target detection from the user config's plugin array;
@@ -343,12 +343,12 @@ export function flue(config: FlueConfig = {}): Plugin[] {
 
       if (preliminaryTarget === 'cloudflare') {
         // The sibling plugin resolves its configuration in ITS `config`
-        // hook — reading the user's wrangler config and invoking Flue's
+        // hook — reading the user's wrangler config and invoking amond's
         // worker-config customizer — which runs after this one only when
-        // flue() precedes cloudflare() in the plugin array. Diagnose the
+        // amond() precedes cloudflare() in the plugin array. Diagnose the
         // wrong order here, before the customizer could run against an
         // unresolved project.
-        if (cloudflarePluginPrecedesFlue(userConfig.plugins, corePlugin)) {
+        if (cloudflarePluginPrecedesAmond(userConfig.plugins, corePlugin)) {
           throw cloudflareOrderingError()
         }
         if (project.db) { throw dbOnCloudflareError() }
@@ -436,14 +436,14 @@ export function flue(config: FlueConfig = {}): Plugin[] {
     configResolved(resolved) {
       for (const warning of state.pendingWarnings) { resolved.logger.warn(warning) }
       state.pendingWarnings = []
-      if (resolved.plugins.filter(plugin => plugin.name === 'flue').length > 1) {
-        throw stackless(new Error('[flue] flue() was added to the Vite config more than once.'))
+      if (resolved.plugins.filter(plugin => plugin.name === 'amond').length > 1) {
+        throw stackless(new Error('[amond] amond() was added to the Vite config more than once.'))
       }
       if (normalizePath(path.resolve(resolved.root)) !== normalizePath(state.root)) {
         throw stackless(
           new Error(
-            `[flue] The resolved Vite root (${resolved.root}) differs from the root flue() resolved its project against (${state.root}). ` +
-            'Another plugin changed `root` after flue() ran; set `root` in the Vite config itself instead.',
+            `[amond] The resolved Vite root (${resolved.root}) differs from the root amond() resolved its project against (${state.root}). ` +
+            'Another plugin changed `root` after amond() ran; set `root` in the Vite config itself instead.',
           ),
         )
       }
@@ -467,43 +467,43 @@ export function flue(config: FlueConfig = {}): Plugin[] {
         if (!cloudflareDetected) {
           throw stackless(
             new Error(
-              '[flue] target is \'cloudflare\' but @cloudflare/vite-plugin is not in the Vite plugin array. ' +
-              'Install @cloudflare/vite-plugin and add it after flue():\n\n' +
+              '[amond] target is \'cloudflare\' but @cloudflare/vite-plugin is not in the Vite plugin array. ' +
+              'Install @cloudflare/vite-plugin and add it after amond():\n\n' +
               '  import { cloudflare } from \'@cloudflare/vite-plugin\';\n' +
-              '  import { flue, flueWorkerConfig } from \'@flue/vite\';\n' +
-              '  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
+              '  import { amond, amondWorkerConfig } from \'@amond-ai/agent-vite\';\n' +
+              '  plugins: [amond(), cloudflare({ config: amondWorkerConfig() })]\n',
             ),
           )
         }
         // Belt-and-suspenders ordering check against the RESOLVED array:
         // the sibling's config-resolving plugin ('vite-plugin-cloudflare')
-        // and flue's core plugin are both normal-enforce, so their resolved
+        // and amond's core plugin are both normal-enforce, so their resolved
         // order mirrors config-hook execution order.
-        const flueIndex = resolved.plugins.findIndex(plugin => plugin.name === 'flue')
+        const amondIndex = resolved.plugins.findIndex(plugin => plugin.name === 'amond')
         const cloudflareIndex = resolved.plugins.findIndex(
           plugin => plugin.name === 'vite-plugin-cloudflare',
         )
-        if (cloudflareIndex !== -1 && flueIndex !== -1 && cloudflareIndex < flueIndex) {
+        if (cloudflareIndex !== -1 && amondIndex !== -1 && cloudflareIndex < amondIndex) {
           throw cloudflareOrderingError()
         }
         if (!state.cloudflarePrepared && !state.isPreview) {
           throw stackless(
             new Error(
-              '[flue] The Cloudflare plugin is present, but flue() could not see it while Vite ' +
-              'resolved the config, so flue() configured the Node target instead. Add flue() ' +
+              '[amond] The Cloudflare plugin is present, but amond() could not see it while Vite ' +
+              'resolved the config, so amond() configured the Node target instead. Add amond() ' +
               'and cloudflare() as plain entries of the same `plugins` array (not wrapped in ' +
-              'a Promise or added by another plugin), with flue() first.',
+              'a Promise or added by another plugin), with amond() first.',
             ),
           )
         }
         if (!workerConfigSource.customizerInvoked && !state.isPreview) {
           throw stackless(
             new Error(
-              '[flue] The Cloudflare plugin is not receiving Flue\'s Worker configuration ' +
+              '[amond] The Cloudflare plugin is not receiving amond\'s Worker configuration ' +
               '(the generated Worker entry and per-agent Durable Object bindings). Pass ' +
-              'Flue\'s config customizer to cloudflare():\n\n' +
-              '  import { flue, flueWorkerConfig } from \'@flue/vite\';\n' +
-              '  plugins: [flue(), cloudflare({ config: flueWorkerConfig() })]\n',
+              'amond\'s config customizer to cloudflare():\n\n' +
+              '  import { amond, amondWorkerConfig } from \'@amond-ai/agent-vite\';\n' +
+              '  plugins: [amond(), cloudflare({ config: amondWorkerConfig() })]\n',
             ),
           )
         }
@@ -545,7 +545,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
       }
       if (id === RESOLVED_WORKER_ENTRY) {
         // The Cloudflare Worker entry. The sibling plugin points wrangler
-        // `main` here (via flueWorkerConfig()) and resolves it through
+        // `main` here (via amondWorkerConfig()) and resolves it through
         // Vite's plugin pipeline in both dev and build; bare imports in
         // the generated code resolve against the user's project root.
         const app = state.project?.app
@@ -603,14 +603,14 @@ export function flue(config: FlueConfig = {}): Plugin[] {
       }
       // Agent code runs in this process and providers resolve API keys from
       // process.env; load the project's .env set (shell values win) so
-      // `vite dev` matches `flue run` instead of requiring a shell export.
+      // `vite dev` matches `amond run` instead of requiring a shell export.
       const injectedEnv = applyDevEnv({
         mode: server.config.mode,
         envDir: server.config.envDir,
       })
       if (injectedEnv.length > 0) {
         server.config.logger.info(
-          `[flue] Loaded ${injectedEnv.length} variable${injectedEnv.length === 1 ? '' : 's'} from the project .env files.`,
+          `[amond] Loaded ${injectedEnv.length} variable${injectedEnv.length === 1 ? '' : 's'} from the project .env files.`,
         )
       }
 
@@ -645,7 +645,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
             // Keep the previous set: a duplicate identity or a module
             // mid-edit shouldn't tear the app down. A later fix re-scans.
             server.config.logger.error(
-              `[flue] Agent scan failed: ${error instanceof Error ? error.message : String(error)}`,
+              `[amond] Agent scan failed: ${error instanceof Error ? error.message : String(error)}`,
             )
             return
           }
@@ -657,13 +657,13 @@ export function flue(config: FlueConfig = {}): Plugin[] {
 
       server.watcher.on('all', (event, file) => {
         const filePath = normalizePath(file)
-        if (isFlueConfigPath(filePath, state)) {
-          server.config.logger.info('[flue] flue.config changed; restarting the dev server.')
+        if (isAmondConfigPath(filePath, state)) {
+          server.config.logger.info('[amond] amond.config changed; restarting the dev server.')
           requestRestart(server)
           return
         }
         // Marked-set watch: any source-module event re-checks directive
-        // prologues; a marked-set change regenerates virtual:flue/agents.
+        // prologues; a marked-set change regenerates virtual:amond/agents.
         if (
           (event === 'add' || event === 'change' || event === 'unlink') &&
           isAgentModulePath(filePath) &&
@@ -704,12 +704,12 @@ export function flue(config: FlueConfig = {}): Plugin[] {
       // supplementary context on stderr.)
       if (!error || state.target !== 'node') { return }
       const explanation = explainCloudflareImport(error, importTrace, state.root)
-      if (explanation) { console.error(`[flue] ${explanation}`) }
+      if (explanation) { console.error(`[amond] ${explanation}`) }
     },
 
     configurePreviewServer(server) {
       // Cloudflare preview is fully owned by the sibling plugin (it runs
-      // workerd over the built Worker output); flue contributes nothing.
+      // workerd over the built Worker output); amond contributes nothing.
       if (state.target === 'cloudflare') { return }
       return configureNodePreview(server)
     },
@@ -719,7 +719,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
     corePlugin,
     markdownImportPlugin(),
     importTrace.plugin,
-    flueDependencyResolverPlugin(resolverState),
+    amondDependencyResolverPlugin(resolverState),
     cloudflareAgentsResolverPlugin(state),
   ]
 }
@@ -730,18 +730,18 @@ export function flue(config: FlueConfig = {}): Plugin[] {
  * Cloudflare dev supervision. The sibling plugin runs workerd, serves the
  * app, and owns the wrangler config end to end — it watches the user's
  * authored wrangler file (its `configPath`) and restarts itself on edits.
- * Flue's only dev job is reacting to structural project changes:
+ * amond's only dev job is reacting to structural project changes:
  *
  * - A changed agent set (agent file add/remove, directive change, identity
  *   change, module move) or changed entry modules (`app.ts`/`cloudflare.ts`
- *   discovery) restarts the dev server. The restart re-runs flue's `config`
+ *   discovery) restarts the dev server. The restart re-runs amond's `config`
  *   hook (fresh scan) and the sibling's config resolution, which re-invokes
- *   `flueWorkerConfig()` with the new Durable Object bindings and Worker
+ *   `amondWorkerConfig()` with the new Durable Object bindings and Worker
  *   entry — the same treatment the sibling gives its own config changes.
  * - An authored wrangler config appearing or disappearing restarts the dev
  *   server (the sibling's watcher covers only `change` events on files that
  *   existed at resolution time).
- * - `flue.config.*` changes restart the dev server (project re-resolution).
+ * - `amond.config.*` changes restart the dev server (project re-resolution).
  * - Body edits regenerate nothing; the sibling's own module invalidation
  *   serves them.
  *
@@ -751,7 +751,7 @@ export function flue(config: FlueConfig = {}): Plugin[] {
  */
 function setupCloudflareDevSupervision(options: {
   server: ViteDevServer
-  state: FluePluginState
+  state: AmondPluginState
   requestRestart: (server: ViteDevServer) => void
   updateAgents: (agents: AgentScanResult[]) => void
 }): { stop: () => void } {
@@ -771,16 +771,16 @@ function setupCloudflareDevSupervision(options: {
         stop()
         return
       }
-      let project: ResolvedFlueProject
+      let project: ResolvedAmondProject
       try {
-        project = resolveFlueProject({
+        project = resolveAmondProject({
           root: state.root,
           config: state.mergedConfig,
           configPath: state.configPath,
         })
       }
       catch (error) {
-        logger.error(`[flue] Project re-resolution failed: ${formatWatchError(error)}`)
+        logger.error(`[amond] Project re-resolution failed: ${formatWatchError(error)}`)
         return
       }
       if (!project.app) {
@@ -794,7 +794,7 @@ function setupCloudflareDevSupervision(options: {
       catch (error) {
         // Keep the previous set: a duplicate identity or a module mid-edit
         // shouldn't tear the app down. A later fix re-scans.
-        logger.error(`[flue] Agent scan failed: ${formatWatchError(error)}`)
+        logger.error(`[amond] Agent scan failed: ${formatWatchError(error)}`)
         return
       }
       if (stopped) { return }
@@ -805,7 +805,7 @@ function setupCloudflareDevSupervision(options: {
       state.project = project
       updateAgents(agents)
       if (structuralChange) {
-        logger.info('[flue] The agent set or entry modules changed; restarting the dev server.')
+        logger.info('[amond] The agent set or entry modules changed; restarting the dev server.')
         requestRestart(server)
       }
     })
@@ -817,8 +817,8 @@ function setupCloudflareDevSupervision(options: {
     // Never react to workerd/wrangler local state (miniflare SQLite and
     // friends can live under the source root when sourceRoot == root).
     if (filePath.startsWith(`${normalizedRoot}/.wrangler/`)) { return }
-    if (isFlueConfigPath(filePath, state)) {
-      logger.info('[flue] flue.config changed; restarting the dev server.')
+    if (isAmondConfigPath(filePath, state)) {
+      logger.info('[amond] amond.config changed; restarting the dev server.')
       requestRestart(server)
       return
     }
@@ -831,7 +831,7 @@ function setupCloudflareDevSupervision(options: {
       AUTHORED_WRANGLER_BASENAMES.some(basename => filePath === `${normalizedRoot}/${basename}`)
     ) {
       logger.info(
-        `[flue] ${path.basename(filePath)} was ${event === 'add' ? 'created' : 'removed'}; restarting the dev server.`,
+        `[amond] ${path.basename(filePath)} was ${event === 'add' ? 'created' : 'removed'}; restarting the dev server.`,
       )
       requestRestart(server)
       return
@@ -860,22 +860,22 @@ function formatWatchError(error: unknown): string {
 }
 
 /**
- * Whether a cloudflare plugin entry precedes flue's core plugin in the raw
+ * Whether a cloudflare plugin entry precedes amond's core plugin in the raw
  * user plugin array (nested arrays flattened; promise entries skipped —
  * `configResolved` re-validates against the final array).
  */
-function cloudflarePluginPrecedesFlue(plugins: UserConfig['plugins'], corePlugin: Plugin): boolean {
+function cloudflarePluginPrecedesAmond(plugins: UserConfig['plugins'], corePlugin: Plugin): boolean {
   const flattened = flattenPluginOptions(plugins)
   const cloudflareIndex = flattened.findIndex(plugin => isCloudflarePluginName(plugin.name))
-  const flueIndex = flattened.indexOf(corePlugin)
-  return cloudflareIndex !== -1 && flueIndex !== -1 && cloudflareIndex < flueIndex
+  const amondIndex = flattened.indexOf(corePlugin)
+  return cloudflareIndex !== -1 && amondIndex !== -1 && cloudflareIndex < amondIndex
 }
 
 /** The `cloudflare` provider is the Workers AI binding — a Cloudflare-target concept. */
 function cloudflareProviderOnNodeError(): Error {
   return stackless(
     new Error(
-      `[flue] The 'cloudflare' provider is not available on the Node target: ` +
+      `[amond] The 'cloudflare' provider is not available on the Node target: ` +
       `it dispatches through the Workers AI binding (env.AI), which only exists ` +
       `on Cloudflare. Remove 'cloudflare' from the providers list, or build for ` +
       `the Cloudflare target. To reach the same models from Node over HTTP, list ` +
@@ -889,7 +889,7 @@ function cloudflareProviderOnNodeError(): Error {
 function dbOnCloudflareError(): Error {
   return stackless(
     new Error(
-      `[flue] Custom persistence (db.ts) is not supported on the Cloudflare target. ` +
+      `[amond] Custom persistence (db.ts) is not supported on the Cloudflare target. ` +
       `Cloudflare agents use Durable Object SQLite automatically. ` +
       `Remove the db.ts file or move it outside the source root.`,
     ),
@@ -898,28 +898,28 @@ function dbOnCloudflareError(): Error {
 
 /**
  * Warn when the discovered config file has same-directory siblings that the
- * basename priority silently loses to it — a stray `flue.config.js` next to a
- * `flue.config.ts` is a support ticket waiting to happen.
+ * basename priority silently loses to it — a stray `amond.config.js` next to an
+ * `amond.config.ts` is a support ticket waiting to happen.
  */
-function flueConfigAmbiguityWarning(configPath: string | undefined): string | undefined {
+function amondConfigAmbiguityWarning(configPath: string | undefined): string | undefined {
   if (!configPath) { return undefined }
   const configDir = path.dirname(configPath)
-  const siblings = FLUE_CONFIG_BASENAMES.map(basename => path.join(configDir, basename)).filter(
+  const siblings = AMOND_CONFIG_BASENAMES.map(basename => path.join(configDir, basename)).filter(
     candidate => fs.existsSync(candidate),
   )
   if (siblings.length <= 1) { return undefined }
   return (
-    `[flue] Multiple Flue config files found (${siblings.map(sibling => path.basename(sibling)).join(', ')}); ` +
+    `[amond] Multiple amond config files found (${siblings.map(sibling => path.basename(sibling)).join(', ')}); ` +
     `using ${path.basename(configPath)}. Delete the others to avoid surprises.`
   )
 }
 
-/** Warning lines for user-set Vite config paths that flue's returned config overrides. */
+/** Warning lines for user-set Vite config paths that amond's returned config overrides. */
 function enforcedConfigWarnings(userConfig: UserConfig, enforcedPaths: string[]): string[] {
   const overridden = enforcedPaths.filter(dottedPath => definedAtPath(userConfig, dottedPath))
   if (overridden.length === 0) { return [] }
   return [
-    `[flue] The following Vite config options are overridden by flue():\n${overridden
+    `[amond] The following Vite config options are overridden by amond():\n${overridden
       .map(dottedPath => `  - ${dottedPath}`)
       .join('\n')}`,
   ]
@@ -938,7 +938,7 @@ function generateScannedAgentsModule(agents: readonly AgentScanResult[]): string
   // One import per module file; one entry per agent export.
   const filePaths = [...new Set(agents.map(agent => normalizePath(agent.filePath)))]
   const varByPath = new Map(
-    filePaths.map((filePath, index) => [filePath, `__flue_agent_module_${index}__`]),
+    filePaths.map((filePath, index) => [filePath, `__amond_agent_module_${index}__`]),
   )
   const imports = filePaths
     .map(filePath => `import * as ${varByPath.get(filePath)} from ${JSON.stringify(filePath)};`)
@@ -949,7 +949,7 @@ function generateScannedAgentsModule(agents: readonly AgentScanResult[]): string
         `\t{ identity: ${JSON.stringify(agent.identity)}, agent: ${varByPath.get(normalizePath(agent.filePath))}[${JSON.stringify(agent.exportName)}] },`,
     )
     .join('\n')
-  return `// Generated by @flue/vite — the scanned 'use agent' agent set.\n${imports}\nexport const scannedAgents = [\n${entries}\n];\n`
+  return `// Generated by @amond-ai/agent-vite — the scanned 'use agent' agent set.\n${imports}\nexport const scannedAgents = [\n${entries}\n];\n`
 }
 
 function agentSetChanged(
@@ -997,7 +997,7 @@ function assertSafeBuildOutDir(root: string, sourceRoot: string, outDir: string)
     if (isWithinDirectory(canonical, canonicalOut)) {
       throw stackless(
         new Error(
-          `[flue] build.outDir "${outDir}" resolves to "${canonicalOut}", which is or contains the ${label} "${canonical}". The build empties the output directory, so this would delete the project. Point build.outDir somewhere outside the project sources (e.g. "dist").`,
+          `[amond] build.outDir "${outDir}" resolves to "${canonicalOut}", which is or contains the ${label} "${canonical}". The build empties the output directory, so this would delete the project. Point build.outDir somewhere outside the project sources (e.g. "dist").`,
         ),
       )
     }
@@ -1005,13 +1005,13 @@ function assertSafeBuildOutDir(root: string, sourceRoot: string, outDir: string)
 }
 
 /**
- * Whether a watched file is the project's Flue config: the discovered config
- * file, or — when none was discovered at startup — any `flue.config.*`
+ * Whether a watched file is the project's amond config: the discovered config
+ * file, or — when none was discovered at startup — any `amond.config.*`
  * candidate appearing at the project root (its creation must also restart).
  */
-function isFlueConfigPath(filePath: string, state: FluePluginState): boolean {
+function isAmondConfigPath(filePath: string, state: AmondPluginState): boolean {
   if (state.configPath) { return filePath === normalizePath(state.configPath) }
-  return FLUE_CONFIG_BASENAMES.some(
+  return AMOND_CONFIG_BASENAMES.some(
     basename => filePath === normalizePath(path.join(state.root, basename)),
   )
 }
@@ -1044,15 +1044,15 @@ function isCloudflarePluginName(name: string | undefined): boolean {
   )
 }
 
-function missingAppEntryError(project: ResolvedFlueProject): Error {
+function missingAppEntryError(project: ResolvedAmondProject): Error {
   const suggestedPath = path.join(path.relative(project.root, project.sourceRoot) || '.', 'app.ts')
   return stackless(
     new Error(
-      `[flue] No app entry found. app.ts is the application's route map and the only required file.\n\n` +
+      `[amond] No app entry found. app.ts is the application's route map and the only required file.\n\n` +
       `Create ${suggestedPath} with:\n\n` +
       `  import { Hono } from 'hono';\n` +
-      `  export default new Hono().get('/', (c) => c.text('Hello from Flue'));\n\n` +
-      `(or set \`app\` in flue.config.ts to an existing entry module).`,
+      `  export default new Hono().get('/', (c) => c.text('Hello from amond'));\n\n` +
+      `(or set \`app\` in amond.config.ts to an existing entry module).`,
     ),
   )
 }
@@ -1077,5 +1077,5 @@ function locateBootstrapModule(basename: string): string {
   ]) {
     if (fs.existsSync(candidate)) { return normalizePath(candidate) }
   }
-  throw new Error(`[flue] Unable to locate the bundled bootstrap module "${basename}".`)
+  throw new Error(`[amond] Unable to locate the bundled bootstrap module "${basename}".`)
 }

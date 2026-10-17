@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import path from 'node:path'
-import { resolveFlueConfigPath } from '@flue/runtime/config'
+import { resolveAmondConfigPath } from '@amond-ai/agent/config'
 import type { CAC } from 'cac'
 import { UsageError } from '../errors.ts'
 import { booleanOption, rejectDoubleDashArgs, stringOption } from '../flags.ts'
@@ -15,21 +15,21 @@ import type { InitTarget } from '../lib/init.ts'
 import { readCliVersion } from '../lib/package-root.ts'
 import { brand, note } from '../lib/terminal.ts'
 
-/** `flue init` — scaffold a new Flue project, interactively when possible. */
+/** `amond init` — scaffold a new amond project, interactively when possible. */
 
 export function registerInitCommand(cli: CAC): void {
   cli
-    .command('init [directory]', 'Initialize a new Flue project (interactive)')
+    .command('init [directory]', 'Initialize a new amond project (interactive)')
     .option('--target <target>', 'Build target: node or cloudflare (prompted for when omitted)')
     .option('--deploy', 'Include the HTTP server setup (vite.config.ts, src/app.ts, hono)')
     .option('--root <path>', 'Directory to scaffold into; same as the positional argument')
     .option(
       '--force',
-      'Scaffold into a non-empty directory and overwrite an existing flue.config.*',
+      'Scaffold into a non-empty directory and overwrite an existing amond.config.*',
     )
-    .example('  $ flue init')
-    .example('  $ flue init ./my-agent-app')
-    .example('  $ flue init --target node --deploy')
+    .example('  $ amond init')
+    .example('  $ amond init ./my-agent-app')
+    .example('  $ amond init --target node --deploy')
     .action(initAction)
 }
 
@@ -80,7 +80,7 @@ async function resolveInitChoices(
 
   if (!process.stdin.isTTY || !process.stderr.isTTY) {
     throw new UsageError(
-      'flue init cannot prompt here. Pass --target <node|cloudflare> (plus --deploy for the server setup).',
+      'amond init cannot prompt here. Pass --target <node|cloudflare> (plus --deploy for the server setup).',
     )
   }
 
@@ -99,7 +99,7 @@ async function resolveInitChoices(
         choices: [
           {
             title: 'Run locally',
-            description: 'talk to agents from your terminal with flue run',
+            description: 'talk to agents from your terminal with amond run',
             value: 'local',
           },
           {
@@ -146,7 +146,7 @@ async function initAction(directory: string | undefined, options: CliOptions): P
   const args = validateInitOptions(directory, options)
   const targetDir = args.explicitRoot ?? process.cwd()
 
-  // `flue init ./my-app` may name a directory that doesn't exist yet.
+  // `amond init ./my-app` may name a directory that doesn't exist yet.
   try {
     fs.mkdirSync(targetDir, { recursive: true })
   }
@@ -156,15 +156,15 @@ async function initAction(directory: string | undefined, options: CliOptions): P
     )
   }
 
-  // Detect any existing flue.config.* in the target dir, using the same
+  // Detect any existing amond.config.* in the target dir, using the same
   // discovery rule the rest of the CLI uses. This catches `.mts`, `.js`,
   // etc. — not just `.ts`.
-  const existing = resolveFlueConfigPath({ cwd: targetDir })
+  const existing = resolveAmondConfigPath({ cwd: targetDir })
 
   if (existing && !args.force) {
     const rel = path.relative(process.cwd(), existing) || existing
     throw new UsageError(
-      `A Flue config already exists at ${rel}.\n  Re-run with --force to overwrite.`,
+      `An amond config already exists at ${rel}.\n  Re-run with --force to overwrite.`,
       { hint: null },
     )
   }
@@ -206,7 +206,7 @@ async function initAction(directory: string | undefined, options: CliOptions): P
   }
 
   // The project skeleton. Every file is created only when absent, unless
-  // --force is passed — then flue init overwrites the whole skeleton.
+  // --force is passed — then amond init overwrites the whole skeleton.
   const files = planInitFiles(planOptions)
 
   // Reported paths are project-relative; the summary line names the
@@ -233,18 +233,18 @@ async function initAction(directory: string | undefined, options: CliOptions): P
 
   const where = targetDir === process.cwd() ? '' : ` in ${displayPath(process.cwd(), targetDir)}`
   const summary = `target ${target}${deploy ? '' : ', local runs only'}${where}`
-  console.error(brand(['flue init', summary, `wrote ${wrote.join(', ')}`]))
+  console.error(brand(['amond init', summary, `wrote ${wrote.join(', ')}`]))
   if (skipped.length > 0) {
     note(`kept existing ${skipped.join(', ')}`)
   }
 
-  // If --force overwrote a non-`.ts` variant, the new flue.config.ts will
-  // take precedence (FLUE_CONFIG_BASENAMES priority), but the old file still
+  // If --force overwrote a non-`.ts` variant, the new amond.config.ts will
+  // take precedence (AMOND_CONFIG_BASENAMES priority), but the old file still
   // sits on disk. Surface that so the user isn't surprised later.
-  if (existing && path.basename(existing) !== 'flue.config.ts') {
+  if (existing && path.basename(existing) !== 'amond.config.ts') {
     const relExisting = path.relative(process.cwd(), existing) || existing
     note(
-      `${relExisting} is still on disk. flue.config.ts now takes precedence; delete the old file if you no longer need it.`,
+      `${relExisting} is still on disk. amond.config.ts now takes precedence; delete the old file if you no longer need it.`,
     )
   }
 

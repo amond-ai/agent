@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import path from 'node:path'
 import { cliPackageRoot } from './package-root.ts'
 
-/** Pure helpers behind `flue docs`: locate, load, and index the docs tree. */
+/** Pure helpers behind `amond docs`: locate, load, and index the docs tree. */
 
 export interface DocsPage {
   /** Page path without extension, e.g. `guide/sandboxes`. */
@@ -19,7 +19,7 @@ export interface DocsPage {
  * For users of the published package this is always `<package root>/docs`,
  * placed there by `scripts/prepare-publish.mjs` at release time.
  *
- * The `apps/docs` candidate exists only for development inside the Flue
+ * The `apps/docs` candidate exists only for development inside the amond
  * monorepo itself and can never resolve in a user's `node_modules`. It is
  * checked first because in a repo checkout the docs site content is the
  * source of truth, and a stale `<package root>/docs` snapshot left behind by

@@ -28,37 +28,37 @@ function assertMcpConnectionDefinition(
   source: string,
 ): asserts definition is McpConnectionDefinition {
   if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
-    throw new Error(`[flue] ${source} requires a definition object: { name, url, ... }.`)
+    throw new Error(`[amond] ${source} requires a definition object: { name, url, ... }.`)
   }
   const candidate = definition as Partial<McpConnectionDefinition>
   const { name } = candidate
   if (typeof name !== 'string' || name.trim().length === 0) {
-    throw new Error(`[flue] ${source} name must be a non-empty string.`)
+    throw new Error(`[amond] ${source} name must be a non-empty string.`)
   }
   for (const key of Object.keys(definition)) {
     if (!DEFINITION_KEYS.has(key)) {
-      throw new Error(`[flue] ${source} "${name}" received unknown field "${key}".`)
+      throw new Error(`[amond] ${source} "${name}" received unknown field "${key}".`)
     }
   }
   const { url } = candidate
   if (typeof url !== 'string' && !(url instanceof URL)) {
-    throw new Error(`[flue] ${source} "${name}" requires \`url\`: the MCP server endpoint.`)
+    throw new Error(`[amond] ${source} "${name}" requires \`url\`: the MCP server endpoint.`)
   }
   if (typeof url === 'string' && !URL.canParse(url)) {
     throw new Error(
-      `[flue] ${source} "${name}" url ${JSON.stringify(url)} is not a valid absolute URL.`,
+      `[amond] ${source} "${name}" url ${JSON.stringify(url)} is not a valid absolute URL.`,
     )
   }
   if (candidate.transport !== undefined && !TRANSPORTS.includes(candidate.transport)) {
     throw new Error(
-      `[flue] ${source} "${name}" transport must be one of ${TRANSPORTS.map(transport => `'${transport}'`).join(', ')}.`,
+      `[amond] ${source} "${name}" transport must be one of ${TRANSPORTS.map(transport => `'${transport}'`).join(', ')}.`,
     )
   }
   if (candidate.auth !== undefined) {
     const validStatic = typeof candidate.auth === 'string' && candidate.auth.length > 0
     if (!validStatic && typeof candidate.auth !== 'function') {
       throw new Error(
-        `[flue] ${source} "${name}" auth must be a bearer token or a function resolving one per request.`,
+        `[amond] ${source} "${name}" auth must be a bearer token or a function resolving one per request.`,
       )
     }
   }
@@ -67,17 +67,17 @@ function assertMcpConnectionDefinition(
     (typeof candidate.headers !== 'object' || candidate.headers === null)
   ) {
     throw new Error(
-      `[flue] ${source} "${name}" headers must be a static HeadersInit value; for credentials resolved per request, use \`auth\`.`,
+      `[amond] ${source} "${name}" headers must be a static HeadersInit value; for credentials resolved per request, use \`auth\`.`,
     )
   }
   if (
     candidate.requestInit !== undefined &&
     (typeof candidate.requestInit !== 'object' || Array.isArray(candidate.requestInit))
   ) {
-    throw new Error(`[flue] ${source} "${name}" requestInit must be an object.`)
+    throw new Error(`[amond] ${source} "${name}" requestInit must be an object.`)
   }
   if (candidate.fetch !== undefined && typeof candidate.fetch !== 'function') {
-    throw new Error(`[flue] ${source} "${name}" fetch must be a function.`)
+    throw new Error(`[amond] ${source} "${name}" fetch must be a function.`)
   }
   if (
     candidate.timeoutMs !== undefined &&
@@ -85,13 +85,13 @@ function assertMcpConnectionDefinition(
       !Number.isFinite(candidate.timeoutMs) ||
       candidate.timeoutMs <= 0)
   ) {
-    throw new Error(`[flue] ${source} "${name}" timeoutMs must be a positive number.`)
+    throw new Error(`[amond] ${source} "${name}" timeoutMs must be a positive number.`)
   }
   if (
     candidate.resetTimeoutOnProgress !== undefined &&
     typeof candidate.resetTimeoutOnProgress !== 'boolean'
   ) {
-    throw new Error(`[flue] ${source} "${name}" resetTimeoutOnProgress must be a boolean.`)
+    throw new Error(`[amond] ${source} "${name}" resetTimeoutOnProgress must be a boolean.`)
   }
   if (candidate.tools !== undefined) {
     if (
@@ -99,12 +99,12 @@ function assertMcpConnectionDefinition(
       candidate.tools.some(tool => typeof tool !== 'string' || tool.length === 0)
     ) {
       throw new Error(
-        `[flue] ${source} "${name}" tools must be an array of tool names (the server's own names).`,
+        `[amond] ${source} "${name}" tools must be an array of tool names (the server's own names).`,
       )
     }
   }
   if (candidate.optional !== undefined && typeof candidate.optional !== 'boolean') {
-    throw new Error(`[flue] ${source} "${name}" optional must be a boolean.`)
+    throw new Error(`[amond] ${source} "${name}" optional must be a boolean.`)
   }
 }
 
@@ -184,13 +184,13 @@ export function useMcpConnection(definition: McpConnectionDefinition): void {
   const frame = requireRenderFrame('useMcpConnection')
   if (frame.kind === 'subagent') {
     throw new Error(
-      '[flue] useMcpConnection() is not available in a subagent render. Declare the connection on the root agent and give the delegate what it needs through the parent\'s tools.',
+      '[amond] useMcpConnection() is not available in a subagent render. Declare the connection on the root agent and give the delegate what it needs through the parent\'s tools.',
     )
   }
   assertMcpConnectionDefinition(definition, 'useMcpConnection()')
   if (frame.mcpConnections.some(declared => declared.name === definition.name)) {
     throw new Error(
-      `[flue] useMcpConnection() declared the MCP server name "${definition.name}" twice in one render. Each server declares once; share it from a single custom hook.`,
+      `[amond] useMcpConnection() declared the MCP server name "${definition.name}" twice in one render. Each server declares once; share it from a single custom hook.`,
     )
   }
   frame.mcpConnections.push(definition)

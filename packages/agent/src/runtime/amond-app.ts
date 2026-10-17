@@ -46,7 +46,7 @@ export interface CloudflareRuntime extends RuntimeBase {
   instanceInfo: (agentName: string, instanceId: string) => Promise<AgentInstanceInfo | null>
 }
 
-export type FlueRuntime = NodeRuntime | CloudflareRuntime
+export type AmondRuntime = NodeRuntime | CloudflareRuntime
 
 /**
  * Accepts input for asynchronous delivery to a continuing agent session —
@@ -75,8 +75,8 @@ export async function dispatch(
   const rt = runtimeConfig
   if (!rt) {
     throw new Error(
-      '[flue] dispatch() called before runtime was configured. ' +
-      'This usually means it was used outside a Flue-built server entry.',
+      '[amond] dispatch() called before runtime was configured. ' +
+      'This usually means it was used outside an amond-built server entry.',
     )
   }
   if (!isAgentFunction(agent)) {
@@ -120,8 +120,8 @@ export async function getAgentInstance(
   const rt = runtimeConfig
   if (!rt) {
     throw new Error(
-      '[flue] getAgentInstance() called before runtime was configured. ' +
-      'This usually means it was used outside a Flue-built server entry.',
+      '[amond] getAgentInstance() called before runtime was configured. ' +
+      'This usually means it was used outside an amond-built server entry.',
     )
   }
   if (!isAgentFunction(agent)) {
@@ -132,12 +132,12 @@ export async function getAgentInstance(
     })
   }
   if (typeof id !== 'string' || id.trim() === '') {
-    throw new Error('[flue] getAgentInstance() requires a non-empty instance id.')
+    throw new Error('[amond] getAgentInstance() requires a non-empty instance id.')
   }
   const name = getRegisteredAgentIdentity(agent)
   if (!name) {
     throw new Error(
-      '[flue] getAgentInstance() target agent is not registered in this built application.',
+      '[amond] getAgentInstance() target agent is not registered in this built application.',
     )
   }
   if (rt.target === 'cloudflare') { return rt.instanceInfo(name, id) }
@@ -177,10 +177,10 @@ function resolveAgentDefinitionDispatchRequest(
   agent: Agent,
   request: AgentDispatchRequest | undefined,
 ): NamedAgentDispatchRequest {
-  if (!request) { throw new Error('[flue] dispatch(agent, request) requires a dispatch request.') }
+  if (!request) { throw new Error('[amond] dispatch(agent, request) requires a dispatch request.') }
   const name = getRegisteredAgentIdentity(agent)
   if (!name) {
-    throw new Error('[flue] dispatch() target agent is not registered in this built application.')
+    throw new Error('[amond] dispatch() target agent is not registered in this built application.')
   }
   return {
     agent: name,
@@ -194,22 +194,22 @@ function resolveAgentDefinitionDispatchRequest(
   }
 }
 
-let runtimeConfig: FlueRuntime | undefined
+let runtimeConfig: AmondRuntime | undefined
 
 /**
- * Not part of the public API — exposed via `@flue/runtime/internal` only
+ * Not part of the public API — exposed via `@amond-ai/agent/internal` only
  * because the generated entry imports it from a stable bare specifier.
  */
-export function configureFlueRuntime(cfg: FlueRuntime): void {
+export function configureAmondRuntime(cfg: AmondRuntime): void {
   runtimeConfig = cfg
   configureErrorRendering({ devMode: cfg.devMode ?? false })
 }
 
-export function resetFlueRuntimeForTests(): void {
+export function resetAmondRuntimeForTests(): void {
   runtimeConfig = undefined
   configureErrorRendering({ devMode: false })
 }
 
-export function getFlueRuntime(): FlueRuntime | undefined {
+export function getAmondRuntime(): AmondRuntime | undefined {
   return runtimeConfig
 }

@@ -1,12 +1,12 @@
 /**
  * One renderable part of a conversation message.
  *
- * Flue projects its private canonical conversation log into this small, stable
+ * amond projects its private canonical conversation log into this small, stable
  * shape. Streaming assembly details (delta sequencing, active blocks) are never
  * exposed here; a part only ever carries materialized content plus a lifecycle
  * `state`.
  */
-export type FlueConversationPart =
+export type AmondConversationPart =
   | { type: 'text', text: string, state: 'streaming' | 'done' }
   | { type: 'reasoning', text: string, state: 'streaming' | 'done' }
 	/**
@@ -68,9 +68,9 @@ export type FlueConversationPart =
  * Coarse render lane for a materialized message. `system` covers every
  * non-chat, non-answer message (internal control input and runtime advisories),
  * following the standard chat convention so a generic renderer can lay out a
- * transcript without understanding the finer {@link FlueConversationMessagePurpose}.
+ * transcript without understanding the finer {@link AmondConversationMessagePurpose}.
  */
-type FlueConversationMessageRole = 'user' | 'assistant' | 'system'
+type AmondConversationMessageRole = 'user' | 'assistant' | 'system'
 
 /**
  * Stable semantic classification of a message, independent of its rendered
@@ -79,21 +79,21 @@ type FlueConversationMessageRole = 'user' | 'assistant' | 'system'
  * advisories (`advisory`) without parsing content, ordering, or timestamps.
  * The union may widen as the runtime grows typed agent-activity signals.
  */
-type FlueConversationMessagePurpose = 'user' | 'assistant' | 'dispatch' | 'advisory'
+type AmondConversationMessagePurpose = 'user' | 'assistant' | 'dispatch' | 'advisory'
 
 /**
  * How a transcript UI should treat a message: `visible` for primary chat,
  * `diagnostic` for content suited to an activity/diagnostics panel, `hidden`
  * for runtime plumbing that should not normally be shown.
  */
-type FlueConversationMessageDisplay = 'visible' | 'hidden' | 'diagnostic'
+type AmondConversationMessageDisplay = 'visible' | 'hidden' | 'diagnostic'
 
 /**
  * Typed detail for a message projected from an internal runtime signal. Present
  * only on `system`-role messages. Carries across history snapshots and live
  * updates so clients can subtype or correlate signals without parsing text.
  */
-interface FlueConversationSignalDescriptor {
+interface AmondConversationSignalDescriptor {
   tagName?: string
   attributes?: Record<string, string>
 }
@@ -105,14 +105,14 @@ interface FlueConversationSignalDescriptor {
  * stream order — the same one-message-per-response shape as the AI SDK's
  * `UIMessage`.
  */
-export interface FlueConversationMessage {
+export interface AmondConversationMessage {
   /** Stable message identity; for an assistant response, the first step's message id. */
   id: string
-  role: FlueConversationMessageRole
-  /** Stable semantic classification; see {@link FlueConversationMessagePurpose}. */
-  purpose: FlueConversationMessagePurpose
-  /** Render/visibility hint; see {@link FlueConversationMessageDisplay}. */
-  display: FlueConversationMessageDisplay
+  role: AmondConversationMessageRole
+  /** Stable semantic classification; see {@link AmondConversationMessagePurpose}. */
+  purpose: AmondConversationMessagePurpose
+  /** Render/visibility hint; see {@link AmondConversationMessageDisplay}. */
+  display: AmondConversationMessageDisplay
   /** Present on messages produced by a tracked submission. */
   submissionId?: string
   /**
@@ -121,7 +121,7 @@ export interface FlueConversationMessage {
    */
   turnId?: string
   /** Typed signal detail; present only on `system`-role messages. */
-  signal?: FlueConversationSignalDescriptor
+  signal?: AmondConversationSignalDescriptor
   /**
    * Structured settlement marker; present only on the terminal advisory the
    * runtime appends when a submission settles short of a reply, so clients
@@ -137,25 +137,25 @@ export interface FlueConversationMessage {
    * For a `user` or `system` message it is when the input or signal was
    * applied to the conversation (not when the submission was accepted); for
    * an assistant response it is when the response's first step started.
-   * Absent on the optimistic echo `useFlueAgent` renders before the server
+   * Absent on the optimistic echo `useAmondAgent` renders before the server
    * confirms a send. Timestamps are server wall-clock times — not guaranteed
    * unique or monotonic — so order messages by array position, never by
    * timestamp.
    */
   timestamp?: string
-  parts: FlueConversationPart[]
+  parts: AmondConversationPart[]
   /**
    * Message metadata is entirely agent-authored: whatever the agent's
    * `useResponseStart`/`useResponseFinish` hooks return, deep-merged in call order. The
    * runtime stamps nothing into it — keys like `usage` or `model` are app
    * conventions, present only when the agent attaches them. The server's
-   * capture time lives on {@link FlueConversationMessage.timestamp}.
+   * capture time lives on {@link AmondConversationMessage.timestamp}.
    */
   metadata?: Record<string, unknown>
 }
 
 /** Terminal outcome of one tracked agent submission within a conversation. */
-export interface FlueConversationSettlement {
+export interface AmondConversationSettlement {
   submissionId: string
   outcome: 'completed' | 'failed' | 'aborted'
   error?: unknown
@@ -175,9 +175,9 @@ export interface FlueConversationSettlement {
  *
  * Returned by the client's `history()` and used to seed `observe()`. The
  * `offset` is an opaque durable-stream checkpoint; pass it back only through
- * Flue's own observation machinery.
+ * amond's own observation machinery.
  */
-export interface FlueConversationSnapshot {
+export interface AmondConversationSnapshot {
   v: 1
   conversationId: string
   offset: string
@@ -191,12 +191,12 @@ export interface FlueConversationSnapshot {
    * where the generation cannot have changed within the delivering connection.
    */
   incarnation?: string
-  messages: FlueConversationMessage[]
+  messages: AmondConversationMessage[]
   /**
    * Terminal outcomes of the conversation's tracked submissions. Always the
    * whole conversation's settlements, even on a bounded read.
    */
-  settlements: FlueConversationSettlement[]
+  settlements: AmondConversationSettlement[]
   /**
    * Present only on bounded reads (`history({ limit })`): the opaque cursor
    * for the next older page — pass it to `historyBefore()` — or `null` when
@@ -215,21 +215,21 @@ export interface FlueConversationSnapshot {
  * not repeated here — the bounded snapshot or observation that produced the
  * cursor already carries the whole conversation's settlements.
  */
-export interface FlueConversationHistoryPage {
+export interface AmondConversationHistoryPage {
   v: 1
   conversationId: string
   /** Messages strictly older than the cursor, oldest first. */
-  messages: FlueConversationMessage[]
+  messages: AmondConversationMessage[]
   /** Cursor for the next older page, or `null` at the start of the conversation. */
   before: string | null
 }
 
 /** Live materialized conversation maintained by `observe()`. */
-export interface FlueConversationState {
+export interface AmondConversationState {
   conversationId: string
-  messages: FlueConversationMessage[]
+  messages: AmondConversationMessage[]
   /** The whole conversation's settlements, including under a bounded `observe({ limit })`. */
-  settlements: FlueConversationSettlement[]
+  settlements: AmondConversationSettlement[]
   /**
    * Present only on a bounded observation (`observe({ limit })`): the opaque
    * cursor for the messages older than the observed window — pass it to
@@ -240,7 +240,7 @@ export interface FlueConversationState {
 }
 
 /** Options for one `history()` read. */
-export interface FlueConversationHistoryOptions {
+export interface AmondConversationHistoryOptions {
   /**
    * Read only the newest `limit` messages (a positive integer). The snapshot
    * still carries the head `offset`, the `incarnation`, and every
@@ -254,7 +254,7 @@ export interface FlueConversationHistoryOptions {
 }
 
 /** Options for one `historyBefore()` read. */
-export interface FlueConversationHistoryBeforeOptions {
+export interface AmondConversationHistoryBeforeOptions {
   /**
    * Page size (a positive integer): read at most this many messages, the
    * newest ones older than the cursor. Required, so a page read is always

@@ -1,9 +1,9 @@
 import {
   
-  createFlueClient,
+  createAmondClient,
   
-} from '@flue/sdk'
-import type { AgentSendResult, ConversationLiveMode, FlueClient } from '@flue/sdk'
+} from '@amond-ai/agent-sdk'
+import type { AgentSendResult, AmondClient, ConversationLiveMode } from '@amond-ai/agent-sdk'
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { emptyAgentState } from './agent-reducer.ts'
 import type { AgentSnapshot } from './agent-reducer.ts'
@@ -21,11 +21,11 @@ const emptySnapshot: AgentSnapshot = {
 const emptySubscribe = () => () => {}
 const getEmptySnapshot = (): AgentSnapshot => emptySnapshot
 const dormantSendMessage = async (): Promise<never> => {
-  throw new Error('useFlueAgent() cannot send without a conversation url')
+  throw new Error('useAmondAgent() cannot send without a conversation url')
 }
 const dormantRefresh = (): void => {}
 
-export interface UseFlueAgentOptions {
+export interface UseAmondAgentOptions {
   /**
    * URL of one agent conversation: wherever the application mounts the
    * agent's routes plus the caller-chosen conversation id
@@ -36,14 +36,14 @@ export interface UseFlueAgentOptions {
   url?: string
   /**
    * Pre-configured conversation client, for custom headers, auth, or fetch
-   * behavior (`createFlueClient({ url, headers })`). Takes precedence over
+   * behavior (`createAmondClient({ url, headers })`). Takes precedence over
    * `url`. Memoize it — a new client instance replaces the session.
    */
-  client?: FlueClient
+  client?: AmondClient
   live?: ConversationLiveMode
 }
 
-export interface UseFlueAgentResult extends AgentSnapshot {
+export interface UseAmondAgentResult extends AgentSnapshot {
   sendMessage(message: string, options?: SendMessageOptions): Promise<AgentSendResult>
   /**
    * Re-checks the conversation and resumes live updates. Call this to observe a
@@ -64,7 +64,7 @@ function isAbsoluteUrl(url: string): boolean {
   }
 }
 
-export function useFlueAgent(options: UseFlueAgentOptions = {}): UseFlueAgentResult {
+export function useAmondAgent(options: UseAmondAgentOptions = {}): UseAmondAgentResult {
   // Default to SSE: lower-latency token-by-token streaming for chat UIs.
   // Safe because React consumes only via observe(), which dedupes redelivered
   // chunks; the SDK transport falls back to long-poll if SSE can't stay open.
@@ -77,7 +77,7 @@ export function useFlueAgent(options: UseFlueAgentOptions = {}): UseFlueAgentRes
     // empty, idle state, no connections) and constructs the client on the
     // hydrated browser render instead of throwing.
     if (globalThis.location === undefined && !isAbsoluteUrl(options.url)) { return undefined }
-    return createFlueClient({ url: options.url })
+    return createAmondClient({ url: options.url })
   }, [options.client, options.url])
   const session = useMemo(
     () => (client ? new AgentSession(client, live) : undefined),

@@ -18,8 +18,8 @@ export type {
   SubmissionDurability,
   SubmissionSettlementObligation,
 } from './agent-execution-store.ts'
-export type { FlueContextConfig, FlueContextInternal } from './client.ts'
-export { createFlueContext } from './client.ts'
+export type { AmondContextConfig, AmondContextInternal } from './client.ts'
+export { createAmondContext } from './client.ts'
 export {
   CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH,
   CLOUDFLARE_AGENT_INTERNAL_INSTANCE_INFO_PATH,
@@ -45,7 +45,7 @@ export { createInstrumentationOwner, runWithInstrumentationOwner } from './instr
 // Node and Cloudflare coordinators inject into submission contexts.
 export type { McpConnectionDefinition, McpConnectionResolver } from './mcp.ts'
 export { createNodeAgentCoordinator, createNodeDispatchQueue } from './node/agent-coordinator.ts'
-// The shared Node runtime assembly `start()` and the CLI's `flue run` build
+// The shared Node runtime assembly `start()` and the CLI's `amond run` build
 // on: registration → persistence validation → coordinator → runtime seed.
 export type {
   AssembledNodeAgentRuntime,
@@ -65,7 +65,7 @@ export type { AttachmentStore } from './runtime/attachment-store.ts'
 export { InMemoryAttachmentStore } from './runtime/attachment-store.ts'
 export { registerDefaultProviders } from './runtime/builtin-providers.ts'
 // Submission-scoped conversation observation: in-process settlement waits and
-// reply reads over the canonical stream (the CLI's `flue run` and the
+// reply reads over the canonical stream (the CLI's `amond run` and the
 // programmatic agent client build on these).
 export type {
   ObserveSubmissionSettlementOptions,
@@ -85,11 +85,11 @@ export {
 } from './runtime/conversation-stream-store.ts'
 export { installDevLifecycleLogger } from './runtime/dev-lifecycle-logger.ts'
 export type { DispatchInput, DispatchQueue } from './runtime/dispatch-queue.ts'
-export type { CloudflareRuntime, FlueRuntime, NodeRuntime } from './runtime/flue-app.ts'
-// `configureFlueRuntime` seeds the module-scoped config that mounted
+export type { AmondRuntime, CloudflareRuntime, NodeRuntime } from './runtime/amond-app.ts'
+// `configureAmondRuntime` seeds the module-scoped config that mounted
 // agent-router handlers read at request time. Called once per generated entry,
 // before the listener (Node) or `default.fetch` (Cloudflare) takes traffic.
-export { configureFlueRuntime } from './runtime/flue-app.ts'
+export { configureAmondRuntime } from './runtime/amond-app.ts'
 export type {
   CreateAgentContextFn,
   CreateAgentContextOptions,
@@ -108,12 +108,12 @@ export {
 } from './runtime/providers.ts'
 // Identity registry consumed by the generated bootstraps (the scanned
 // `'use agent'` set), the CLI, and unit tests mounting createAgentRouter().
-export type { FlueAgentRegistration } from './runtime/registration.ts'
+export type { AmondAgentRegistration } from './runtime/registration.ts'
 export {
   AGENT_IDENTITY_PATTERN,
-  getRegisteredFlueAgents,
-  registerFlueAgents,
-  resetFlueAgentRegistrationForTests,
+  getRegisteredAmondAgents,
+  registerAmondAgents,
+  resetAmondAgentRegistrationForTests,
   resolveAgentIdentity,
   resolveAgentInitialDataSchema,
 } from './runtime/registration.ts'

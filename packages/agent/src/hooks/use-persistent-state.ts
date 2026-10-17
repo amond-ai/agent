@@ -64,17 +64,17 @@ export function usePersistentState(
   const frame = requireRenderFrame('usePersistentState')
   if (frame.kind === 'subagent') {
     throw new Error(
-      '[flue] usePersistentState() is not available in a subagent render. Durable state is scoped to the agent instance; delegates run detached tasks with no state channel. Pass what the delegate needs through the task prompt instead.',
+      '[amond] usePersistentState() is not available in a subagent render. Durable state is scoped to the agent instance; delegates run detached tasks with no state channel. Pass what the delegate needs through the task prompt instead.',
     )
   }
   if (typeof name !== 'string' || name.length === 0) {
     throw new Error(
-      '[flue] usePersistentState(name, defaultValue?) takes the state name as its first argument — a non-empty string.',
+      '[amond] usePersistentState(name, defaultValue?) takes the state name as its first argument — a non-empty string.',
     )
   }
   if (frame.stateNames.has(name)) {
     throw new Error(
-      `[flue] Duplicate usePersistentState name "${name}" in one render. State names identify a value across renders and must be unique.`,
+      `[amond] Duplicate usePersistentState name "${name}" in one render. State names identify a value across renders and must be unique.`,
     )
   }
   frame.stateNames.add(name)
@@ -86,12 +86,12 @@ export function usePersistentState(
   const setValue: StateSetter<unknown> = (next) => {
     if (isRendering()) {
       throw new Error(
-        `[flue] State "${name}" was written during render. Renders are pure reads of the record stream — write from tool run functions or other runtime callbacks, and use the default value for the initial value.`,
+        `[amond] State "${name}" was written during render. Renders are pure reads of the record stream — write from tool run functions or other runtime callbacks, and use the default value for the initial value.`,
       )
     }
     if (!store) {
       throw new Error(
-        `[flue] State "${name}" has no durable runtime behind this render, so writes are unavailable.`,
+        `[amond] State "${name}" has no durable runtime behind this render, so writes are unavailable.`,
       )
     }
     // An updater's `previous` resolves through the buffer at call time —
@@ -167,6 +167,6 @@ function normalizeStateValue(name: string, value: unknown): unknown {
   return normalizeJsonValue(value, {
     label: 'State',
     name,
-    undefinedMessage: `[flue] State "${name}" cannot be set to undefined. State values are JSON; there is no unset.`,
+    undefinedMessage: `[amond] State "${name}" cannot be set to undefined. State values are JSON; there is no unset.`,
   })
 }

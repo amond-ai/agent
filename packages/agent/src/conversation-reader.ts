@@ -49,7 +49,7 @@ export async function loadReducedConversationPrefix(options: {
     }
     if (read.upToDate) {
       await options.store.read(options.path, { offset: options.offset, limit: 1 })
-      throw new Error('[flue] Canonical conversation offset is not a batch boundary.')
+      throw new Error('[amond] Canonical conversation offset is not a batch boundary.')
     }
   }
 }

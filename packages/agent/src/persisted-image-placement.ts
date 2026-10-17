@@ -10,7 +10,7 @@ import type { AgentSubmissionInput } from './runtime/agent-submissions.ts'
 export type { SubmissionChunkRow } from './persisted-images.ts'
 
 /**
- * Storage for submission-payload overflow chunks (`flue_submission_chunks`):
+ * Storage for submission-payload overflow chunks (`amond_submission_chunks`):
  * oversized attachment parts are split out of the persisted payload at
  * admission and reassembled on read. Chunks share the submission row's
  * lifecycle — `replace` swaps the whole chunk group atomically with respect
@@ -77,7 +77,7 @@ function reassemblePersistedChunks(
       ordered.length !== expectedCount ||
       ordered.some((row, index) => row.count !== expectedCount || row.index !== index)
     ) {
-      throw new Error('[flue] Persisted image chunks are missing or malformed.')
+      throw new Error('[amond] Persisted image chunks are missing or malformed.')
     }
     data.set(itemId, ordered.map(row => row.data).join(''))
   }

@@ -12,10 +12,10 @@
  * INTERNAL convenience, scoped to the SQLite dialect family (`node:sqlite`
  * and Durable Object SQLite). Do NOT generalize this module across SQL
  * dialects: there is deliberately no generic-SQL abstraction spanning
- * SQLite and Postgres, and `@flue/postgres` implements the store contract
+ * SQLite and Postgres, and a Postgres persistence adapter implements the store contract
  * directly on purpose. Cross-backend parity is enforced by the documented
  * invariants on the store interfaces and the contract suites in
- * `@flue/runtime/test-utils` — the only shared code is the storage-agnostic
+ * `@amond-ai/agent/test-utils` — the only shared code is the storage-agnostic
  * admission algorithm (`admitSubmissionWithBackend`) in adapter-helpers.
  */
 
@@ -37,7 +37,7 @@ import type { SqlStorage } from './sql-storage.ts'
 
 type SqlRow = Record<string, unknown>
 
-import { migrateFlueSqlSchema } from './format-version.ts'
+import { migrateAmondSqlSchema } from './format-version.ts'
 import { hydratePersistedSubmissionAttachments } from './persisted-image-placement.ts'
 import {
   
@@ -51,7 +51,7 @@ import {
 } from './sql-persisted-chunk-store.ts'
 
 export function ensureSqlAgentExecutionTables(sql: SqlStorage): void {
-  migrateFlueSqlSchema(sql, () => {
+  migrateAmondSqlSchema(sql, () => {
     ensureSubmissionTable(sql)
     ensureSqlSubmissionChunkTable(sql)
   })
@@ -90,7 +90,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     const now = Date.now()
     const row = this.sql
       .exec(
-        `UPDATE flue_agent_submissions
+        `UPDATE amond_agent_submissions
 				 SET attempt_id = ?, started_at = ?, attempt_count = attempt_count + 1${
             lease ? ', owner_id = ?, lease_expires_at = ?' : ''
           }
@@ -118,7 +118,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
   async admitDirect(input: AgentSubmissionInput): Promise<AgentSubmission> {
     const admission = this.admitSubmission(input)
     if (admission.kind !== 'submission') {
-      throw new Error('[flue] Internal direct admission returned an unexpected result.')
+      throw new Error('[amond] Internal direct admission returned an unexpected result.')
     }
     return admission.submission
   }
@@ -126,7 +126,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
   async markSubmissionCanonicalReady(submissionId: string): Promise<AgentSubmission | null> {
     const row = this.sql
       .exec(
-        `UPDATE flue_agent_submissions
+        `UPDATE amond_agent_submissions
 				 SET canonical_ready_at = COALESCE(canonical_ready_at, ?)
 				 WHERE submission_id = ? AND status = 'queued'
 				 RETURNING ${submissionColumns}`,
@@ -142,7 +142,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       this.sql
         .exec(
           `SELECT 1
-					 FROM flue_agent_submissions
+					 FROM amond_agent_submissions
 				 WHERE status IN ('queued', 'running', 'terminalizing', 'joining', 'joined')
 				 LIMIT 1`,
         )
@@ -156,7 +156,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       this.sql
         .exec(
           `SELECT ${submissionColumns}
-					 FROM flue_agent_submissions
+					 FROM amond_agent_submissions
 					 WHERE status = 'queued' AND canonical_ready_at IS NULL
 					 ORDER BY sequence ASC`,
         )
@@ -169,12 +169,12 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     const rows = this.sql
       .exec(
         `SELECT ${submissionColumns}
-				 FROM flue_agent_submissions AS current
+				 FROM amond_agent_submissions AS current
 				 WHERE current.status = 'queued'
 				   AND current.canonical_ready_at IS NOT NULL
 				   AND NOT EXISTS (
 				     SELECT 1
-				     FROM flue_agent_submissions AS earlier
+				     FROM amond_agent_submissions AS earlier
 				     WHERE earlier.session_key = current.session_key
 				       AND earlier.status IN ('queued', 'running', 'terminalizing', 'joining', 'joined')
 				       AND earlier.sequence < current.sequence
@@ -190,7 +190,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       this.sql
         .exec(
           `SELECT ${submissionColumns}
-					 FROM flue_agent_submissions
+					 FROM amond_agent_submissions
 					 WHERE status = 'running'
 					 ORDER BY sequence ASC`,
         )
@@ -204,7 +204,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       .exec(
         `SELECT submission_id, session_key, attempt_id, settlement_record_id,
 				        settlement_record
-				 FROM flue_agent_submissions
+				 FROM amond_agent_submissions
 				 WHERE status = 'terminalizing'
 				 ORDER BY sequence ASC`,
       )
@@ -220,7 +220,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     const leaseExpiresAt = now + LEASE_DURATION_MS
     const placeholders = submissionIds.map(() => '?').join(', ')
     this.sql.exec(
-      `UPDATE flue_agent_submissions
+      `UPDATE amond_agent_submissions
 			 SET lease_expires_at = ?
 			 WHERE owner_id = ? AND status = 'running'
 			   AND submission_id IN (${placeholders})`,
@@ -236,7 +236,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       this.sql
         .exec(
           `SELECT ${submissionColumns}
-					 FROM flue_agent_submissions
+					 FROM amond_agent_submissions
 					 WHERE status = 'running' AND lease_expires_at > 0 AND lease_expires_at < ?
 					 ORDER BY sequence ASC`,
           now,
@@ -251,7 +251,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     const timeoutAt = now + DURABILITY_DEFAULT_TIMEOUT_MS
     const row = this.sql
       .exec(
-        `UPDATE flue_agent_submissions AS current
+        `UPDATE amond_agent_submissions AS current
 				 SET status = 'running', attempt_id = ?, started_at = ?, attempt_count = attempt_count + 1,
 				     max_attempts = ?, timeout_at = CASE WHEN timeout_at = 0 THEN ? ELSE timeout_at END,
 				     owner_id = ?, lease_expires_at = ?
@@ -259,7 +259,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
 				   AND current.canonical_ready_at IS NOT NULL
 				   AND NOT EXISTS (
 				     SELECT 1
-				     FROM flue_agent_submissions AS earlier
+				     FROM amond_agent_submissions AS earlier
 				     WHERE earlier.session_key = current.session_key
 				       AND earlier.status IN ('queued', 'running', 'terminalizing', 'joining', 'joined')
 				       AND earlier.sequence < current.sequence
@@ -282,7 +282,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     durability?: { maxAttempts: number, timeoutAt: number },
   ): Promise<boolean> {
     return this.updateOwnedSubmission(
-      `UPDATE flue_agent_submissions
+      `UPDATE amond_agent_submissions
 			 SET input_applied_at = COALESCE(input_applied_at, ?),
 			     max_attempts = CASE WHEN input_applied_at IS NULL THEN ? ELSE max_attempts END,
 			     timeout_at = CASE WHEN input_applied_at IS NULL THEN ? ELSE timeout_at END
@@ -299,7 +299,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
   async requestSessionAbort(sessionKey: string): Promise<string[]> {
     const rows = this.sql
       .exec(
-        `UPDATE flue_agent_submissions
+        `UPDATE amond_agent_submissions
 				 SET abort_requested_at = COALESCE(abort_requested_at, ?)
 				 WHERE session_key = ? AND status IN ('queued', 'running', 'joining', 'joined')
 				 RETURNING submission_id`,
@@ -314,7 +314,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     return (
       this.sql
         .exec(
-          `UPDATE flue_agent_submissions
+          `UPDATE amond_agent_submissions
 					 SET status = 'queued', attempt_id = NULL, input_applied_at = NULL, started_at = NULL, owner_id = NULL, lease_expires_at = 0
 					 WHERE submission_id = ? AND status = 'running' AND attempt_id = ?
 					 RETURNING submission_id`,
@@ -344,7 +344,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       // finalize fencing hold.
       const inserted = this.sql
         .exec(
-          `UPDATE flue_agent_submissions AS current
+          `UPDATE amond_agent_submissions AS current
 					 SET status = 'terminalizing', settlement_record_id = ?, settlement_record = ?,
 					     attempt_id = ?, started_at = COALESCE(started_at, ?)
 					 WHERE current.submission_id = ?
@@ -352,7 +352,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
 					   AND (
 					     (current.status = 'running' AND current.attempt_id = ? AND current.owner_id IS NOT NULL)
 					     OR (current.status = 'joined' AND EXISTS (
-					       SELECT 1 FROM flue_agent_submissions AS host
+					       SELECT 1 FROM amond_agent_submissions AS host
 					       WHERE host.submission_id = current.joined_into
 					         AND host.status = 'running' AND host.attempt_id = ?
 					     ))
@@ -373,7 +373,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
         .exec(
           `SELECT submission_id, session_key, attempt_id, settlement_record_id,
 					        settlement_record
-					 FROM flue_agent_submissions
+					 FROM amond_agent_submissions
 					 WHERE submission_id = ? AND status = 'terminalizing'
 					   AND attempt_id = ? AND settlement_record_id = ? AND settlement_record = ?`,
           attempt.submissionId,
@@ -394,7 +394,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     return this.transactionSync(() => {
       const pending = this.sql
         .exec(
-          `SELECT settlement_record FROM flue_agent_submissions
+          `SELECT settlement_record FROM amond_agent_submissions
 					 WHERE submission_id = ? AND status = 'terminalizing' AND attempt_id = ?
 					   AND settlement_record_id = ?`,
           attempt.submissionId,
@@ -416,7 +416,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
           : (options?.errorMessage ?? record.error?.message ?? 'The submission did not complete.')
       const row = this.sql
         .exec(
-          `UPDATE flue_agent_submissions
+          `UPDATE amond_agent_submissions
 					 SET status = 'settled', settled_at = ?, error = ?
 					 WHERE submission_id = ? AND status = 'terminalizing' AND attempt_id = ?
 					   AND settlement_record_id = ?
@@ -439,7 +439,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
   async completeSubmission(attempt: SubmissionAttemptRef): Promise<boolean> {
     return this.transactionSync(() => {
       const settled = this.updateOwnedSubmission(
-        `UPDATE flue_agent_submissions
+        `UPDATE amond_agent_submissions
 				 SET status = 'settled', settled_at = ?, error = NULL
 				 WHERE submission_id = ? AND status = 'running' AND attempt_id = ?
 				 RETURNING submission_id`,
@@ -456,7 +456,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     const message = error instanceof Error ? error.message : String(error)
     return this.transactionSync(() => {
       const settled = this.updateOwnedSubmission(
-        `UPDATE flue_agent_submissions
+        `UPDATE amond_agent_submissions
 				 SET status = 'settled', settled_at = ?, error = ?
 				 WHERE submission_id = ? AND status = 'running' AND attempt_id = ?
 				 RETURNING submission_id`,
@@ -480,7 +480,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     // fan-out is needed — joins attach to a RUNNING host, so a queued row can
     // never have deliveries joined into it.
     return this.updateOwnedSubmission(
-      `UPDATE flue_agent_submissions
+      `UPDATE amond_agent_submissions
 			 SET status = 'settled', settled_at = ?, error = ?
 			 WHERE submission_id = ? AND status = 'queued'
 			 RETURNING submission_id`,
@@ -499,7 +499,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     return this.transactionSync(() => {
       const hostRow = this.sql
         .exec(
-          `SELECT session_key FROM flue_agent_submissions
+          `SELECT session_key FROM amond_agent_submissions
 					 WHERE submission_id = ? AND status = 'running' AND attempt_id = ?
 					 LIMIT 1`,
           host.submissionId,
@@ -510,7 +510,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       const queued = this.sql
         .exec(
           `SELECT ${submissionColumns}
-					 FROM flue_agent_submissions
+					 FROM amond_agent_submissions
 					 WHERE session_key = ? AND status = 'queued'
 					 ORDER BY sequence ASC`,
           String(hostRow.session_key),
@@ -535,7 +535,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
         }
         if (submission.input.agent !== agentName) { break }
         this.sql.exec(
-          `UPDATE flue_agent_submissions
+          `UPDATE amond_agent_submissions
 					 SET status = 'joining', joined_into = ?
 					 WHERE submission_id = ? AND status = 'queued'`,
           host.submissionId,
@@ -552,11 +552,11 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     submissionId: string,
   ): Promise<boolean> {
     return this.updateOwnedSubmission(
-      `UPDATE flue_agent_submissions
+      `UPDATE amond_agent_submissions
 			 SET status = 'joined', input_applied_at = COALESCE(input_applied_at, ?)
 			 WHERE submission_id = ? AND status = 'joining' AND joined_into = ?
 			   AND EXISTS (
-			     SELECT 1 FROM flue_agent_submissions AS host
+			     SELECT 1 FROM amond_agent_submissions AS host
 			     WHERE host.submission_id = ? AND host.status = 'running' AND host.attempt_id = ?
 			   )
 			 RETURNING submission_id`,
@@ -573,11 +573,11 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     submissionId: string,
   ): Promise<boolean> {
     return this.updateOwnedSubmission(
-      `UPDATE flue_agent_submissions
+      `UPDATE amond_agent_submissions
 			 SET status = 'queued', joined_into = NULL, input_applied_at = NULL
 			 WHERE submission_id = ? AND status = 'joining' AND joined_into = ?
 			   AND EXISTS (
-			     SELECT 1 FROM flue_agent_submissions AS host
+			     SELECT 1 FROM amond_agent_submissions AS host
 			     WHERE host.submission_id = ? AND host.status = 'running' AND host.attempt_id = ?
 			   )
 			 RETURNING submission_id`,
@@ -593,7 +593,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       this.sql
         .exec(
           `SELECT ${submissionColumns}
-					 FROM flue_agent_submissions
+					 FROM amond_agent_submissions
 					 WHERE joined_into = ? AND status IN ('joining', 'joined')
 					 ORDER BY sequence ASC`,
           hostSubmissionId,
@@ -612,7 +612,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
    */
   private settleJoinedSubmissions(hostSubmissionId: string, error: string | null): void {
     this.sql.exec(
-      `UPDATE flue_agent_submissions
+      `UPDATE amond_agent_submissions
 			 SET status = 'settled', settled_at = ?, error = ?
 			 WHERE joined_into = ? AND status = 'joined'`,
       Date.now(),
@@ -620,7 +620,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       hostSubmissionId,
     )
     this.sql.exec(
-      `UPDATE flue_agent_submissions
+      `UPDATE amond_agent_submissions
 			 SET status = 'queued', joined_into = NULL, input_applied_at = NULL
 			 WHERE joined_into = ? AND status = 'joining'`,
       hostSubmissionId,
@@ -633,7 +633,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       const admission = admitSubmissionWithBackend<SqlRow>(input, {
         insertIfAbsent: (row) => {
           this.sql.exec(
-            `INSERT OR IGNORE INTO flue_agent_submissions
+            `INSERT OR IGNORE INTO amond_agent_submissions
 						 (submission_id, session_key, kind, payload, status, accepted_at)
 						 VALUES (?, ?, ?, ?, 'queued', ?)`,
             row.submissionId,
@@ -651,7 +651,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       // Unreachable: every backend callback above is synchronous, so the
       // shared algorithm completes inside `transactionSync`.
       if (admission instanceof Promise) {
-        throw new Error('[flue] Internal SQLite admission backend must be synchronous.')
+        throw new Error('[amond] Internal SQLite admission backend must be synchronous.')
       }
       return admission
     })
@@ -677,7 +677,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
       catch (error) {
         if (typeof row.sequence !== 'number') { throw error }
         console.error(
-          '[flue] Terminating malformed submission (sequence %d):',
+          '[amond] Terminating malformed submission (sequence %d):',
           row.sequence,
           error,
         )
@@ -696,7 +696,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     this.transactionSync(() => {
       const row = this.sql
         .exec(
-          `UPDATE flue_agent_submissions
+          `UPDATE amond_agent_submissions
 					 SET status = 'settled', settled_at = ?, error = ?
 					 WHERE sequence = ? AND ${status === 'queued' ? 'status = \'queued\'' : 'status = \'running\''}
 					 RETURNING submission_id`,
@@ -716,7 +716,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
     return this.sql
       .exec(
         `SELECT ${submissionColumns}
-				 FROM flue_agent_submissions
+				 FROM amond_agent_submissions
 				 WHERE submission_id = ?
 				 LIMIT 1`,
         submissionId,
@@ -741,7 +741,7 @@ function parseSettlementObligation(row: SqlRow): SubmissionSettlementObligation 
     typeof row.settlement_record_id !== 'string' ||
     typeof row.settlement_record !== 'string'
   ) {
-    throw new Error('[flue] Persisted submission settlement obligation is malformed.')
+    throw new Error('[amond] Persisted submission settlement obligation is malformed.')
   }
   return {
     submissionId: row.submission_id,
@@ -803,7 +803,7 @@ function parseSubmission(
                             typeof row.max_attempts !== 'number' ||
                             typeof row.timeout_at !== 'number'
   ) {
-    throw new Error('[flue] Persisted agent submission row is malformed.')
+    throw new Error('[amond] Persisted agent submission row is malformed.')
   }
   const parsedPayload = JSON.parse(row.payload)
   const input = hydratePersistedSubmissionAttachments(
@@ -818,7 +818,7 @@ function parseSubmission(
       acceptedAt: row.accepted_at as number,
     })
   ) {
-    throw new Error('[flue] Persisted agent submission payload is malformed.')
+    throw new Error('[amond] Persisted agent submission payload is malformed.')
   }
   return {
     sequence: row.sequence,
@@ -848,7 +848,7 @@ function parseSubmission(
 
 function ensureSubmissionTable(sql: SqlStorage): void {
   sql.exec(
-    `CREATE TABLE IF NOT EXISTS flue_agent_submissions (
+    `CREATE TABLE IF NOT EXISTS amond_agent_submissions (
 		 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
 		 submission_id TEXT NOT NULL UNIQUE,
 		 session_key TEXT NOT NULL,
@@ -874,12 +874,12 @@ function ensureSubmissionTable(sql: SqlStorage): void {
 		)`,
   )
   sql.exec(
-    'CREATE INDEX IF NOT EXISTS flue_agent_submissions_status_sequence_idx ON flue_agent_submissions (status, sequence ASC)',
+    'CREATE INDEX IF NOT EXISTS amond_agent_submissions_status_sequence_idx ON amond_agent_submissions (status, sequence ASC)',
   )
   sql.exec(
-    'CREATE INDEX IF NOT EXISTS flue_agent_submissions_session_status_sequence_idx ON flue_agent_submissions (session_key, status, sequence ASC)',
+    'CREATE INDEX IF NOT EXISTS amond_agent_submissions_session_status_sequence_idx ON amond_agent_submissions (session_key, status, sequence ASC)',
   )
   sql.exec(
-    'CREATE INDEX IF NOT EXISTS flue_agent_submissions_joined_into_idx ON flue_agent_submissions (joined_into) WHERE joined_into IS NOT NULL',
+    'CREATE INDEX IF NOT EXISTS amond_agent_submissions_joined_into_idx ON amond_agent_submissions (joined_into) WHERE joined_into IS NOT NULL',
   )
 }

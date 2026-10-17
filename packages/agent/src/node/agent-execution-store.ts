@@ -101,14 +101,14 @@ function openDatabase(path: string): {
  * @example
  * ```ts
  * // src/db.ts
- * import { sqlite } from '@flue/runtime/node';
- * export default sqlite('./data/flue.db');
+ * import { sqlite } from '@amond-ai/agent/node';
+ * export default sqlite('./data/amond.db');
  * ```
  */
 export function sqlite(path?: string): PersistenceAdapter {
   if (path !== undefined && path !== ':memory:' && path.trim() === '') {
     throw new Error(
-      '[flue] sqlite() requires a non-empty file path, or omit the argument for an in-memory database.',
+      '[amond] sqlite() requires a non-empty file path, or omit the argument for an in-memory database.',
     )
   }
   const resolvedPath = path ?? ':memory:'

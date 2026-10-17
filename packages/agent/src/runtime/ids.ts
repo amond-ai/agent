@@ -69,7 +69,7 @@ export function generateInvocationId(): string {
 }
 
 /**
- * Every submission — dispatched or direct (attached HTTP / flue run) — gets
+ * Every submission — dispatched or direct (attached HTTP / amond run) — gets
  * one of these. Historical dispatch submissions minted `dispatch_`-prefixed
  * ids; the values are opaque, so both prefixes remain valid identifiers.
  */
@@ -85,7 +85,7 @@ export function generateSubmissionId(): string {
  *
  * FROZEN WIRE FORMAT — do not change the prefix or the preimage. A redelivery
  * after a deploy must derive the same id, so both are versioned by the
- * `flue-submission-key` label in the preimage; a future derivation change
+ * `amond-submission-key` label in the preimage; a future derivation change
  * needs a new label (and prefix), never an edit of this one. The hash is
  * namespaced by `(agent, instanceId)` because the submission store is shared
  * across all agents and instances — the same channel event id fanned out to
@@ -98,7 +98,7 @@ export async function deriveKeyedSubmissionId(
   id: string,
   idempotencyKey: string,
 ): Promise<string> {
-  const preimage = `flue-submission-key\n${agent}\n${id}\n${idempotencyKey}`
+  const preimage = `amond-submission-key\n${agent}\n${id}\n${idempotencyKey}`
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(preimage))
   const hex = [...new Uint8Array(digest)]
     .map(byte => byte.toString(16).padStart(2, '0'))
@@ -135,7 +135,7 @@ export function generateToolCallId(): string {
 /**
  * Correlation ref minted when the HTTP error renderer writes a server-side
  * log line. The same value rides the wire envelope (`error.ref`), the
- * `flue-error-ref` response header, and the log-line prefix — never persisted,
+ * `amond-error-ref` response header, and the log-line prefix — never persisted,
  * so a ref is a promise of a matching log line, not a durable resource. ULID
  * ordering lets an operator bracket the log window from the ref alone.
  */

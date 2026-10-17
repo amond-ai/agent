@@ -1,5 +1,5 @@
 /**
- * Node dev integration: loads the bootstrap (`virtual:flue/server`) through
+ * Node dev integration: loads the bootstrap (`virtual:amond/server`) through
  * the outer Vite dev server's SSR module loader and serves the application
  * behind a Fetch-compatible connect middleware.
  *
@@ -20,12 +20,12 @@ import {
   configureErrorRendering,
   RuntimeUnavailableError,
   toHttpResponse,
-} from '@flue/runtime/internal'
+} from '@amond-ai/agent/internal'
 import { getRequestListener } from '@hono/node-server'
 import type { ViteDevServer } from 'vite'
 import type {
-  LoadedFlueNodeApplication,
-  LoadFlueNodeApplicationOptions,
+  LoadAmondNodeApplicationOptions,
+  LoadedAmondNodeApplication,
 } from './bootstrap/node-server.ts'
 
 type NodeRuntimeStatus = 'loading' | 'ready' | 'failed' | 'closed'
@@ -63,11 +63,11 @@ export function createNodeDevController(options: {
   // Back the dev conversation store with an on-disk SQLite file so history
   // survives reloads within a session. Reset it on each cold start so a
   // fresh dev server begins empty (WAL mode adds the -wal/-shm sidecars).
-  const devDbPath = path.join(root, 'node_modules', '.cache', 'flue', 'dev.db')
+  const devDbPath = path.join(root, 'node_modules', '.cache', 'amond', 'dev.db')
   for (const suffix of ['', '-wal', '-shm']) { fs.rmSync(devDbPath + suffix, { force: true }) }
 
   let status: NodeRuntimeStatus = 'loading'
-  let application: LoadedFlueNodeApplication | undefined
+  let application: LoadedAmondNodeApplication | undefined
   let closed = false
   let queue: Promise<void> = Promise.resolve()
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -90,16 +90,16 @@ export function createNodeDevController(options: {
     queued = false
     if (!application) { status = 'loading' }
     try {
-      const bootstrap = (await server.ssrLoadModule('virtual:flue/server', {
+      const bootstrap = (await server.ssrLoadModule('virtual:amond/server', {
         fixStacktrace: true,
       })) as {
-        loadFlueNodeApplication(
-          options: LoadFlueNodeApplicationOptions,
-        ): Promise<LoadedFlueNodeApplication>
+        loadAmondNodeApplication(
+          options: LoadAmondNodeApplicationOptions,
+        ): Promise<LoadedAmondNodeApplication>
       }
-      const loaded = await bootstrap.loadFlueNodeApplication({
+      const loaded = await bootstrap.loadAmondNodeApplication({
         local: true,
-        env: { ...process.env, FLUE_DEV_SQLITE_PATH: devDbPath },
+        env: { ...process.env, AMOND_DEV_SQLITE_PATH: devDbPath },
       })
       if (closed) {
         await loaded.stop()
@@ -110,7 +110,7 @@ export function createNodeDevController(options: {
       status = 'ready'
       if (lastLoadError !== undefined) {
         lastLoadError = undefined
-        logger.info('[flue] Application load recovered.')
+        logger.info('[amond] Application load recovered.')
       }
       if (previous) {
         // Load-new-then-stop-old: the swap happened above, so in-flight
@@ -119,7 +119,7 @@ export function createNodeDevController(options: {
           await previous.stop(30_000)
         }
         catch (error) {
-          logger.error(`[flue] Previous application shutdown failed: ${formatError(error)}`, {
+          logger.error(`[amond] Previous application shutdown failed: ${formatError(error)}`, {
             error: asError(error),
           })
         }
@@ -135,7 +135,7 @@ export function createNodeDevController(options: {
         .filter(Boolean)
         .join('\n')
       logger.error(
-        `[flue] Application load failed: ${formatError(error)}${explanation ? `\n${explanation}` : ''}`,
+        `[amond] Application load failed: ${formatError(error)}${explanation ? `\n${explanation}` : ''}`,
         { error: asError(error) },
       )
       if (!application) { status = 'failed' }
@@ -199,7 +199,7 @@ export function createNodeDevController(options: {
           await current.stop(30_000)
         }
         catch (error) {
-          logger.error(`[flue] Application shutdown failed: ${formatError(error)}`, {
+          logger.error(`[amond] Application shutdown failed: ${formatError(error)}`, {
             error: asError(error),
           })
         }

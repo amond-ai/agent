@@ -1,7 +1,7 @@
 /**
- * Worker-side Flue runtime seams for the generated Cloudflare entry.
+ * Worker-side amond runtime seams for the generated Cloudflare entry.
  *
- * The entry installs these via `configureFlueRuntime`: the dispatch queue
+ * The entry installs these via `configureAmondRuntime`: the dispatch queue
  * (durable admission against the target agent's Durable Object), the DO
  * request router, and instance lookup. Building them here keeps the logic
  * tested TypeScript instead of generated string code; the entry injects only
@@ -17,7 +17,7 @@ import {
   SubmissionConflictError,
 } from '../errors.ts'
 import type { DispatchInput, DispatchQueue } from '../runtime/dispatch-queue.ts'
-import type { CloudflareRuntime } from '../runtime/flue-app.ts'
+import type { CloudflareRuntime } from '../runtime/amond-app.ts'
 import type { DispatchReceipt } from '../types.ts'
 import {
   CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH,
@@ -43,7 +43,7 @@ export interface CreateCloudflareWorkerConfigOptions {
   fetchAgent: (binding: unknown, instanceId: string, request: Request) => Promise<Response>
 }
 
-/** The Cloudflare-target seams the generated entry passes to `configureFlueRuntime`. */
+/** The Cloudflare-target seams the generated entry passes to `configureAmondRuntime`. */
 export type CloudflareWorkerConfig = Pick<
   CloudflareRuntime,
 	'dispatchQueue' | 'routeAgentRequest' | 'instanceInfo'
@@ -65,13 +65,13 @@ export function createCloudflareWorkerConfig(
       const binding = lookupBinding(input.agent, env)
       if (!binding) {
         throw new Error(
-          `[flue] dispatch() target agent "${input.agent}" Durable Object binding is unavailable.`,
+          `[amond] dispatch() target agent "${input.agent}" Durable Object binding is unavailable.`,
         )
       }
       const response = await fetchAgent(
         binding,
         input.id,
-        new Request(`https://flue.invalid${CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH}`, {
+        new Request(`https://amond.invalid${CLOUDFLARE_AGENT_INTERNAL_DISPATCH_PATH}`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(input),
@@ -106,19 +106,19 @@ export function createCloudflareWorkerConfig(
     const binding = lookupBinding(agentName, env)
     if (!binding) {
       throw new Error(
-        `[flue] getAgentInstance() target agent "${agentName}" Durable Object binding is unavailable.`,
+        `[amond] getAgentInstance() target agent "${agentName}" Durable Object binding is unavailable.`,
       )
     }
     const response = await fetchAgent(
       binding,
       instanceId,
-      new Request(`https://flue.invalid${CLOUDFLARE_AGENT_INTERNAL_INSTANCE_INFO_PATH}`, {
+      new Request(`https://amond.invalid${CLOUDFLARE_AGENT_INTERNAL_INSTANCE_INFO_PATH}`, {
         method: 'GET',
       }),
     )
     if (!response.ok) {
       throw new Error(
-        `[flue] getAgentInstance() lookup for agent "${agentName}" failed with status ${response.status}.`,
+        `[amond] getAgentInstance() lookup for agent "${agentName}" failed with status ${response.status}.`,
       )
     }
     const info = (await response.json()) as { exists?: unknown, uid?: unknown } | null
@@ -179,12 +179,12 @@ function dispatchAdmissionError(input: DispatchInput, status: number, rejection:
     const details = typeof body.details === 'string' ? ` ${body.details}` : ''
     return Object.assign(
       new Error(
-        `[flue] dispatch() target agent "${input.agent}" rejected admission: ${body.error}${details}`,
+        `[amond] dispatch() target agent "${input.agent}" rejected admission: ${body.error}${details}`,
       ),
       { status, details: body.details },
     )
   }
   return new Error(
-    `[flue] dispatch() target agent "${input.agent}" rejected durable admission with status ${status}.`,
+    `[amond] dispatch() target agent "${input.agent}" rejected durable admission with status ${status}.`,
   )
 }

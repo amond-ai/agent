@@ -1,22 +1,22 @@
 /**
- * `start()` — the Node bootstrap for running Flue outside a generated server
+ * `start()` — the Node bootstrap for running amond outside a generated server
  * entry: standalone scripts (`node ./scripts/report.ts`) and user test
- * suites. The CLI's `flue run` shares the same assembly (`./assemble.ts`)
+ * suites. The CLI's `amond run` shares the same assembly (`./assemble.ts`)
  * with module loading layered on top.
  *
- * One process holds at most one Flue runtime (the runtime keeps module-scoped
- * registries — see `configureFlueRuntime`), so `start()` refuses to run where
- * a runtime is already configured: inside a Flue server, `init()`/`dispatch()`
+ * One process holds at most one amond runtime (the runtime keeps module-scoped
+ * registries — see `configureAmondRuntime`), so `start()` refuses to run where
+ * a runtime is already configured: inside an amond server, `init()`/`dispatch()`
  * work directly and no bootstrap is needed.
  */
 
 import type { Provider } from '@earendil-works/pi-ai'
 import type { PersistenceAdapter } from '../agent-execution-store.ts'
 import { registerDefaultProviders } from '../runtime/builtin-providers.ts'
-import { getFlueRuntime } from '../runtime/flue-app.ts'
+import { getAmondRuntime } from '../runtime/amond-app.ts'
 import { setProvider } from '../runtime/providers.ts'
 import { resolveAgentIdentity } from '../runtime/registration.ts'
-import type { FlueAgentRegistration } from '../runtime/registration.ts'
+import type { AmondAgentRegistration } from '../runtime/registration.ts'
 import type { Agent } from '../types.ts'
 import { sqlite } from './agent-execution-store.ts'
 import { assembleNodeAgentRuntime, connectPersistenceAdapter } from './assemble.ts'
@@ -63,30 +63,30 @@ export interface StartOptions {
   providers?: readonly Provider[]
 }
 
-/** A started Flue runtime. Stop it when the script is done. */
-export interface Flue {
+/** A started amond runtime. Stop it when the script is done. */
+export interface Amond {
   /** Graceful shutdown: drain in-flight work, then disconnect persistence. */
   stop(): Promise<void>
   [Symbol.asyncDispose](): Promise<void>
 }
 
 /**
- * Start the Flue runtime in this process — the bootstrap for standalone
- * scripts and test suites, mirroring what a generated Flue server entry does
+ * Start the amond runtime in this process — the bootstrap for standalone
+ * scripts and test suites, mirroring what a generated amond server entry does
  * at boot (registration, persistence, the durable submission coordinator)
  * without any HTTP surface.
  *
  * After `start()` resolves, the runtime-backed APIs work exactly as they do
- * inside a Flue server: the `init()` handle to send messages and read their
+ * inside an amond server: the `init()` handle to send messages and read their
  * settled replies, the top-level `dispatch()` to fire-and-forget.
  *
  * ```ts
  * import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
- * import { init } from '@flue/runtime';
- * import { sqlite, start } from '@flue/runtime/node';
+ * import { init } from '@amond-ai/agent';
+ * import { sqlite, start } from '@amond-ai/agent/node';
  * import { Reporter } from '../src/agents/reporter.ts';
  *
- * await using flue = await start({
+ * await using amond = await start({
  *   agents: [Reporter], // the function IS the agent
  *   db: sqlite('./nightly.db'), // omit for in-memory
  *   providers: [anthropicProvider()], // omit for every pi built-in
@@ -98,22 +98,22 @@ export interface Flue {
  * console.log(reply.text);
  * ```
  *
- * Inside a Flue server (a generated entry, `flue dev`, a deploy) the runtime
+ * Inside an amond server (a generated entry, `amond dev`, a deploy) the runtime
  * is already configured — call `init()`/`dispatch()` directly; `start()`
  * throws there rather than split the process's registries.
  */
-export async function start(options: StartOptions): Promise<Flue> {
-  if (getFlueRuntime() !== undefined) {
+export async function start(options: StartOptions): Promise<Amond> {
+  if (getAmondRuntime() !== undefined) {
     throw new Error(
-      '[flue] start() found an already-configured Flue runtime in this process. ' +
-      'Inside a Flue server, init()/dispatch() work directly — start() is only for ' +
+      '[amond] start() found an already-configured amond runtime in this process. ' +
+      'Inside an amond server, init()/dispatch() work directly — start() is only for ' +
       'standalone scripts and tests, and one process holds one runtime.',
     )
   }
   if (!Array.isArray(options?.agents) || options.agents.length === 0) {
-    throw new Error('[flue] start() requires at least one agent: start({ agents: [MyAgent] }).')
+    throw new Error('[amond] start() requires at least one agent: start({ agents: [MyAgent] }).')
   }
-  const registrations: FlueAgentRegistration[] = options.agents.map(record =>
+  const registrations: AmondAgentRegistration[] = options.agents.map(record =>
     normalizeStartAgentEntry(record),
   )
 
@@ -158,13 +158,13 @@ export async function start(options: StartOptions): Promise<Flue> {
   }
 }
 
-function normalizeStartAgentEntry(record: StartAgentEntry): FlueAgentRegistration {
+function normalizeStartAgentEntry(record: StartAgentEntry): AmondAgentRegistration {
   if (typeof record === 'function') {
     return { identity: requireIdentity(record, undefined), agent: record }
   }
   if (!record || typeof record !== 'object' || typeof record.agent !== 'function') {
     throw new Error(
-      '[flue] start() agents entries must be agent functions or { agent, name? } records.',
+      '[amond] start() agents entries must be agent functions or { agent, name? } records.',
     )
   }
   return { identity: requireIdentity(record.agent, record.name), agent: record.agent }
@@ -174,7 +174,7 @@ function requireIdentity(agent: Agent, override: string | undefined): string {
   const identity = override ?? resolveAgentIdentity(agent)
   if (identity === undefined) {
     throw new Error(
-      '[flue] start() could not resolve an identity for an agents entry: the function is ' +
+      '[amond] start() could not resolve an identity for an agents entry: the function is ' +
       'anonymous and carries no agentName static. Name the function, assign ' +
       '`fn.agentName = \'<identity>\'`, or use the { agent, name } entry form.',
     )

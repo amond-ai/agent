@@ -3,12 +3,12 @@
 import type {
   AgentConversationObservation,
   AgentConversationObservationPhase,
+  AmondClient,
   DeliveredAttachment,
-  FlueClient,
-} from '@flue/sdk'
+} from '@amond-ai/agent-sdk'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { useFlueAgent } from './use-agent.ts'
+import { useAmondAgent } from './use-agent.ts'
 
 function activeClient() {
   let phase: AgentConversationObservationPhase = 'loading'
@@ -35,7 +35,7 @@ function activeClient() {
         deduplicated: true,
       }
     },
-  } as unknown as FlueClient
+  } as unknown as AmondClient
   const sent: unknown[] = []
   return {
     client,
@@ -47,10 +47,10 @@ function activeClient() {
   }
 }
 
-describe('useFlueAgent callback identities', () => {
+describe('useAmondAgent callback identities', () => {
   it('keeps active callbacks stable across external store updates', () => {
     const source = activeClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     const sendMessage = result.current.sendMessage
     const refresh = result.current.refresh
 
@@ -62,7 +62,7 @@ describe('useFlueAgent callback identities', () => {
 
   it('passes SDK send controls through and returns the full receipt', async () => {
     const source = activeClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
     const images: DeliveredAttachment[] = [
       { type: 'image', data: 'aGVsbG8=', mimeType: 'image/png' },
     ]
@@ -94,7 +94,7 @@ describe('useFlueAgent callback identities', () => {
 
   it('folds images and documents into attachments with optimistic file parts', async () => {
     const source = activeClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
 
     await act(async () => {
       await result.current.sendMessage('summarize', {
@@ -129,7 +129,7 @@ describe('useFlueAgent callback identities', () => {
 
   it('sends only the message when no options are given', async () => {
     const source = activeClient()
-    const { result } = renderHook(() => useFlueAgent({ client: source.client }))
+    const { result } = renderHook(() => useAmondAgent({ client: source.client }))
 
     await result.current.sendMessage('hello')
 
@@ -138,7 +138,7 @@ describe('useFlueAgent callback identities', () => {
   })
 
   it('keeps dormant callbacks stable across renders', async () => {
-    const { result, rerender } = renderHook(() => useFlueAgent())
+    const { result, rerender } = renderHook(() => useAmondAgent())
     const sendMessage = result.current.sendMessage
     const refresh = result.current.refresh
 

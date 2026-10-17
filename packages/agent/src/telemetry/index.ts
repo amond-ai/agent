@@ -1,6 +1,6 @@
 /**
- * `@flue/runtime/telemetry` — the backend-neutral GenAI content machinery
- * shared by the native Cloudflare tracing adapter and `@flue/opentelemetry`:
+ * `@amond-ai/agent/telemetry` — the backend-neutral GenAI content machinery
+ * shared by the native Cloudflare tracing adapter and an OpenTelemetry adapter:
  * the role/parts message projection, the content pipeline
  * (detach → transform → serialize → truncate-at-budget), the in-band
  * truncation helper, and the semconv vocabulary/revision stamps.
@@ -37,8 +37,8 @@ export {
   toolDefinitions,
 } from './projection.ts'
 export {
+  AMOND_TELEMETRY_EXTENSION_REVISION,
   CONTENT_ATTR,
-  FLUE_TELEMETRY_EXTENSION_REVISION,
   GEN_AI_PROJECTION_REVISION,
   GEN_AI_SEMCONV_REVISION,
 } from './semconv.ts'

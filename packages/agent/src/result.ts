@@ -37,7 +37,7 @@ export function buildPackagedSkillPrompt(
   schema?: v.GenericSchema,
 ): string {
   const skillFile = directory.files['SKILL.md']
-  if (!skillFile) { throw new Error(`[flue] Packaged skill "${directory.name}" is missing SKILL.md.`) }
+  if (!skillFile) { throw new Error(`[amond] Packaged skill "${directory.name}" is missing SKILL.md.`) }
   const raw = new TextDecoder().decode(decodeBase64(skillFile.content))
   const skill = parseSkillMarkdown(raw, {
     directoryName: directory.name,

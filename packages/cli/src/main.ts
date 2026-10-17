@@ -6,7 +6,7 @@ import { readCliVersion } from './lib/package-root.ts'
 import { error as cliError, note } from './lib/terminal.ts'
 
 // Signal handling stays with Node's default terminate-on-signal for every
-// command; only a live `flue run` execution installs handlers (commands/run.ts)
+// command; only a live `amond run` execution installs handlers (commands/run.ts)
 // to drain to a bounded shutdown. Installing handlers here would suppress the
 // default and leave commands with a pending async operation un-interruptible.
 
@@ -21,7 +21,7 @@ function handleUnknownCommand(command: string | undefined): void {
       ...cli.commands.map(entry => entry.name),
       'help',
     ])
-    if (suggestion) { note(`Did you mean \`flue ${suggestion}\`?`) }
+    if (suggestion) { note(`Did you mean \`amond ${suggestion}\`?`) }
     console.error('')
   }
   printHelpToStderr(cli)
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
 
 void main().then(
   () => {
-    // `flue run` may leave db/Vite handles that hold the event loop open
+    // `amond run` may leave db/Vite handles that hold the event loop open
     // after settlement; every other command exits naturally.
     if (cli.matchedCommandName === 'run') { process.exit(process.exitCode ?? 0) }
   },

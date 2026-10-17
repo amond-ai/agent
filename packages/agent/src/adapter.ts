@@ -6,8 +6,8 @@
  * a persistence backend for a database not covered by the built-in adapters.
  *
  * ```ts
- * import type { AgentSubmissionStore, PersistenceAdapter } from '@flue/runtime/adapter';
- * import { createSessionStorageKey, parseAcceptedAt } from '@flue/runtime/adapter';
+ * import type { AgentSubmissionStore, PersistenceAdapter } from '@amond-ai/agent/adapter';
+ * import { createSessionStorageKey, parseAcceptedAt } from '@amond-ai/agent/adapter';
  * ```
  *
  * This surface is intentionally narrow: store interfaces, vocabulary types,
@@ -20,7 +20,7 @@
  * as MongoDB are first-class implementations. An adapter is correct when the
  * executable contract suites pass: `defineStoreContractTests`,
  * `defineConversationStreamStoreContractTests`, and
- * `defineAttachmentStoreContractTests` from `@flue/runtime/test-utils`.
+ * `defineAttachmentStoreContractTests` from `@amond-ai/agent/test-utils`.
  *
  * Stability: the `AgentSubmissionStore` settlement and lease method groups
  * mirror the durable-execution engine and are subject to change until 1.0 —
@@ -82,7 +82,7 @@ export {
   ConversationStreamStoreError,
   PersistedFormatVersionError,
 } from './errors.ts'
-export { assertSupportedFlueFormatVersion, FLUE_FORMAT_VERSION } from './format-version.ts'
+export { AMOND_FORMAT_VERSION, assertSupportedAmondFormatVersion } from './format-version.ts'
 
 // ─── Submission payload chunking ─────────────────────────────────────────────
 

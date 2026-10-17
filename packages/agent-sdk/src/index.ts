@@ -10,27 +10,27 @@ export {
 } from '@durable-streams/client'
 export type {
   AgentAbortResult,
-  CreateFlueClientOptions,
-  FlueClient,
+  AmondClient,
+  CreateAmondClientOptions,
   HttpClientOptions,
   RequestHeaders,
 } from './client.ts'
-export { createFlueClient } from './client.ts'
-export { FlueApiError } from './http.ts'
+export { createAmondClient } from './client.ts'
+export { AmondApiError } from './http.ts'
 export type {
-  FlueConversationHistoryBeforeOptions,
-  FlueConversationHistoryOptions,
-  FlueConversationHistoryPage,
-  FlueConversationMessage,
-  FlueConversationPart,
-  FlueConversationSettlement,
-  FlueConversationSnapshot,
-  FlueConversationState,
+  AmondConversationHistoryBeforeOptions,
+  AmondConversationHistoryOptions,
+  AmondConversationHistoryPage,
+  AmondConversationMessage,
+  AmondConversationPart,
+  AmondConversationSettlement,
+  AmondConversationSnapshot,
+  AmondConversationState,
 } from './public/conversation.ts'
 // The conversation `updates` wire union is not stable application API, but
 // first-party presenters (the CLI) reduce it directly, so the type is
 // exported for them. Application code should consume materialized
-// `FlueConversationState` via `observe()` rather than handling chunks.
+// `AmondConversationState` via `observe()` rather than handling chunks.
 export type { ConversationStreamChunk } from './public/conversation-stream.ts'
 export type {
   AgentConversationObservation,
@@ -51,9 +51,9 @@ export type {
 } from './public/send.ts'
 export {
   type AgentWaitOptions,
-  FlueExecutionError,
-  type FlueExecutionFailure,
-  type FlueExecutionTarget,
+  AmondExecutionError,
+  type AmondExecutionFailure,
+  type AmondExecutionTarget,
 } from './public/settle.ts'
-export type { FlueEventStream, FlueStreamOptions } from './public/stream.ts'
+export type { AmondEventStream, AmondStreamOptions } from './public/stream.ts'
 export type { PromptUsage } from './types.ts'

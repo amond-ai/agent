@@ -36,19 +36,19 @@ import type {
   Agent,
   AgentConfig,
   AgentRuntimeConfig,
+  AmondEvent,
+  AmondEventCallback,
+  AmondEventContext,
+  AmondEventInput,
+  AmondObservationDetail,
   DeliveredMessage,
-  FlueEvent,
-  FlueEventCallback,
-  FlueEventContext,
-  FlueEventInput,
-  FlueObservationDetail,
   Sandbox,
   SandboxFactory,
   SandboxToolFactory,
   ToolDefinition,
 } from './types.ts'
 
-export interface FlueContextConfig {
+export interface AmondContextConfig {
   id: string
   agentName?: string
   /**
@@ -81,8 +81,8 @@ export interface FlueContextConfig {
   mcpConnections?: McpConnectionResolver
 }
 
-/** Extends FlueEventContext with server-only methods. */
-export interface FlueContextInternal extends FlueEventContext {
+/** Extends AmondEventContext with server-only methods. */
+export interface AmondContextInternal extends AmondEventContext {
   /**
    * `delivery` is the submission's delivered message; renders read it via
    * `useDelivery()`. Omit for invocations no delivered message triggered.
@@ -96,19 +96,19 @@ export interface FlueContextInternal extends FlueEventContext {
     delivery?: DeliveredMessage,
     data?: unknown,
   ): Promise<Harness>
-  createEvent(event: FlueEventInput): FlueEvent
-  publishEvent(event: FlueEvent, observation?: FlueObservationDetail): void
-  emitEvent(event: FlueEventInput, observation?: FlueObservationDetail): FlueEvent
-  subscribeEvent(callback: FlueEventCallback): () => void
+  createEvent(event: AmondEventInput): AmondEvent
+  publishEvent(event: AmondEvent, observation?: AmondObservationDetail): void
+  emitEvent(event: AmondEventInput, observation?: AmondObservationDetail): AmondEvent
+  subscribeEvent(callback: AmondEventCallback): () => void
   flushEventCallbacks(): Promise<void>
-  setEventCallback(callback: FlueEventCallback | undefined): void
+  setEventCallback(callback: AmondEventCallback | undefined): void
   setConversationWriter?(writer: ConversationRecordWriter | undefined): void
   setAttachmentStore?(store: AttachmentStore | undefined): void
   setMcpConnections?(resolver: McpConnectionResolver | undefined): void
 }
 
-export function createFlueContext(config: FlueContextConfig): FlueContextInternal {
-  const subscribers = new Set<FlueEventCallback>()
+export function createAmondContext(config: AmondContextConfig): AmondContextInternal {
+  const subscribers = new Set<AmondEventCallback>()
   let handlerUnsubscribe: (() => void) | undefined
   const pendingEventCallbacks = new Set<Promise<void>>()
   let eventCallbackError: unknown
@@ -123,7 +123,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
     }>
     | undefined
 
-  const createEvent = (event: FlueEventInput): FlueEvent => ({
+  const createEvent = (event: AmondEventInput): AmondEvent => ({
     ...event,
     instanceId: config.id,
     // Payload wins for submissionId: the context stamps its own only when
@@ -140,7 +140,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
     timestamp: new Date().toISOString(),
   })
 
-  const publishEvent = (decorated: FlueEvent, observation?: FlueObservationDetail): void => {
+  const publishEvent = (decorated: AmondEvent, observation?: AmondObservationDetail): void => {
     for (const subscriber of subscribers) {
       try {
         const callback = subscriber(decorated)
@@ -158,20 +158,20 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
       }
     }
     // Fan out to module-scoped subscribers registered via
-    // `observe()` from `@flue/runtime`. These run after the
+    // `observe()` from `@amond-ai/agent`. These run after the
     // per-context subscribers and receive the originating `ctx` as
     // a second argument so cross-cutting code can read runtime identity
     // and environment metadata.
     dispatchGlobalEvent(decorated, ctx, observation)
   }
 
-  const emitEvent = (event: FlueEventInput, observation?: FlueObservationDetail): FlueEvent => {
+  const emitEvent = (event: AmondEventInput, observation?: AmondObservationDetail): AmondEvent => {
     const decorated = createEvent(event)
     publishEvent(decorated, observation)
     return decorated
   }
 
-  const ctx: FlueContextInternal = {
+  const ctx: AmondContextInternal = {
     get id() {
       return config.id
     },
@@ -245,7 +245,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
 
     emitEvent,
 
-    subscribeEvent(callback: FlueEventCallback): () => void {
+    subscribeEvent(callback: AmondEventCallback): () => void {
       subscribers.add(callback)
       return () => subscribers.delete(callback)
     },
@@ -259,7 +259,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
       }
     },
 
-    setEventCallback(callback: FlueEventCallback | undefined): void {
+    setEventCallback(callback: AmondEventCallback | undefined): void {
       handlerUnsubscribe?.()
       handlerUnsubscribe = callback ? ctx.subscribeEvent(callback) : undefined
     },
@@ -280,7 +280,7 @@ export function createFlueContext(config: FlueContextConfig): FlueContextInterna
   return ctx
 }
 
-async function createLocalConversationRuntime(config: FlueContextConfig): Promise<{
+async function createLocalConversationRuntime(config: AmondContextConfig): Promise<{
   writer: ConversationRecordWriter
   attachments: AttachmentStore
 }> {
@@ -299,12 +299,12 @@ async function createLocalConversationRuntime(config: FlueContextConfig): Promis
 
 async function initializeRootHarness(
   agent: Agent,
-  config: FlueContextConfig,
-  emitEvent: (event: FlueEventInput, observation?: FlueObservationDetail) => void,
+  config: AmondContextConfig,
+  emitEvent: (event: AmondEventInput, observation?: AmondObservationDetail) => void,
   delivery?: DeliveredMessage,
 ): Promise<Harness> {
   if (!config.conversationWriter || !config.attachmentStore) {
-    throw new Error('[flue] Canonical conversation runtime is not configured.')
+    throw new Error('[amond] Canonical conversation runtime is not configured.')
   }
   // usePersistentState reads the instance's reduced state snapshot at render time and
   // writes through this buffer, which the session drains into the tool
@@ -315,7 +315,7 @@ async function initializeRootHarness(
   // messages is deliberately ignored, and nothing re-validates). Execution
   // never creates instance identity.
   if (!reduced.initialData) {
-    throw new Error('[flue] Instance identity must exist before execution — admission creates it.')
+    throw new Error('[amond] Instance identity must exist before execution — admission creates it.')
   }
   const initialData = reduced.initialData.value
   const hookState = createHookStateBuffer(reduced.state)
@@ -343,12 +343,12 @@ async function initializeRootHarness(
   let lastStructure: AgentRenderStructure = first.structure
   if (typeof definition.model !== 'string') {
     throw new Error(
-      `[flue] The agent requires a model. Call useModel('provider-id/model-id') in the agent function.`,
+      `[amond] The agent requires a model. Call useModel('provider-id/model-id') in the agent function.`,
     )
   }
   const resolvedModel = config.agentConfig.resolveModel(definition.model)
   if (!resolvedModel) {
-    throw new Error(`[flue] The agent model "${definition.model}" could not be resolved.`)
+    throw new Error(`[amond] The agent model "${definition.model}" could not be resolved.`)
   }
   // MCP declarations resolve alongside the sandbox: every declared server
   // connects in parallel, inside request context. Init-only like the rest of
@@ -519,7 +519,7 @@ async function initializeRootHarness(
  * connection per initialized harness.
  */
 async function resolveMcpTools(
-  config: FlueContextConfig,
+  config: AmondContextConfig,
   definitions: readonly McpConnectionDefinition[] | undefined,
 ): Promise<{ tools: ToolDefinition[], unavailable: McpUnavailableConnection[] }> {
   if (!definitions || definitions.length === 0) { return { tools: [], unavailable: [] } }
@@ -599,14 +599,14 @@ async function resolveSandbox(
     if (!sandbox.createSandbox && !warnedLegacyCreateSessionEnv) {
       warnedLegacyCreateSessionEnv = true
       console.warn(
-        '[flue] SandboxFactory.createSessionEnv is deprecated; rename the method to createSandbox.',
+        '[amond] SandboxFactory.createSessionEnv is deprecated; rename the method to createSandbox.',
       )
     }
     if (create === undefined) {
-      throw new Error('[flue] Invalid sandbox option composed by the agent function.')
+      throw new Error('[amond] Invalid sandbox option composed by the agent function.')
     }
     const env = await create.call(sandbox, { id })
     return { env, toolFactory: sandbox.tools }
   }
-  throw new Error('[flue] Invalid sandbox option composed by the agent function.')
+  throw new Error('[amond] Invalid sandbox option composed by the agent function.')
 }

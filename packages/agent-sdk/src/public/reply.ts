@@ -16,7 +16,7 @@
  * so a reply read over HTTP and one read in-process agree byte for byte.
  */
 
-import type { FlueConversationMessage, FlueConversationSettlement } from './conversation.ts'
+import type { AmondConversationMessage, AmondConversationSettlement } from './conversation.ts'
 
 /** The reply a settled submission produced, read from the conversation. */
 export interface AgentSubmissionReply {
@@ -50,8 +50,8 @@ export interface AgentSubmissionReply {
  */
 export function readSubmissionReply(
   conversation: {
-    messages: FlueConversationMessage[]
-    settlements: FlueConversationSettlement[]
+    messages: AmondConversationMessage[]
+    settlements: AmondConversationSettlement[]
     before?: string | null
   },
   submissionId: string,

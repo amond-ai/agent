@@ -28,9 +28,9 @@ export type { ConversationStreamChunk } from './conversation-public.ts'
 export {
   AgentInstanceExistsError,
   AgentInstanceNotFoundError,
+  AmondError,
   AttachmentNotAvailableError,
   DelegationDepthExceededError,
-  FlueError,
   InstrumentationAlreadyInstalledError,
   OperationFailedError,
   SandboxDiedError,
@@ -54,9 +54,9 @@ export {
 } from './errors.ts'
 export { IMAGE_DATA_OMITTED } from './event-redaction.ts'
 export type {
-  FlueExecutionContext,
-  FlueExecutionInterceptor,
-  FlueExecutionOperation,
+  AmondExecutionContext,
+  AmondExecutionInterceptor,
+  AmondExecutionOperation,
 } from './execution-interceptor.ts'
 export { useAgentFinish } from './hooks/use-agent-finish.ts'
 export { useAgentStart } from './hooks/use-agent-start.ts'
@@ -74,7 +74,7 @@ export { useSandbox, type UseSandboxOptions } from './hooks/use-sandbox.ts'
 export { useSkill } from './hooks/use-skill.ts'
 export { defineSubagent, GeneralSubagent, useSubagent } from './hooks/use-subagent.ts'
 export { useTool } from './hooks/use-tool.ts'
-export { type FlueInstrumentation, instrument } from './instrumentation.ts'
+export { type AmondInstrumentation, instrument } from './instrumentation.ts'
 export type { JsonValue } from './json-snapshot.ts'
 export type {
   McpAuth,
@@ -94,15 +94,15 @@ export type {
   ResponseMetadataCallback,
   ResponseStartContext,
 } from './message-output.ts'
-export type { FlueObservationSubscriber } from './observation.ts'
+export type { AmondObservationSubscriber } from './observation.ts'
 export { ResultUnavailableError } from './result.ts'
 export type { ChannelRouteDefinition } from './runtime/channel-routes.ts'
 export { createChannelRouter } from './runtime/channel-routes.ts'
-export { type FlueEventSubscriber, observe } from './runtime/events.ts'
-export { type AgentInstanceInfo, dispatch, getAgentInstance } from './runtime/flue-app.ts'
+export { type AmondEventSubscriber, observe } from './runtime/events.ts'
+export { type AgentInstanceInfo, dispatch, getAgentInstance } from './runtime/amond-app.ts'
 export { isDynamicModel, setProvider } from './runtime/providers.ts'
 export type { AgentIdentityBinding } from './runtime/registration.ts'
-export { __flueBindAgentModule } from './runtime/registration.ts'
+export { __amondBindAgentModule } from './runtime/registration.ts'
 export {
   bash,
   // Deprecated alias for sandboxFromDriver.
@@ -122,6 +122,12 @@ export type {
   AgentProps,
   AgentRuntimeConfig,
   AgentStatics,
+  AmondEvent,
+  AmondEventContext,
+  AmondFs,
+  AmondHarness,
+  AmondLogger,
+  AmondObservation,
   AttachedAgentEvent,
   BashFactory,
   BashLike,
@@ -133,12 +139,6 @@ export type {
   DispatchReceipt,
   DurabilityConfig,
   FileStat,
-  FlueEvent,
-  FlueEventContext,
-  FlueFs,
-  FlueHarness,
-  FlueLogger,
-  FlueObservation,
   LlmAssistantMessage,
   LlmImageContent,
   LlmMessage,
@@ -191,14 +191,14 @@ export type {
 } from './types.ts'
 
 // Note: the `Fetchable` interface for user-authored `app.ts` entries lives at
-// `@flue/runtime/routing`, not on the root barrel.
+// `@amond-ai/agent/routing`, not on the root barrel.
 //
-// Note: createFlueContext, bashFactoryToSandbox, and the
-// FlueContextConfig/FlueContextInternal types are intentionally NOT re-exported
+// Note: createAmondContext, bashFactoryToSandbox, and the
+// AmondContextConfig/AmondContextInternal types are intentionally NOT re-exported
 // here. They are internal runtime helpers consumed exclusively by the generated
-// server entry point — see `@flue/runtime/internal`. User agent code should not
+// server entry point — see `@amond-ai/agent/internal`. User agent code should not
 // need to import any of them directly.
 //
-// Note: `build`, `dev`, and the build/dev/env helpers live in `@flue/cli`,
+// Note: `build`, `dev`, and the build/dev/env helpers live in `amond`,
 // not this barrel — import them from there if you're driving the build
 // programmatically.

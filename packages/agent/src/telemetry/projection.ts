@@ -1,5 +1,5 @@
 /**
- * Projection of Flue message/tool shapes into the GenAI semconv role/parts
+ * Projection of amond message/tool shapes into the GenAI semconv role/parts
  * form carried by `gen_ai.input.messages` / `gen_ai.output.messages` and
  * friends. The payload shape is a documented contract
  * (`GEN_AI_PROJECTION_REVISION` stamps it); both trace backends emit exactly

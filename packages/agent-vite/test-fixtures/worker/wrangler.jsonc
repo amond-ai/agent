@@ -1,0 +1,7 @@
+{
+  "name": "amond-worker-fixture",
+  "compatibility_date": "2026-05-01",
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["AmondIssueTriageAgent"] }
+  ]
+}

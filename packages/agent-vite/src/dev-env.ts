@@ -4,9 +4,9 @@
  * `vite dev` runs user agent code in this process, and model providers
  * resolve API keys from `process.env` — so without this, developers had to
  * export their `.env` into the shell before starting the dev server (while
- * `flue run` loaded it for them). Vite's `loadEnv` reads the standard file
+ * `amond run` loaded it for them). Vite's `loadEnv` reads the standard file
  * set (`.env`, `.env.local`, `.env.[mode]`, `.env.[mode].local`); values are
- * applied with shell-wins semantics, matching `flue run`.
+ * applied with shell-wins semantics, matching `amond run`.
  *
  * Injections are tracked in a process-global registry so a dev-server
  * restart (which re-runs this with fresh plugin instances) can tell "we set
@@ -20,7 +20,7 @@
  */
 import { loadEnv } from 'vite'
 
-const INJECTED_ENV_REGISTRY = Symbol.for('flue.vite.injectedDevEnv')
+const INJECTED_ENV_REGISTRY = Symbol.for('amond.vite.injectedDevEnv')
 
 type GlobalWithRegistry = typeof globalThis & {
   [INJECTED_ENV_REGISTRY]?: Map<string, string>

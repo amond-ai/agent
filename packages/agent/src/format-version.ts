@@ -1,11 +1,11 @@
 /**
  * Persisted-store format versioning.
  *
- * Every persisted Flue store durably records the format version it was
+ * Every persisted amond store durably records the format version it was
  * created with, and refuses to open a store recorded with an unknown or newer
  * version. This is a storage-agnostic obligation of the
  * {@link PersistenceAdapter} contract: the built-in SQL backends implement it
- * with a one-row `flue_meta` key/value table; non-SQL adapters implement the
+ * with a one-row `amond_meta` key/value table; non-SQL adapters implement the
  * same obligation natively (a key, a meta document, etc.).
  */
 
@@ -13,47 +13,47 @@ import { PersistedFormatVersionError } from './errors.ts'
 import type { SqlStorage } from './sql-storage.ts'
 
 /**
- * Current format version of Flue's built-in persisted stores.
+ * Current format version of amond's built-in persisted stores.
  *
  * Bump this when a persisted format changes incompatibly. Stores recorded
  * with another version are rejected and must be cleared.
  */
-export const FLUE_FORMAT_VERSION = 1
+export const AMOND_FORMAT_VERSION = 1
 
 /**
  * Throw {@link PersistedFormatVersionError} unless the stored version matches
- * the current {@link FLUE_FORMAT_VERSION}.
+ * the current {@link AMOND_FORMAT_VERSION}.
  *
  * Adapters call this with the version value they recorded at store creation.
  * A version greater than the current one means the store was written by a
- * newer Flue version and must not be read; any other mismatch means the
+ * newer amond version and must not be read; any other mismatch means the
  * version marker is unrecognized.
  */
-export function assertSupportedFlueFormatVersion(storedVersion: string): void {
-  if (storedVersion === String(FLUE_FORMAT_VERSION)) { return }
+export function assertSupportedAmondFormatVersion(storedVersion: string): void {
+  if (storedVersion === String(AMOND_FORMAT_VERSION)) { return }
   throw new PersistedFormatVersionError({
     storedVersion,
-    supportedVersion: FLUE_FORMAT_VERSION,
+    supportedVersion: AMOND_FORMAT_VERSION,
   })
 }
 
-export function migrateFlueSqlSchema(sql: SqlStorage, ensureCurrentSchema: () => void): void {
+export function migrateAmondSqlSchema(sql: SqlStorage, ensureCurrentSchema: () => void): void {
   sql.exec(
-    `CREATE TABLE IF NOT EXISTS flue_meta (
+    `CREATE TABLE IF NOT EXISTS amond_meta (
 		 key TEXT PRIMARY KEY,
 		 value TEXT NOT NULL
 		)`,
   )
   const stored = sql
-    .exec(`SELECT value FROM flue_meta WHERE key = 'format_version'`)
+    .exec(`SELECT value FROM amond_meta WHERE key = 'format_version'`)
     .toArray()[0]
     ?.value
   if (stored !== undefined && stored !== null) {
-    assertSupportedFlueFormatVersion(String(stored))
+    assertSupportedAmondFormatVersion(String(stored))
   }
   else {
     const legacy = sql
-      .exec(`SELECT value FROM flue_meta WHERE key = 'schema_version'`)
+      .exec(`SELECT value FROM amond_meta WHERE key = 'schema_version'`)
       .toArray()[0]
       ?.value
     if (legacy !== undefined && legacy !== null) {
@@ -64,29 +64,29 @@ export function migrateFlueSqlSchema(sql: SqlStorage, ensureCurrentSchema: () =>
       if (String(legacy) !== '8') {
         throw new PersistedFormatVersionError({
           storedVersion: String(legacy),
-          supportedVersion: FLUE_FORMAT_VERSION,
+          supportedVersion: AMOND_FORMAT_VERSION,
         })
       }
       // One UPDATE renames the row in place: atomic even on node:sqlite,
       // where nothing wraps this in a transaction, so the store is never
       // observable without a stamp at either key.
       sql.exec(
-        `UPDATE flue_meta SET key = 'format_version', value = ? WHERE key = 'schema_version'`,
-        String(FLUE_FORMAT_VERSION),
+        `UPDATE amond_meta SET key = 'format_version', value = ? WHERE key = 'schema_version'`,
+        String(AMOND_FORMAT_VERSION),
       )
     }
     else {
       const existing = sql
         .exec(
           String.raw`SELECT name FROM sqlite_master
-					 WHERE type = 'table' AND name LIKE 'flue\_%' ESCAPE '\' AND name <> 'flue_meta'
+					 WHERE type = 'table' AND name LIKE 'amond\_%' ESCAPE '\' AND name <> 'amond_meta'
 					 LIMIT 1`,
         )
         .toArray()[0]
       if (existing) {
         throw new PersistedFormatVersionError({
           storedVersion: 'unversioned',
-          supportedVersion: FLUE_FORMAT_VERSION,
+          supportedVersion: AMOND_FORMAT_VERSION,
         })
       }
       // Nothing wraps this in a transaction on node:sqlite, so the stamp
@@ -94,8 +94,8 @@ export function migrateFlueSqlSchema(sql: SqlStorage, ensureCurrentSchema: () =>
       // then leaves a versioned store that re-migrates cleanly instead of
       // tripping the unversioned-legacy rejection forever.
       sql.exec(
-        `INSERT OR IGNORE INTO flue_meta (key, value) VALUES ('format_version', ?)`,
-        String(FLUE_FORMAT_VERSION),
+        `INSERT OR IGNORE INTO amond_meta (key, value) VALUES ('format_version', ?)`,
+        String(AMOND_FORMAT_VERSION),
       )
     }
   }

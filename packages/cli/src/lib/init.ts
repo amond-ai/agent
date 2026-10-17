@@ -1,7 +1,7 @@
 import path from 'node:path'
 
 /**
- * `flue init` scaffolding: pure file planning, no filesystem access.
+ * `amond init` scaffolding: pure file planning, no filesystem access.
  *
  * The CLI resolves the target and the deploy choice (from flags or
  * interactively) and hands them here; `planInitFiles` returns every file the
@@ -20,7 +20,7 @@ export interface InitPlanOptions {
   deploy: boolean
   /** Absolute directory being scaffolded into; its basename names the project. */
   targetDir: string
-  /** The CLI's own version — `@flue/*` dependencies pin to it. */
+  /** The CLI's own version — `@amond-ai/*` and `amond` dependencies pin to it. */
   cliVersion: string
   /** Package manager used in README/next-step commands. */
   packageManager: PackageManager
@@ -78,7 +78,7 @@ function projectNameFrom(targetDir: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  return name || 'my-flue-app'
+  return name || 'my-amond-app'
 }
 
 function sortedRecord(record: Record<string, string>): Record<string, string> {
@@ -89,7 +89,7 @@ function renderPackageJson(opts: InitPlanOptions): string {
   const cloudflare = opts.target === 'cloudflare'
   // Nightly (prerelease) versions pin exactly; caret ranges resolve
   // prereleases too loosely to be meaningful there.
-  const flueRange = opts.cliVersion.includes('-') ? opts.cliVersion : `^${opts.cliVersion}`
+  const amondRange = opts.cliVersion.includes('-') ? opts.cliVersion : `^${opts.cliVersion}`
 
   const scripts: Record<string, string> = {}
   if (opts.deploy) {
@@ -100,15 +100,15 @@ function renderPackageJson(opts: InitPlanOptions): string {
   }
   scripts['check:types'] = 'tsc --noEmit'
 
-  const dependencies: Record<string, string> = { '@flue/runtime': flueRange }
+  const dependencies: Record<string, string> = { '@amond-ai/agent': amondRange }
   const devDependencies: Record<string, string> = {
-    '@flue/cli': flueRange,
+    'amond': amondRange,
     '@types/node': DEPENDENCY_VERSIONS.typesNode,
     'typescript': DEPENDENCY_VERSIONS.typescript,
   }
   if (opts.deploy) {
     dependencies.hono = DEPENDENCY_VERSIONS.hono
-    devDependencies['@flue/vite'] = flueRange
+    devDependencies['@amond-ai/agent-vite'] = amondRange
     devDependencies.vite = DEPENDENCY_VERSIONS.vite
     if (cloudflare) {
       devDependencies['@cloudflare/vite-plugin'] = DEPENDENCY_VERSIONS.cloudflareVitePlugin
@@ -127,9 +127,9 @@ function renderPackageJson(opts: InitPlanOptions): string {
   return `${JSON.stringify(manifest, null, '\t')}\n`
 }
 
-function renderFlueConfig(target: InitTarget): string {
+function renderAmondConfig(target: InitTarget): string {
   return [
-    `import { defineConfig } from '@flue/runtime/config';`,
+    `import { defineConfig } from '@amond-ai/agent/config';`,
     ``,
     `export default defineConfig({`,
     `\ttarget: '${target}',`,
@@ -142,21 +142,21 @@ function renderViteConfig(target: InitTarget): string {
   if (target === 'cloudflare') {
     return [
       `import { cloudflare } from '@cloudflare/vite-plugin';`,
-      `import { flue, flueWorkerConfig } from '@flue/vite';`,
+      `import { amond, amondWorkerConfig } from '@amond-ai/agent-vite';`,
       `import { defineConfig } from 'vite';`,
       ``,
       `export default defineConfig({`,
-      `\tplugins: [flue(), cloudflare({ config: flueWorkerConfig() })],`,
+      `\tplugins: [amond(), cloudflare({ config: amondWorkerConfig() })],`,
       `});`,
       ``,
     ].join('\n')
   }
   return [
-    `import { flue } from '@flue/vite';`,
+    `import { amond } from '@amond-ai/agent-vite';`,
     `import { defineConfig } from 'vite';`,
     ``,
     `export default defineConfig({`,
-    `\tplugins: [flue()],`,
+    `\tplugins: [amond()],`,
     `});`,
     ``,
   ].join('\n')
@@ -173,7 +173,7 @@ function renderHelloAgent(target: InitTarget): string {
   }
   return [
     `'use agent';`,
-    `import { useModel } from '@flue/runtime';`,
+    `import { useModel } from '@amond-ai/agent';`,
     ``,
     `// Every exported capitalized function in a 'use agent' module is an agent,`,
     `// and the function's name is its durable identity. The return value is the`,
@@ -188,7 +188,7 @@ function renderHelloAgent(target: InitTarget): string {
 
 function renderApp(): string {
   return [
-    `import { createAgentRouter } from '@flue/runtime/routing';`,
+    `import { createAgentRouter } from '@amond-ai/agent/routing';`,
     `import { Hono } from 'hono';`,
     `import { Hello } from './agents/hello.ts';`,
     ``,
@@ -209,13 +209,13 @@ function renderApp(): string {
 
 function renderDb(): string {
   return [
-    `import { sqlite } from '@flue/runtime/node';`,
+    `import { sqlite } from '@amond-ai/agent/node';`,
     ``,
     `// Conversations, attachments, and accepted submissions are stored here so`,
     `// they survive a restart. Swap in another adapter (Postgres, libSQL, ...)`,
     `// when one host's SQLite file is no longer enough:`,
     `// https://flueframework.com/docs/guide/database/`,
-    `export default sqlite('./data/flue.db');`,
+    `export default sqlite('./data/amond.db');`,
     ``,
   ].join('\n')
 }
@@ -251,10 +251,10 @@ function renderWrangler(opts: InitPlanOptions): string {
     `\t// https://flueframework.com/docs/guide/models/#cloudflare-workers-ai-cloudflare-only`,
     `\t// "ai": { "binding": "AI" },`,
     `\t// Every agent generates a Durable Object class named after its identity`,
-    `\t// (Hello -> FlueHelloAgent), and Cloudflare requires a migration entry`,
+    `\t// (Hello -> AmondHelloAgent), and Cloudflare requires a migration entry`,
     `\t// for each one. Append a new tag when you add an agent:`,
     `\t// https://flueframework.com/docs/guide/cloudflare-target/#managing-migrations`,
-    `\t"migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueHelloAgent"] }]`,
+    `\t"migrations": [{ "tag": "v1", "new_sqlite_classes": ["AmondHelloAgent"] }]`,
     `}`,
     ``,
   ].join('\n')
@@ -293,7 +293,7 @@ function renderGitignore(opts: InitPlanOptions): string {
 
 function renderEnv(): string {
   return [
-    `# Model provider API keys, loaded automatically by \`flue run\` and \`vite dev\`.`,
+    `# Model provider API keys, loaded automatically by \`amond run\` and \`vite dev\`.`,
     `# Any provider Pi supports works: https://pi.dev/docs/latest/providers#api-keys`,
     `ANTHROPIC_API_KEY=""`,
     ``,
@@ -319,7 +319,7 @@ function renderAgentsMd(opts: InitPlanOptions): string {
   }
 
   const commands = [
-    `- \`${execCommand(pm, 'flue run src/agents/hello.ts --message "Hi"')}\` — run an agent locally, no server.`,
+    `- \`${execCommand(pm, 'amond run src/agents/hello.ts --message "Hi"')}\` — run an agent locally, no server.`,
   ]
   if (opts.deploy) {
     commands.push(`- \`${pm} run dev\` — start the dev server.`)
@@ -334,14 +334,14 @@ function renderAgentsMd(opts: InitPlanOptions): string {
   }
   commands.push(
     `- \`${pm} run check:types\` — typecheck.`,
-    `- \`${execCommand(pm, 'flue docs search <query>')}\` — search the Flue docs from the terminal (then \`flue docs read <path>\`).`,
-    `- \`${execCommand(pm, 'flue add')}\` — list blueprints for adding channels, sandboxes, and databases.`,
+    `- \`${execCommand(pm, 'amond docs search <query>')}\` — search the amond docs from the terminal (then \`amond docs read <path>\`).`,
+    `- \`${execCommand(pm, 'amond add')}\` — list blueprints for adding channels, sandboxes, and databases.`,
   )
 
   return [
     `# AGENTS.md`,
     ``,
-    `This is a [Flue](https://flueframework.com) project: agents are TypeScript functions.`,
+    `This is an [amond](https://flueframework.com) project: agents are TypeScript functions.`,
     ``,
     `## Layout`,
     ``,
@@ -359,7 +359,7 @@ function renderReadme(opts: InitPlanOptions): string {
   const lines = [
     `# ${projectNameFrom(opts.targetDir)}`,
     ``,
-    `A [Flue](https://flueframework.com) agent project.`,
+    `An [amond](https://flueframework.com) agent project.`,
     ``,
     `## Setup`,
     ``,
@@ -372,7 +372,7 @@ function renderReadme(opts: InitPlanOptions): string {
     `## Talk to your agent`,
     ``,
     '```sh',
-    execCommand(pm, `flue run src/agents/hello.ts --message "Say hello!"`),
+    execCommand(pm, `amond run src/agents/hello.ts --message "Say hello!"`),
     '```',
     ``,
     `Conversations are durable — pass \`--id <id>\` to continue one.`,
@@ -406,7 +406,7 @@ function renderReadme(opts: InitPlanOptions): string {
     ``,
     `## Learn more`,
     ``,
-    `- [Flue docs](https://flueframework.com/docs/) — or \`${execCommand(pm, 'flue docs')}\` from the terminal.`,
+    `- [amond docs](https://flueframework.com/docs/) — or \`${execCommand(pm, 'amond docs')}\` from the terminal.`,
     ``,
   )
   return lines.join('\n')
@@ -415,7 +415,7 @@ function renderReadme(opts: InitPlanOptions): string {
 /** The full skeleton for the chosen target and deploy choice, in write order. */
 export function planInitFiles(opts: InitPlanOptions): ScaffoldFile[] {
   const files: ScaffoldFile[] = [
-    { relPath: 'flue.config.ts', content: renderFlueConfig(opts.target) },
+    { relPath: 'amond.config.ts', content: renderAmondConfig(opts.target) },
     { relPath: 'package.json', content: renderPackageJson(opts) },
     { relPath: 'tsconfig.json', content: renderTsconfig() },
     { relPath: '.gitignore', content: renderGitignore(opts) },
@@ -450,7 +450,7 @@ export function initNextSteps(opts: InitPlanOptions): string[] {
   const steps = [
     `${pm} install`,
     `add a model provider API key to .env`,
-    execCommand(pm, `flue run src/agents/hello.ts --message "Say hello!"`),
+    execCommand(pm, `amond run src/agents/hello.ts --message "Say hello!"`),
   ]
   if (opts.deploy) {
     steps.push(`${pm} run dev — the Hello agent listens at /agents/hello`)

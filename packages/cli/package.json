@@ -1,7 +1,7 @@
 {
-  "name": "@flue/cli",
+  "name": "amond",
   "type": "module",
-  "version": "2.3.0",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "homepage": "https://flueframework.com/",
   "repository": {
@@ -10,10 +10,10 @@
     "directory": "packages/cli"
   },
   "bin": {
-    "flue": "bin/flue.mjs"
+    "amond": "bin/amond.mjs"
   },
   "files": [
-    "bin/flue.mjs",
+    "bin/amond.mjs",
     "dist",
     "docs"
   ],
@@ -22,15 +22,15 @@
   },
   "scripts": {
     "prebuild": "bun scripts/generate-blueprint-index.ts",
-    "build": "tsdown && mv dist/flue.mjs dist/flue.js",
-    "check": "tsc --noEmit",
+    "build": "tsdown && mv dist/amond.mjs dist/amond.js",
+    "check": "bun scripts/generate-blueprint-index.ts && tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "bun --bun vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@flue/runtime": "workspace:*",
-    "@flue/vite": "workspace:*",
+    "@amond-ai/agent": "workspace:*",
+    "@amond-ai/agent-vite": "workspace:*",
     "@vercel/detect-agent": "^1.2.3",
     "cac": "^7.0.0",
     "minisearch": "^7.2.0",
@@ -40,7 +40,7 @@
     "vite": "^8.1.2"
   },
   "devDependencies": {
-    "@flue/sdk": "workspace:*",
+    "@amond-ai/agent-sdk": "workspace:*",
     "@types/node": "catalog:",
     "@types/prompts": "^2.4.9",
     "tsdown": "catalog:",

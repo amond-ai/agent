@@ -14,8 +14,8 @@ import type { PromptUsage } from './types.ts'
 import { addUsage, emptyUsage, fromProviderUsage } from './usage.ts'
 
 /**
- * Materialized conversation part. Structurally identical to @flue/sdk's
- * `FlueConversationPart` — the public projection shape. The runtime cannot
+ * Materialized conversation part. Structurally identical to @amond-ai/agent-sdk's
+ * `AmondConversationPart` — the public projection shape. The runtime cannot
  * import the SDK, so the shape is mirrored here and asserted by the snapshot
  * wire contract.
  */
@@ -40,7 +40,7 @@ type ConversationUiPart =
  * Coarse render lane for a materialized message. `system` covers every
  * non-chat, non-answer message (internal control input and runtime advisories),
  * mirroring the standard chat convention so a generic renderer can lay a
- * transcript out without understanding Flue's finer {@link ConversationMessagePurpose}.
+ * transcript out without understanding amond's finer {@link ConversationMessagePurpose}.
  */
 type ConversationMessageRole = 'user' | 'assistant' | 'system'
 

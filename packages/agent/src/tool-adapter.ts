@@ -5,7 +5,7 @@ interface PreparedToolAdapter {
   execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<string>
 }
 
-const preparedToolAdapter = Symbol('flue.preparedToolAdapter')
+const preparedToolAdapter = Symbol('amond.preparedToolAdapter')
 
 type PreparedToolDefinition = ToolDefinition & {
   readonly [preparedToolAdapter]?: PreparedToolAdapter

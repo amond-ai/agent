@@ -338,7 +338,7 @@ export function createNodeAgentCoordinator(options: {
 
   function resolveAgent(name: string): Agent {
     const agent = agents.find(record => record.name === name)?.agent
-    if (!agent) { throw new Error(`[flue] submission target agent "${name}" has no agent definition.`) }
+    if (!agent) { throw new Error(`[amond] submission target agent "${name}" has no agent definition.`) }
     return agent
   }
 
@@ -369,7 +369,7 @@ export function createNodeAgentCoordinator(options: {
         // AbortErrors during shutdown are expected — don't log them.
         if (error instanceof DOMException && error.name === 'AbortError') { return }
         console.error(
-          '[flue:submission-processing]',
+          '[amond:submission-processing]',
           {
             submissionId: claimed.submissionId,
             operation: 'process_submission',
@@ -470,7 +470,7 @@ export function createNodeAgentCoordinator(options: {
         // sleeping indefinitely waiting for an external wake. During
         // shutdown, skip the backoff — the loop is about to exit and
         // `shutdown()` is awaiting it.
-        console.error('[flue:claim-loop] Error in claim pass, retrying:', error)
+        console.error('[amond:claim-loop] Error in claim pass, retrying:', error)
         passEventEmitter(
           {
             type: 'submission_recovery',
@@ -516,7 +516,7 @@ export function createNodeAgentCoordinator(options: {
     // Errors in individual submissions are caught by spawnSubmissionTask.
     // Unexpected errors in the loop itself are fatal and logged.
     claimLoopDone = claimLoop().catch((error) => {
-      console.error('[flue:claim-loop] Fatal error in claim loop:', error)
+      console.error('[amond:claim-loop] Fatal error in claim loop:', error)
       passEventEmitter(
         {
           type: 'submission_recovery',
@@ -536,7 +536,7 @@ export function createNodeAgentCoordinator(options: {
         const ids = [...activeSubmissions.keys()]
         if (ids.length === 0) { return }
         submissions.renewLeases(ownerId, ids).catch((error) => {
-          console.error('[flue:lease-heartbeat] Failed to renew leases:', error)
+          console.error('[amond:lease-heartbeat] Failed to renew leases:', error)
           passEventEmitter(
             {
               type: 'submission_recovery',
@@ -662,7 +662,7 @@ export function createNodeAgentCoordinator(options: {
       }
       const agent = agents.find(record => record.name === submission.input.agent)?.agent
       if (!agent) { continue }
-      console.error('[flue:submission-reconciliation]', {
+      console.error('[amond:submission-reconciliation]', {
         submissionId: submission.submissionId,
         operation: 'enforce_deadline',
         outcome: 'terminated',
@@ -748,7 +748,7 @@ export function createNodeAgentCoordinator(options: {
     )
     if (!settled) { return false }
     console.error(
-      '[flue:submission-reconciliation]',
+      '[amond:submission-reconciliation]',
       {
         submissionId: submission.submissionId,
         operation: 'materialize_submission',
@@ -781,13 +781,13 @@ export function createNodeAgentCoordinator(options: {
           (await terminalizeUnreadySubmission(
             submission,
             new Error(
-              `[flue] Submission target agent "${submission.input.agent}" has no registered definition, so the submission could never start.`,
+              `[amond] Submission target agent "${submission.input.agent}" has no registered definition, so the submission could never start.`,
             ),
           ))
         ) {
           continue
         }
-        console.error('[flue:submission-reconciliation]', {
+        console.error('[amond:submission-reconciliation]', {
           submissionId: submission.submissionId,
           operation: 'materialize_submission',
           outcome: 'agent_unavailable',
@@ -813,7 +813,7 @@ export function createNodeAgentCoordinator(options: {
           continue
         }
         console.error(
-          '[flue:submission-reconciliation]',
+          '[amond:submission-reconciliation]',
           {
             submissionId: submission.submissionId,
             operation: 'materialize_submission',
@@ -863,7 +863,7 @@ export function createNodeAgentCoordinator(options: {
       }
       catch (error) {
         console.error(
-          '[flue:submission-reconciliation]',
+          '[amond:submission-reconciliation]',
           {
             submissionId: settlement.submissionId,
             operation: 'finalize_settlement',
@@ -896,7 +896,7 @@ export function createNodeAgentCoordinator(options: {
       const agentName = submission.input.agent
       const agent = agents.find(record => record.name === agentName)?.agent
       if (!agent) {
-        console.error('[flue:submission-reconciliation]', {
+        console.error('[amond:submission-reconciliation]', {
           submissionId: submission.submissionId,
           operation: 'reconcile_submission',
           outcome: 'agent_unavailable',
@@ -929,7 +929,7 @@ export function createNodeAgentCoordinator(options: {
       }
       catch (error) {
         console.error(
-          '[flue:submission-reconciliation]',
+          '[amond:submission-reconciliation]',
           {
             submissionId: submission.submissionId,
             operation: 'reconcile_submission',
@@ -966,7 +966,7 @@ export function createNodeAgentCoordinator(options: {
       await reconcileRunningSubmissions()
       // Return once the pass has run — recovered and requeued work settles
       // in the background via the now-running claim loop. Callers that
-      // boot an HTTP server (start(), `flue run`, the vite node servers)
+      // boot an HTTP server (start(), `amond run`, the vite node servers)
       // await only this pass, so the server serves while recovery runs,
       // matching the Cloudflare coordinator. Callers that need completion
       // (shutdown, tests) await waitForIdle() explicitly.
@@ -983,7 +983,7 @@ export function createNodeAgentCoordinator(options: {
       try {
         const agent = agents.find(record => record.name === input.agent)?.agent
         if (!agent) {
-          throw new Error(`[flue] dispatch target agent "${input.agent}" has no agent definition.`)
+          throw new Error(`[amond] dispatch target agent "${input.agent}" has no agent definition.`)
         }
 
         const submissionInput = createDispatchAgentSubmissionInput(input)
@@ -1064,7 +1064,7 @@ export function createNodeAgentCoordinator(options: {
           if (uid === undefined && deduplicated) { uid = (await loadReducedState())?.uid }
           if (uid === undefined) {
             throw new Error(
-              '[flue] invariant: a materialized instance\'s birth record must carry a uid.',
+              '[amond] invariant: a materialized instance\'s birth record must carry a uid.',
             )
           }
 
@@ -1113,7 +1113,7 @@ export function createNodeAgentCoordinator(options: {
       wake()
       if (hasInactive) {
         void reconcileRunningSubmissions().catch((error) => {
-          console.error('[flue:submission-abort] reconcile after abort failed:', error)
+          console.error('[amond:submission-abort] reconcile after abort failed:', error)
           passEventEmitter(
             {
               type: 'submission_recovery',
@@ -1139,7 +1139,7 @@ export function createNodeAgentCoordinator(options: {
           const agent = agents.find(record => record.name === agentName)?.agent
           if (!agent) {
             throw new Error(
-              `[flue] direct prompt target agent "${agentName}" has no agent definition.`,
+              `[amond] direct prompt target agent "${agentName}" has no agent definition.`,
             )
           }
 
@@ -1239,7 +1239,7 @@ export function createNodeAgentCoordinator(options: {
             }
             if (instanceUid === undefined) {
               throw new Error(
-                '[flue] invariant: a materialized instance\'s birth record must carry a uid.',
+                '[amond] invariant: a materialized instance\'s birth record must carry a uid.',
               )
             }
             return {
@@ -1338,7 +1338,7 @@ export function createNodeAgentCoordinator(options: {
       if (activeSubmissions.size > 0) {
         const abandoned = [...activeSubmissions.keys()]
         console.error(
-          `[flue:shutdown] ${abandoned.length} submission(s) did not settle within ${timeoutMs}ms and will be reclaimed on next startup:`,
+          `[amond:shutdown] ${abandoned.length} submission(s) did not settle within ${timeoutMs}ms and will be reclaimed on next startup:`,
           abandoned,
         )
         for (const submissionId of abandoned) {

@@ -1,5 +1,5 @@
 import type { BackoffOptions } from '@durable-streams/client'
-import type { FlueConversationSnapshot, FlueConversationState } from './conversation.ts'
+import type { AmondConversationSnapshot, AmondConversationState } from './conversation.ts'
 import {
   applyConversationChunk,
   
@@ -14,7 +14,7 @@ import {
   STALE_STREAM_TIMEOUT_MS,
   statusOf,
 } from './follow-policy.ts'
-import type { FlueEventStream } from './stream.ts'
+import type { AmondEventStream } from './stream.ts'
 
 /**
  * Live mode for conversation observation: `'long-poll'` (offset-resumed polling)
@@ -34,7 +34,7 @@ export type AgentConversationObservationPhase =
 	'loading' | 'connecting' | 'live' | 'absent' | 'error' | 'closed'
 
 export interface AgentConversationObservationSnapshot {
-  conversation: FlueConversationState | undefined
+  conversation: AmondConversationState | undefined
   offset: string | undefined
   phase: AgentConversationObservationPhase
   error: Error | undefined
@@ -84,7 +84,7 @@ export interface AgentConversationObservationSource {
     signal?: AbortSignal
     limit?: number
     from?: string
-  }): Promise<FlueConversationSnapshot>
+  }): Promise<AmondConversationSnapshot>
   updates(options: {
     offset: string
     live?: ConversationLiveMode
@@ -102,7 +102,7 @@ export interface AgentConversationObservationSource {
      * watchdog in `follow()`.
      */
     onActivity?: () => void
-  }): FlueEventStream<ConversationStreamChunk>
+  }): AmondEventStream<ConversationStreamChunk>
 }
 
 export function createAgentConversationObservation(
@@ -122,7 +122,7 @@ export function createAgentConversationObservation(
   // separately so resets from a runtime that cannot window them are cut
   // locally without interpreting the cursor. Unused when `limit` is undefined.
   let historyWindow: WindowAnchor = { kind: 'newest' }
-  let streamState: FlueConversationState | undefined
+  let streamState: AmondConversationState | undefined
   let snapshot: AgentConversationObservationSnapshot = {
     conversation: undefined,
     offset: undefined,
@@ -134,7 +134,7 @@ export function createAgentConversationObservation(
   let generation = 0
   let controller: AbortController | undefined
   let removeExternalAbortListener: (() => void) | undefined
-  let stream: FlueEventStream<ConversationStreamChunk> | undefined
+  let stream: AmondEventStream<ConversationStreamChunk> | undefined
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   // Stale-stream watchdog for the active stream. Armed by follow(), reset on
   // every chunk and transport activity tick (plain setTimeout reset, no
@@ -217,7 +217,7 @@ export function createAgentConversationObservation(
   const follow = async (value: number, offset: string) => {
     if (!isCurrent(value)) { return }
     publish({ ...snapshot, phase: 'live', error: undefined })
-    let nextStream: FlueEventStream<ConversationStreamChunk>
+    let nextStream: AmondEventStream<ConversationStreamChunk>
     // Declare the stream stale after STALE_STREAM_TIMEOUT_MS of total
     // silence: cancel it (aborting the underlying connection) and route
     // through scheduleRetry as a transient error — a stall carries no
@@ -434,9 +434,9 @@ export function createAgentConversationObservation(
   // message — resets re-project the same append-only transcript, so it
   // normally survives. Anything else re-bases.
   const rewindow = (
-    state: FlueConversationState,
-    reset: FlueConversationSnapshot,
-  ): FlueConversationState | undefined => {
+    state: AmondConversationState,
+    reset: AmondConversationSnapshot,
+  ): AmondConversationState | undefined => {
     const expected = windowBefore(historyWindow)
     if (reset.before !== undefined) {
       return historyWindow.kind !== 'newest' && reset.before === expected ? state : undefined

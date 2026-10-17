@@ -14,7 +14,7 @@ import {
 } from '../lib/docs-pages.ts'
 
 /**
- * `flue docs` — browse the bundled documentation. cac has no nested
+ * `amond docs` — browse the bundled documentation. cac has no nested
  * subcommands, so `read`/`search` are dispatched from the action.
  */
 
@@ -22,12 +22,12 @@ export function registerDocsCommand(cli: CAC): void {
   cli
     .command(
       'docs [read|search] [...args]',
-      'Browse the Flue docs: list pages, read one, or search',
+      'Browse the amond docs: list pages, read one, or search',
     )
     .usage('docs [read <path> | search <query>]')
-    .example('  $ flue docs')
-    .example('  $ flue docs read guide/sandboxes')
-    .example('  $ flue docs search "durable execution"')
+    .example('  $ amond docs')
+    .example('  $ amond docs read guide/sandboxes')
+    .example('  $ amond docs search "durable execution"')
     .action(docsAction)
 }
 
@@ -37,9 +37,9 @@ function docsAction(action: string | undefined, rest: string[], options: CliOpti
 
   if (action === undefined) {
     process.stderr.write(
-      'Flue documentation\n\n' +
-      '  flue docs read <path>      Print a documentation page as markdown\n' +
-      '  flue docs search <query>   Search the documentation (JSON results)\n\n' +
+      'amond documentation\n\n' +
+      '  amond docs read <path>      Print a documentation page as markdown\n' +
+      '  amond docs search <query>   Search the documentation (JSON results)\n\n' +
       `Pages (${pages.length}):\n\n`,
     )
     for (const page of pages) {
@@ -54,10 +54,10 @@ function docsAction(action: string | undefined, rest: string[], options: CliOpti
   if (action === 'read') {
     const [value, ...extra] = rest
     if (!value) {
-      throw new UsageError('Missing docs page path for `flue docs read <path>`.')
+      throw new UsageError('Missing docs page path for `amond docs read <path>`.')
     }
     if (extra.length > 0) {
-      throw new UsageError(`Unexpected extra arguments for \`flue docs read\`: ${extra.join(' ')}`)
+      throw new UsageError(`Unexpected extra arguments for \`amond docs read\`: ${extra.join(' ')}`)
     }
     readPage(pages, value)
     return
@@ -66,16 +66,16 @@ function docsAction(action: string | undefined, rest: string[], options: CliOpti
   if (action === 'search') {
     const query = rest.join(' ').trim()
     if (!query) {
-      throw new UsageError('Missing search query for `flue docs search <query>`.')
+      throw new UsageError('Missing search query for `amond docs search <query>`.')
     }
     searchPages(pages, query)
     return
   }
 
-  throw new UsageError(`Unknown \`flue docs\` action: ${action}`, {
+  throw new UsageError(`Unknown \`amond docs\` action: ${action}`, {
     hint: action.includes('/')
-      ? `Did you mean \`flue docs read ${action}\`?`
-      : 'Run `flue docs --help` for usage.',
+      ? `Did you mean \`amond docs read ${action}\`?`
+      : 'Run `amond docs --help` for usage.',
   })
 }
 
@@ -83,7 +83,7 @@ function loadPagesOrThrow(): ReturnType<typeof loadDocsPages> {
   const root = resolveDocsRoot()
   if (!root) {
     throw new Error(
-      'Could not locate the bundled documentation. Your @flue/cli installation may be incomplete — try reinstalling it.',
+      'Could not locate the bundled documentation. Your amond installation may be incomplete — try reinstalling it.',
     )
   }
   return loadDocsPages(root)
@@ -94,7 +94,7 @@ function readPage(pages: ReturnType<typeof loadDocsPages>, value: string): void 
   const page = pages.find(candidate => candidate.path === target)
   if (!page) {
     throw new UsageError(`Unknown docs page: ${value}`, {
-      hint: 'Run `flue docs` to list available pages, or `flue docs search <query>` to find one.',
+      hint: 'Run `amond docs` to list available pages, or `amond docs search <query>` to find one.',
     })
   }
   let output = `# ${page.title}\n`
@@ -136,5 +136,5 @@ function searchPages(pages: ReturnType<typeof loadDocsPages>, query: string): vo
     }))
 
   process.stdout.write(`${JSON.stringify({ query, results }, null, 2)}\n`)
-  process.stderr.write('\nRead a page with: flue docs read <path>\n')
+  process.stderr.write('\nRead a page with: amond docs read <path>\n')
 }

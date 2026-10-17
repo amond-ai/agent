@@ -2,8 +2,8 @@
  * The `"use agent"` module transform.
  *
  * For every agent of a scanned module (each exported capitalized function),
- * appends a call to `__flueBindAgentModule(agentFn, { identity })` — the
- * identity-binding contract defined by `@flue/runtime` (see
+ * appends a call to `__amondBindAgentModule(agentFn, { identity })` — the
+ * identity-binding contract defined by `@amond-ai/agent` (see
  * packages/runtime/src/runtime/registration.ts). The binding runs at
  * module-evaluation time, so `app.ts` can call `createAgentRouter(agent)`
  * during its own evaluation, before the generated bootstrap registers the
@@ -53,7 +53,7 @@ export async function transformUseAgentModule(options: {
 
   const bindings = agents.map(
     agent =>
-      `__flue_bind_agent_module__(__flue_agent_module__[${JSON.stringify(agent.exportName)}], { identity: ${JSON.stringify(agent.identity)} });`,
+      `__amond_bind_agent_module__(__amond_agent_module__[${JSON.stringify(agent.exportName)}], { identity: ${JSON.stringify(agent.identity)} });`,
   )
 
   const ms = new MagicString(code)
@@ -61,9 +61,9 @@ export async function transformUseAgentModule(options: {
     [
       '',
       '',
-      '// Injected by @flue/vite ("use agent" identity binding).',
-      `import { __flueBindAgentModule as __flue_bind_agent_module__ } from '@flue/runtime';`,
-      `import * as __flue_agent_module__ from ${JSON.stringify(id)};`,
+      '// Injected by @amond-ai/agent-vite ("use agent" identity binding).',
+      `import { __amondBindAgentModule as __amond_bind_agent_module__ } from '@amond-ai/agent';`,
+      `import * as __amond_agent_module__ from ${JSON.stringify(id)};`,
       ...bindings,
       '',
     ].join('\n'),

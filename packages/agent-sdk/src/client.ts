@@ -1,11 +1,11 @@
 import { HttpClient } from './http.ts'
 import type { HttpClientOptions, RequestHeaders } from './http.ts'
 import type {
-  FlueConversationHistoryBeforeOptions,
-  FlueConversationHistoryOptions,
-  FlueConversationHistoryPage,
-  FlueConversationMessage,
-  FlueConversationSnapshot,
+  AmondConversationHistoryBeforeOptions,
+  AmondConversationHistoryOptions,
+  AmondConversationHistoryPage,
+  AmondConversationMessage,
+  AmondConversationSnapshot,
 } from './public/conversation.ts'
 import {
   assertConversationStreamChunk,
@@ -30,7 +30,7 @@ import {
 import type { AgentPromptOptions, AgentSendResult } from './public/send.ts'
 import { waitForAgentSubmission } from './public/settle.ts'
 import type { AgentWaitOptions } from './public/settle.ts'
-import { createFlueEventStream } from './public/stream.ts'
+import { createAmondEventStream } from './public/stream.ts'
 
 export type { HttpClientOptions } from './http.ts'
 export type { RequestHeaders }
@@ -48,10 +48,10 @@ export interface AgentAbortResult {
 }
 
 /** Options for creating a client for one agent conversation. */
-export type CreateFlueClientOptions = HttpClientOptions
+export type CreateAmondClientOptions = HttpClientOptions
 
 /**
- * Client for one agent conversation of a deployed Flue application.
+ * Client for one agent conversation of a deployed amond application.
  *
  * The framework does not know where an application mounts its agents — the
  * application's route map (app.ts) does. A client therefore addresses exactly
@@ -60,7 +60,7 @@ export type CreateFlueClientOptions = HttpClientOptions
  * id. Starting a new conversation is constructing a client with a fresh id
  * appended to the mount URL.
  */
-export interface FlueClient {
+export interface AmondClient {
   /** The fully resolved conversation URL this client addresses. */
   readonly url: string
   /** Starts one message delivery without waiting for completion (202 admission). */
@@ -70,7 +70,7 @@ export interface FlueClient {
    * target is the admission `send()` resolved with, or a bare submission id
    * — the re-attach form, which follows the conversation from the stream
    * origin, so any process can read a submission at any later time; one
-   * that already settled resolves immediately. Throws `FlueExecutionError`
+   * that already settled resolves immediately. Throws `AmondExecutionError`
    * when the submission settles failed or aborted. Composes `wait()`,
    * `history()`, and `readSubmissionReply()` — use those directly when you
    * only need the outcome, or already hold the conversation via `observe()`.
@@ -78,7 +78,7 @@ export interface FlueClient {
   read(target: AgentSendResult | string, options?: AgentReadOptions): Promise<AgentReadResult>
   /**
    * Awaits the admitted submission's completion. Resolves void when it
-   * settles completed and throws `FlueExecutionError` when it settles
+   * settles completed and throws `AmondExecutionError` when it settles
    * failed or aborted. The agent's reply is not returned here — `read()`
    * returns it, or read it from the conversation via `onEvent` chunks,
    * `observe()`, or `history()`.
@@ -95,7 +95,7 @@ export interface FlueClient {
    * Reads one materialized conversation snapshot — the whole conversation,
    * or only its newest messages with `limit`.
    */
-  history(options?: FlueConversationHistoryOptions): Promise<FlueConversationSnapshot>
+  history(options?: AmondConversationHistoryOptions): Promise<AmondConversationSnapshot>
   /**
    * Reads one page (at most `limit` messages) older than a `before` cursor
    * from a bounded `history({ limit })` snapshot, a bounded
@@ -104,8 +104,8 @@ export interface FlueClient {
    */
   historyBefore(
     cursor: string,
-    options: FlueConversationHistoryBeforeOptions,
-  ): Promise<FlueConversationHistoryPage>
+    options: AmondConversationHistoryBeforeOptions,
+  ): Promise<AmondConversationHistoryPage>
   /** Observes the materialized conversation across history catch-up and live updates. */
   observe(options?: AgentConversationObserveOptions): AgentConversationObservation
   /**
@@ -123,9 +123,9 @@ export interface FlueClient {
 // it via `attachmentUrl`. Optimistic parts (no `id`) carry their own `data:`
 // preview and are left untouched.
 function withAttachmentUrls(
-  message: FlueConversationMessage,
+  message: AmondConversationMessage,
   http: HttpClient,
-): FlueConversationMessage {
+): AmondConversationMessage {
   let changed = false
   const parts = message.parts.map((part) => {
     if (part.type === 'file' && part.id !== undefined && part.url === undefined) {
@@ -141,9 +141,9 @@ function withAttachmentUrls(
 }
 
 function rewriteSnapshotAttachmentUrls(
-  snapshot: FlueConversationSnapshot,
+  snapshot: AmondConversationSnapshot,
   http: HttpClient,
-): FlueConversationSnapshot {
+): AmondConversationSnapshot {
   return {
     ...snapshot,
     messages: snapshot.messages.map(message => withAttachmentUrls(message, http)),
@@ -163,8 +163,8 @@ function rewriteChunkAttachmentUrls(
   return chunk
 }
 
-/** Creates a client for one agent conversation of a deployed Flue application. */
-export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
+/** Creates a client for one agent conversation of a deployed amond application. */
+export function createAmondClient(options: CreateAmondClientOptions): AmondClient {
   const http = new HttpClient(options)
   return {
     url: http.conversationUrl,
@@ -180,7 +180,7 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
     history: async (opts = {}) => {
       if (opts.limit !== undefined) { assertHistoryLimit(opts.limit, 'history()') }
       return rewriteSnapshotAttachmentUrls(
-        await http.json<FlueConversationSnapshot>({
+        await http.json<AmondConversationSnapshot>({
           query: { view: 'history', limit: opts.limit },
           signal: opts.signal,
         }),
@@ -194,7 +194,7 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
       // A page size is required: an unbounded older read would transfer
       // the rest of the transcript in one call.
       assertHistoryLimit(opts?.limit as number, 'historyBefore()')
-      const page = await http.json<FlueConversationHistoryPage | FlueConversationSnapshot>({
+      const page = await http.json<AmondConversationHistoryPage | AmondConversationSnapshot>({
         query: { view: 'history', before: cursor, limit: opts.limit },
         signal: opts.signal,
       })
@@ -204,7 +204,7 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
       // duplicates the messages the caller already holds.
       if ('offset' in page || !('before' in page)) {
         throw new Error(
-          'The client historyBefore() requires a Flue runtime that supports bounded history reads.',
+          'The client historyBefore() requires an amond runtime that supports bounded history reads.',
         )
       }
       return {
@@ -217,14 +217,14 @@ export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
         {
           history: async ({ signal, limit, from }) =>
             rewriteSnapshotAttachmentUrls(
-              await http.json<FlueConversationSnapshot>({
+              await http.json<AmondConversationSnapshot>({
                 query: { view: 'history', limit, from },
                 signal,
               }),
               http,
             ),
           updates: ({ onActivity, window, ...updateOptions }) =>
-            createFlueEventStream<ConversationStreamChunk>(
+            createAmondEventStream<ConversationStreamChunk>(
               updateOptions,
               {
                 url: http.url('', { view: 'updates', from: window?.from, limit: window?.limit }),

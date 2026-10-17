@@ -1,9 +1,9 @@
 /**
  * Shared helpers for persistence adapter implementations.
  *
- * These pure functions are consumed by the built-in SQLite adapter, the
- * Postgres adapter (`@flue/postgres`), and any future community adapters
- * via `@flue/runtime/adapter`.
+ * These pure functions are consumed by the built-in SQLite adapter, a
+ * Postgres persistence adapter, and any future community adapters
+ * via `@amond-ai/agent/adapter`.
  *
  * All functions operate on plain values — no database driver types.
  */
@@ -217,7 +217,7 @@ export function admitSubmissionWithBackend<Row extends SubmissionAdmissionRow>(
     () =>
       chain(backend.getExisting(submissionId), (row) => {
         if (!row) {
-          throw new Error(`[flue] Durable ${kind} admission did not create a submission row.`)
+          throw new Error(`[amond] Durable ${kind} admission did not create a submission row.`)
         }
         return adopt(row)
       }),
@@ -228,12 +228,12 @@ export function admitSubmissionWithBackend<Row extends SubmissionAdmissionRow>(
 
 /**
  * Parse an ISO timestamp string into epoch milliseconds.
- * Throws with a `[flue]` error if the value is not a finite number.
+ * Throws with a `[amond]` error if the value is not a finite number.
  */
 export function parseAcceptedAt(value: string, label: string): number {
   const acceptedAt = Date.parse(value)
   if (!Number.isFinite(acceptedAt)) {
-    throw new Error(`[flue] Internal ${label} received an invalid acceptedAt timestamp.`)
+    throw new Error(`[amond] Internal ${label} received an invalid acceptedAt timestamp.`)
   }
   return acceptedAt
 }

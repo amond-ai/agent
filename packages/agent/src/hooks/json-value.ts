@@ -21,11 +21,11 @@ export function normalizeJsonValue(
   }
   catch (error) {
     throw new Error(
-      `[flue] ${options.label} "${options.name}" value is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}.`,
+      `[amond] ${options.label} "${options.name}" value is not JSON-serializable: ${error instanceof Error ? error.message : String(error)}.`,
     )
   }
   if (text === undefined) {
-    throw new Error(`[flue] ${options.label} "${options.name}" value is not JSON-serializable.`)
+    throw new Error(`[amond] ${options.label} "${options.name}" value is not JSON-serializable.`)
   }
   return JSON.parse(text)
 }

@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: {
     'index': 'src/index.ts',
-    // `@flue/vite/internal` — plumbing shared with `@flue/cli` (flue run).
+    // `@amond-ai/agent-vite/internal` — plumbing shared with `amond` (amond run).
     'internal': 'src/internal.ts',
     'bootstrap/node-server': 'src/bootstrap/node-server.ts',
     'bootstrap/node-entry': 'src/bootstrap/node-entry.ts',
@@ -12,15 +12,15 @@ export default defineConfig({
   dts: true,
   clean: true,
   deps: {
-    // The virtual:flue/* specifiers only resolve inside a Vite build/dev
-    // graph that runs the flue() plugin, so they must survive the package
+    // The virtual:amond/* specifiers only resolve inside a Vite build/dev
+    // graph that runs the amond() plugin, so they must survive the package
     // build verbatim.
     neverBundle: [
-      /^virtual:flue\//,
+      /^virtual:amond\//,
       'vite',
       'tinyglobby',
       'magic-string',
-      '@flue/runtime',
+      '@amond-ai/agent',
       '@hono/node-server',
     ],
   },

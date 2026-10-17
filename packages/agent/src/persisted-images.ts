@@ -6,7 +6,7 @@ import type { PromptDocument, PromptImage } from './types.ts'
 export { MAX_IMAGE_DATA_LENGTH }
 export const IMAGE_DATA_CHUNK_LENGTH = 256 * 1024
 
-const markerPrefix = '__flue_submission_chunks__:'
+const markerPrefix = '__amond_submission_chunks__:'
 
 type ImageBlock =
 	PromptImage | PromptDocument | (Omit<PromptImage | PromptDocument, 'data'> & { data: string })
@@ -39,7 +39,7 @@ export function assertImagesWithinLimit(images: readonly PromptImage[] | undefin
   for (const image of images ?? []) {
     if (image.data.length > MAX_IMAGE_DATA_LENGTH) {
       const kind = isDocumentMimeType(image.mimeType) ? 'Document' : 'Image'
-      throw new Error(`[flue] ${kind} data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`)
+      throw new Error(`[amond] ${kind} data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`)
     }
   }
 }
@@ -101,7 +101,7 @@ function extractImageBlocks(blocks: unknown[]): ExtractedImages<unknown[]> {
     if (!isImageBlock(block)) { return block }
     if (block.data.length > MAX_IMAGE_DATA_LENGTH) {
       throw new Error(
-        `[flue] ${block.type === 'document' ? 'Document' : 'Image'} data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`,
+        `[amond] ${block.type === 'document' ? 'Document' : 'Image'} data exceeds the ${MAX_IMAGE_DATA_LENGTH} character limit.`,
       )
     }
     const itemId = String(imageIndex++)
@@ -136,11 +136,11 @@ function assertExactImageGroups(
 ): void {
   const markers = new Set(markerItemIds)
   if (markers.size !== markerItemIds.length || markers.size !== itemData.size) {
-    throw new Error('[flue] Persisted image chunks do not match persisted image markers.')
+    throw new Error('[amond] Persisted image chunks do not match persisted image markers.')
   }
   for (const itemId of itemData.keys()) {
     if (!markers.has(itemId)) {
-      throw new Error('[flue] Persisted image chunks do not match persisted image markers.')
+      throw new Error('[amond] Persisted image chunks do not match persisted image markers.')
     }
   }
 }
@@ -149,7 +149,7 @@ function hydrateImageArray<T>(blocks: T[], itemData: ReadonlyMap<string, string>
   return blocks.map((block) => {
     if (!isImageBlock(block) || !block.data.startsWith(markerPrefix)) { return block }
     const data = itemData.get(block.data.slice(markerPrefix.length))
-    if (data === undefined) { throw new Error('[flue] Persisted image chunks are missing.') }
+    if (data === undefined) { throw new Error('[amond] Persisted image chunks are missing.') }
     return { ...block, data }
   }) as T[]
 }

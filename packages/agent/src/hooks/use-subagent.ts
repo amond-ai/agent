@@ -12,25 +12,25 @@ function assertSubagentDefinition(
   source: string,
 ): asserts subagent is SubagentDefinition {
   if (!subagent || typeof subagent !== 'object' || Array.isArray(subagent)) {
-    throw new Error(`[flue] ${source} requires an options object: { name, description, agent }.`)
+    throw new Error(`[amond] ${source} requires an options object: { name, description, agent }.`)
   }
   const { name, description, agent, model, thinkingLevel } =
     subagent as Partial<SubagentDefinition>
   if (typeof name !== 'string' || name.trim().length === 0) {
-    throw new Error(`[flue] ${source} name must be a non-empty string.`)
+    throw new Error(`[amond] ${source} name must be a non-empty string.`)
   }
   if (typeof description !== 'string' || description.trim().length === 0) {
     throw new Error(
-      `[flue] ${source} "${name}" needs a non-empty description — it is the catalog line the model uses to decide when to delegate.`,
+      `[amond] ${source} "${name}" needs a non-empty description — it is the catalog line the model uses to decide when to delegate.`,
     )
   }
   if (typeof agent !== 'function') {
     throw new Error(
-      `[flue] ${source} "${name}" needs \`agent\`: the agent function that defines the delegate (rendered when the model delegates to it).`,
+      `[amond] ${source} "${name}" needs \`agent\`: the agent function that defines the delegate (rendered when the model delegates to it).`,
     )
   }
   if (model !== undefined && (typeof model !== 'string' || model.trim().length === 0)) {
-    throw new Error(`[flue] ${source} "${name}" model must be a non-empty string.`)
+    throw new Error(`[amond] ${source} "${name}" model must be a non-empty string.`)
   }
   // Same validation useModel() applies — a typo'd level must fail at
   // authoring time, not deep inside the first delegated task run.
@@ -77,7 +77,7 @@ export function defineSubagent(definition: SubagentDefinition): SubagentDefiniti
  * discovered from its cwd (AGENTS.md, workspace skills), the environment's
  * own tools, and the parent's model — nothing else.
  */
-function FlueGeneralAgent(): undefined {
+function AmondGeneralAgent(): undefined {
   return undefined
 }
 
@@ -90,15 +90,15 @@ function FlueGeneralAgent(): undefined {
  * environment (sandbox tools, filesystem context, model) but inherits none
  * of the parent's instructions, tools, skills, or subagents.
  *
- * The `flue-general` name is framework-reserved by convention; declare your
+ * The `amond-general` name is framework-reserved by convention; declare your
  * own delegates under your own names.
  */
 export const GeneralSubagent: SubagentDefinition = defineSubagent({
-  name: 'flue-general',
+  name: 'amond-general',
   description:
 		'General-purpose agent for independent research, file exploration, and parallel work. ' +
 		'Runs with a fresh context and the workspace tools; give it complete instructions in the prompt.',
-  agent: FlueGeneralAgent,
+  agent: AmondGeneralAgent,
 })
 
 /**
@@ -141,7 +141,7 @@ export function useSubagent(subagent: SubagentDefinition): void {
   const { name, description, agent, model, thinkingLevel } = subagent
   if (frame.subagents.some(declared => declared.name === name)) {
     throw new Error(
-      `[flue] useSubagent() declared the subagent name "${name}" twice in one render. Each delegate declares once; share it from a single custom hook.`,
+      `[amond] useSubagent() declared the subagent name "${name}" twice in one render. Each delegate declares once; share it from a single custom hook.`,
     )
   }
   frame.subagents.push({

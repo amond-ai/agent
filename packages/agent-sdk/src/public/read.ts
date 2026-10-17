@@ -16,7 +16,7 @@
  */
 
 import type { HttpClient } from '../http.ts'
-import type { FlueConversationSnapshot } from './conversation.ts'
+import type { AmondConversationSnapshot } from './conversation.ts'
 import { readSubmissionReply } from './reply.ts'
 import type { AgentSubmissionReply } from './reply.ts'
 import type { AgentSendResult } from './send.ts'
@@ -53,7 +53,7 @@ export async function readAgentSubmissionReply(
 ): Promise<AgentReadResult> {
   const admission = normalizeReadTarget(http, target)
   await waitForAgentSubmission(http, admission, options)
-  const snapshot = await http.json<FlueConversationSnapshot>({
+  const snapshot = await http.json<AmondConversationSnapshot>({
     query: { view: 'history' },
     signal: options.signal,
   })

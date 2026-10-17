@@ -66,7 +66,7 @@ export interface AgentPromptOptions {
    *   and nothing is delivered. Cannot be combined with `initialData`.
    * - `null`: create only when no instance exists; an existing instance
    *   rejects with 409 (`agent_instance_exists`) carrying its uid in
-   *   `error.meta.uid` (read it from the `FlueApiError`'s `body`).
+   *   `error.meta.uid` (read it from the `AmondApiError`'s `body`).
    */
   uid?: string | null
   /**
@@ -78,7 +78,7 @@ export interface AgentPromptOptions {
    * outcome — a submission that settled `failed` stays failed; retry with a
    * fresh key to ask again. Reusing a key with a different payload rejects
    * with a 409 `submission_conflict` (read the existing submission's id
-   * from the `FlueApiError` body's `error.meta.submissionId`).
+   * from the `AmondApiError` body's `error.meta.submissionId`).
    */
   idempotencyKey?: string
   signal?: AbortSignal

@@ -1,9 +1,9 @@
 /**
- * Public authoring surface of `@flue/runtime/cloudflare`: APIs that user
+ * Public authoring surface of `@amond-ai/agent/cloudflare`: APIs that user
  * agent modules import on the Cloudflare target.
  *
  * Generated-entry plumbing lives in `./internal.ts`
- * (`@flue/runtime/cloudflare/internal`). This entry only ever evaluates
+ * (`@amond-ai/agent/cloudflare/internal`). This entry only ever evaluates
  * inside workerd, so static `cloudflare:workers` imports are allowed on it
  * (today: `./tracing`'s namespace import) — but keep that virtual module out
  * of the coordinator / root-internal graph, which the Node bootstrap
@@ -23,7 +23,7 @@ export {
 } from '../errors.ts'
 export type { CloudflareSandboxOptions, CloudflareSandboxStub } from './cf-sandbox.ts'
 export { cloudflareSandbox } from './cf-sandbox.ts'
-export type { CloudflareContext, FlueDurableObjectIdentity } from './context.ts'
+export type { AmondDurableObjectIdentity, CloudflareContext } from './context.ts'
 export { getCloudflareContext, getDurableObjectIdentity } from './context.ts'
 export type {
   CloudflareAgentLike,
@@ -35,6 +35,6 @@ export { extend } from './extension.ts'
 export type { CloudflareGatewayOptions } from './gateway.ts'
 export { type CloudflareTracingOptions, createCloudflareTracing } from './tracing/index.ts'
 // The Workers AI binding provider lives on its own subpath
-// (@flue/runtime/cloudflare/workers-ai): importing it is what puts the
+// (@amond-ai/agent/cloudflare/workers-ai): importing it is what puts the
 // binding dispatch code in a build, so it must not ride along with this
 // barrel.

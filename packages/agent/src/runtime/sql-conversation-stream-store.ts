@@ -70,12 +70,12 @@ class SqlConversationStreamStore implements ConversationStreamStore {
     const data = JSON.stringify(identity)
     await dialect.transaction(async (tx) => {
       await tx.query(
-        `${dialect.insertIgnorePrefix} INTO flue_conversation_streams (path, identity_json, incarnation)
+        `${dialect.insertIgnorePrefix} INTO amond_conversation_streams (path, identity_json, incarnation)
 				 VALUES (${p(1)}, ${p(2)}, ${p(3)}) ${dialect.insertIgnoreSuffix}`,
         [path, data, generateIncarnationId()],
       )
       const rows = await tx.query(
-        `SELECT identity_json FROM flue_conversation_streams WHERE path = ${p(1)}`,
+        `SELECT identity_json FROM amond_conversation_streams WHERE path = ${p(1)}`,
         [path],
       )
       if (rows[0]?.identity_json !== data) { throw failure(path, 'Stream identity conflicts.', 'create') }
@@ -89,7 +89,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
     return dialect.transaction(async (tx) => {
       if (dialect.supportsReturning) {
         const rows = await tx.query(
-          `UPDATE flue_conversation_streams
+          `UPDATE amond_conversation_streams
 					 SET producer_id = ${p(1)}, producer_epoch = producer_epoch + 1, next_producer_sequence = 0
 					 WHERE path = ${p(2)}
 					 RETURNING producer_epoch, next_offset, incarnation`,
@@ -107,14 +107,14 @@ class SqlConversationStreamStore implements ConversationStreamStore {
       }
       const rows = await tx.query(
         `SELECT next_offset, producer_epoch, incarnation
-				 FROM flue_conversation_streams WHERE path = ${p(1)} ${dialect.lockClause}`,
+				 FROM amond_conversation_streams WHERE path = ${p(1)} ${dialect.lockClause}`,
         [path],
       )
       const row = rows[0]
       if (!row) { throw failure(path, 'Stream does not exist.', 'acquire_producer') }
       const producerEpoch = Number(row.producer_epoch) + 1
       await tx.query(
-        `UPDATE flue_conversation_streams
+        `UPDATE amond_conversation_streams
 				 SET producer_id = ${p(1)}, producer_epoch = ${p(2)}, next_producer_sequence = 0
 				 WHERE path = ${p(3)}`,
         [producerId, producerEpoch, path],
@@ -149,7 +149,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
     const result = await dialect.transaction(async (tx) => {
       const rows = await tx.query(
         `SELECT next_offset, producer_id, producer_epoch, next_producer_sequence, incarnation
-				 FROM flue_conversation_streams WHERE path = ${p(1)} ${dialect.lockClause}`,
+				 FROM amond_conversation_streams WHERE path = ${p(1)} ${dialect.lockClause}`,
         [input.path],
       )
       const meta = rows[0]
@@ -162,7 +162,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
         throw failure(input.path, 'Producer ownership is stale.')
       }
       const retries = await tx.query(
-        `SELECT seq, data, submission_id, attempt_id FROM flue_conversation_stream_batches
+        `SELECT seq, data, submission_id, attempt_id FROM amond_conversation_stream_batches
 				 WHERE path = ${p(1)} AND producer_id = ${p(2)} AND producer_epoch = ${p(3)} AND producer_sequence = ${p(4)}`,
         [input.path, input.producerId, input.producerEpoch, input.producerSequence],
       )
@@ -183,7 +183,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
       await assertSubmissionAuthorization(dialect, tx, input.path, input.submission, input.records)
       const seq = Number(meta.next_offset)
       await tx.query(
-        `INSERT INTO flue_conversation_stream_batches
+        `INSERT INTO amond_conversation_stream_batches
 				 (path, seq, producer_id, producer_epoch, producer_sequence, data, submission_id, attempt_id)
 				 VALUES (${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(6)}, ${p(7)}, ${p(8)})`,
         [
@@ -198,7 +198,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
         ],
       )
       await tx.query(
-        `UPDATE flue_conversation_streams
+        `UPDATE amond_conversation_streams
 				 SET next_offset = next_offset + 1, next_producer_sequence = next_producer_sequence + 1
 				 WHERE path = ${p(1)}`,
         [input.path],
@@ -228,7 +228,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
     const limitSql = dialect.inlineReadLimit ? `${limit + 1}` : p(3)
     const params = dialect.inlineReadLimit ? [path, startAfter] : [path, startAfter, limit + 1]
     const rows = await dialect.query(
-      `SELECT seq, data FROM flue_conversation_stream_batches
+      `SELECT seq, data FROM amond_conversation_stream_batches
 			 WHERE path = ${p(1)} AND seq > ${p(2)} ORDER BY seq ASC LIMIT ${limitSql}`,
       params,
     )
@@ -250,7 +250,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
     dialect.validatePath?.(path, 'get_meta')
     const rows = await dialect.query(
       `SELECT identity_json, next_offset, producer_id, producer_epoch, next_producer_sequence, incarnation
-			 FROM flue_conversation_streams WHERE path = ${p(1)}`,
+			 FROM amond_conversation_streams WHERE path = ${p(1)}`,
       [path],
     )
     const row = rows[0]
@@ -276,9 +276,9 @@ class SqlConversationStreamStore implements ConversationStreamStore {
     // Delete-then-insert inside one transaction spells the upsert portably
     // across all three dialects; the transaction keeps supersession atomic.
     await dialect.transaction(async (tx) => {
-      await tx.query(`DELETE FROM flue_conversation_fold_checkpoints WHERE path = ${p(1)}`, [path])
+      await tx.query(`DELETE FROM amond_conversation_fold_checkpoints WHERE path = ${p(1)}`, [path])
       await tx.query(
-        `INSERT INTO flue_conversation_fold_checkpoints
+        `INSERT INTO amond_conversation_fold_checkpoints
 				 (path, head_offset, incarnation, format_version, data)
 				 VALUES (${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)})`,
         [
@@ -301,7 +301,7 @@ class SqlConversationStreamStore implements ConversationStreamStore {
     dialect.validatePath?.(path, 'get_fold_checkpoint')
     const rows = await dialect.query(
       `SELECT head_offset, incarnation, format_version, data
-			 FROM flue_conversation_fold_checkpoints WHERE path = ${p(1)}`,
+			 FROM amond_conversation_fold_checkpoints WHERE path = ${p(1)}`,
       [path],
     )
     const row = rows[0]
@@ -350,7 +350,7 @@ async function assertSubmissionAuthorization(
     // carries the host's attempt.
     if (record.attemptId === submission.attemptId && record.submissionId !== undefined) {
       const deliveries = await tx.query(
-        `SELECT status, joined_into FROM flue_agent_submissions WHERE submission_id = ${p(1)}`,
+        `SELECT status, joined_into FROM amond_agent_submissions WHERE submission_id = ${p(1)}`,
         [record.submissionId],
       )
       const delivery = deliveries[0]
@@ -365,12 +365,12 @@ async function assertSubmissionAuthorization(
   }
   const rows = await tx.query(
     `SELECT status, attempt_id, session_key, settlement_record_id, settlement_record
-		 FROM flue_agent_submissions WHERE submission_id = ${p(1)} ${dialect.lockClause}`,
+		 FROM amond_agent_submissions WHERE submission_id = ${p(1)} ${dialect.lockClause}`,
     [submission.submissionId],
   )
   const row = rows[0]
   const streams = await tx.query(
-    `SELECT identity_json FROM flue_conversation_streams WHERE path = ${p(1)}`,
+    `SELECT identity_json FROM amond_conversation_streams WHERE path = ${p(1)}`,
     [path],
   )
   const streamIdentity = streams[0]

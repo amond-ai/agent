@@ -1,7 +1,7 @@
 {
-  "name": "@flue/sdk",
+  "name": "@amond-ai/agent-sdk",
   "type": "module",
-  "version": "2.3.0",
+  "version": "0.1.0",
   "license": "Apache-2.0",
   "homepage": "https://flueframework.com/",
   "repository": {
@@ -32,7 +32,7 @@
     "@durable-streams/client": "^0.2.6"
   },
   "devDependencies": {
-    "@flue/runtime": "workspace:*",
+    "@amond-ai/agent": "workspace:*",
     "@types/node": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",

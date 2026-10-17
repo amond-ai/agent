@@ -1,15 +1,15 @@
 /**
- * Transport-free execution bootstrap for `flue run <path>`.
+ * Transport-free execution bootstrap for `amond run <path>`.
  *
  * IMPORTANT — this module is NOT imported by the CLI process. It is loaded
  * through the same non-listening Vite server that loads the user's agent
- * module (see run-local.ts), so that every `@flue/runtime` specifier in the
+ * module (see run-local.ts), so that every `@amond-ai/agent` specifier in the
  * execution graph — this bootstrap's, the agent module's, and the db
  * module's — resolves to exactly ONE on-disk copy of the runtime (the
  * project's install). The runtime keeps module-scoped registries (providers,
  * agent registration, instrumentation), so a second copy silently splits
  * that state. The CLI ships this file as its own build entry
- * (`dist/run-bootstrap.mjs`) with `@flue/runtime/*` kept external for the
+ * (`dist/run-bootstrap.mjs`) with `@amond-ai/agent/*` kept external for the
  * same reason.
  *
  * The bootstrap drives the REAL durable submission path — the shared
@@ -20,7 +20,7 @@
  * created: no Hono app, no listener, no channels.
  */
 
-import type { Agent, DeliveredMessage } from '@flue/runtime'
+import type { Agent, DeliveredMessage } from '@amond-ai/agent'
 import {
   AGENT_IDENTITY_PATTERN,
   agentStreamPath,
@@ -34,17 +34,17 @@ import {
   readSubmissionReply,
   registerDefaultProviders,
   runWithInstrumentationOwner,
-} from '@flue/runtime/internal'
-import type { AssembledNodeAgentRuntime, ConversationStreamChunk, PersistenceAdapter } from '@flue/runtime/internal'
-import { sqlite } from '@flue/runtime/node'
+} from '@amond-ai/agent/internal'
+import type { AssembledNodeAgentRuntime, ConversationStreamChunk, PersistenceAdapter } from '@amond-ai/agent/internal'
+import { sqlite } from '@amond-ai/agent/node'
 
-export interface FlueRunSessionOptions {
+export interface AmondRunSessionOptions {
   /** Absolute path of the agent module; imported via {@link loadModule}. */
   agentModulePath: string
   /**
    * The module's agent export names, produced by scanning its source with
    * the build scanner's export-shape rule (run-local.ts). Only these exports
-   * are agent candidates, so `flue run` and the build can never disagree
+   * are agent candidates, so `amond run` and the build can never disagree
    * about what is an agent.
    */
   agentExports: readonly string[]
@@ -59,7 +59,7 @@ export interface FlueRunSessionOptions {
   dbSource?: string
   /**
    * SQLite file used when no db entry resolves. Unlike the dev server's
-   * dev.db this file is NEVER wiped — `--id` continuation across `flue run`
+   * dev.db this file is NEVER wiped — `--id` continuation across `amond run`
    * invocations depends on it accumulating history.
    */
   defaultSqlitePath: string
@@ -73,7 +73,7 @@ export interface FlueRunSessionOptions {
   loadModule: (path: string) => Promise<Record<string, unknown>>
 }
 
-export interface FlueRunSubmitOptions {
+export interface AmondRunSubmitOptions {
   /** Receives every conversation stream chunk as it is durably recorded. */
   onEvent?: (chunk: ConversationStreamChunk) => void
   /** Instance-creation data; the seed, consulted only when this send creates. */
@@ -91,7 +91,7 @@ export interface FlueRunSubmitOptions {
   signal?: AbortSignal
 }
 
-export interface FlueRunOutcome {
+export interface AmondRunOutcome {
   submissionId: string
   outcome: 'completed' | 'failed' | 'aborted'
   error?: unknown
@@ -101,15 +101,15 @@ export interface FlueRunOutcome {
   uid?: string
 }
 
-export interface FlueRunSession {
+export interface AmondRunSession {
   /** The agent's name: its `agentName` static, else its exported name. */
   readonly identity: string
   /** Submit one message to a conversation and wait for settlement. */
   submit(
     conversationId: string,
     message: DeliveredMessage,
-    options?: FlueRunSubmitOptions,
-  ): Promise<FlueRunOutcome>
+    options?: AmondRunSubmitOptions,
+  ): Promise<AmondRunOutcome>
   /** Coordinator shutdown, instrumentation dispose, adapter close. */
   close(): Promise<void>
 }
@@ -160,7 +160,7 @@ function selectRunAgent(
   const candidates = listModuleAgents(agentModule, agentExports)
   if (candidates.length === 0) {
     throw new Error(
-      `[flue] ${modulePath} exports no agents. Export a capitalized agent function, ` +
+      `[amond] ${modulePath} exports no agents. Export a capitalized agent function, ` +
       `e.g. \`export function MyAgent() { … }\`.`,
     )
   }
@@ -169,14 +169,14 @@ function selectRunAgent(
     const matches = candidates.filter(candidate => candidate.name === agentName)
     if (matches.length === 0) {
       throw new Error(
-        `[flue] --name ${JSON.stringify(agentName)} does not match an agent of ${modulePath}. ` +
+        `[amond] --name ${JSON.stringify(agentName)} does not match an agent of ${modulePath}. ` +
         `Agents: ${names}.`,
       )
     }
     const selected = matches[0]
     if (matches.length > 1 || selected === undefined) {
       throw new Error(
-        `[flue] --name ${JSON.stringify(agentName)} matches ${matches.length} agents of ${modulePath}. ` +
+        `[amond] --name ${JSON.stringify(agentName)} matches ${matches.length} agents of ${modulePath}. ` +
         `Give each a distinct \`agentName\`.`,
       )
     }
@@ -185,7 +185,7 @@ function selectRunAgent(
   const only = candidates[0]
   if (candidates.length > 1 || only === undefined) {
     throw new Error(
-      `[flue] ${modulePath} defines ${candidates.length} agents (${names}). ` +
+      `[amond] ${modulePath} defines ${candidates.length} agents (${names}). ` +
       `Pick one with --name <agent>.`,
     )
   }
@@ -194,13 +194,13 @@ function selectRunAgent(
 
 /**
  * Validate the selected agent's name as a durable identity — it keys
- * conversation storage. Function names are trustworthy here: `flue run`
+ * conversation storage. Function names are trustworthy here: `amond run`
  * never minifies user modules.
  */
 function assertRunIdentity(name: string, modulePath: string): string {
   if (!AGENT_IDENTITY_PATTERN.test(name)) {
     throw new Error(
-      `[flue] ${JSON.stringify(name)} is not a valid agent identity (${modulePath}). ` +
+      `[amond] ${JSON.stringify(name)} is not a valid agent identity (${modulePath}). ` +
       `Rename the exported function or assign \`MyAgent.agentName = '<identity>'\`; ` +
       `identities must match ${AGENT_IDENTITY_PATTERN}.`,
     )
@@ -208,9 +208,9 @@ function assertRunIdentity(name: string, modulePath: string): string {
   return name
 }
 
-export async function createFlueRunSession(
-  options: FlueRunSessionOptions,
-): Promise<FlueRunSession> {
+export async function createAmondRunSession(
+  options: AmondRunSessionOptions,
+): Promise<AmondRunSession> {
   const runtimeEnv = options.env ?? process.env
   const instrumentationOwner = createInstrumentationOwner()
   let persistenceAdapter: PersistenceAdapter | undefined
@@ -241,7 +241,7 @@ export async function createFlueRunSession(
       }
       else {
         // The default run.db is NEVER wiped — `--id` continuation across
-        // `flue run` invocations depends on it accumulating history.
+        // `amond run` invocations depends on it accumulating history.
         adapter = sqlite(options.defaultSqlitePath)
         adapterSource = 'the default sqlite adapter'
       }
@@ -250,7 +250,7 @@ export async function createFlueRunSession(
       const stores = await connectPersistenceAdapter(adapter, adapterSource)
       persistenceAdapter = adapter
 
-      // `flue run` always carries the full built-in provider catalog: it
+      // `amond run` always carries the full built-in provider catalog: it
       // loads only the agent module (never app.ts), and the `providers`
       // config narrowing is a server-build concern. Agent-module
       // setProvider() calls ran at import above and win by ID.
@@ -296,7 +296,7 @@ export async function createFlueRunSession(
             }
             if (errors.length === 1) { throw errors[0] }
             if (errors.length > 1) {
-              throw new AggregateError(errors, '[flue] flue run shutdown failed.')
+              throw new AggregateError(errors, '[amond] amond run shutdown failed.')
             }
           })()
           return closing
@@ -321,7 +321,7 @@ export async function createFlueRunSession(
       cleanupErrors.push(cleanupError)
     }
     if (cleanupErrors.length) {
-      throw new AggregateError([error, ...cleanupErrors], '[flue] flue run startup failed.')
+      throw new AggregateError([error, ...cleanupErrors], '[amond] amond run startup failed.')
     }
     throw error
   }
@@ -329,7 +329,7 @@ export async function createFlueRunSession(
 
 // ─── Submission + settlement observation ────────────────────────────────────
 
-interface SubmitAndSettleOptions extends FlueRunSubmitOptions {
+interface SubmitAndSettleOptions extends AmondRunSubmitOptions {
   coordinator: AssembledNodeAgentRuntime['coordinator']
   conversationStreamStore: NonNullable<
     Awaited<ReturnType<PersistenceAdapter['connect']>>['conversationStreamStore']
@@ -345,7 +345,7 @@ interface SubmitAndSettleOptions extends FlueRunSubmitOptions {
  * conversation stream via the runtime's observation seam — no transport.
  * This is `invokeDirectAttached` semantics without HTTP.
  */
-async function submitAndSettle(options: SubmitAndSettleOptions): Promise<FlueRunOutcome> {
+async function submitAndSettle(options: SubmitAndSettleOptions): Promise<AmondRunOutcome> {
   const { coordinator, conversationStreamStore, identity, conversationId, message } = options
   throwIfAborted(options.signal)
 
@@ -363,7 +363,7 @@ async function submitAndSettle(options: SubmitAndSettleOptions): Promise<FlueRun
     // Durable abort intent; settlement (outcome 'aborted') arrives
     // asynchronously on the conversation stream, which we keep observing.
     void coordinator.abortInstance(identity, conversationId).catch((error) => {
-      console.error('[flue] Abort request failed:', error)
+      console.error('[amond] Abort request failed:', error)
     })
   }
   if (options.signal?.aborted) { requestAbort() }

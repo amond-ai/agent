@@ -1,27 +1,27 @@
 /**
- * Ambient types for Flue's virtual modules. The `flue()` plugin resolves
+ * Ambient types for amond's virtual modules. The `amond()` plugin resolves
  * these inside the application's Vite graph:
  *
- * - `virtual:flue/app`    → the user's app entry (`app.ts` default export)
- * - `virtual:flue/db`     → the user's `db.ts` default export, or `undefined`
- * - `virtual:flue/agents` → the scanned `'use agent'` module set
- * - `virtual:flue/server` → the Node bootstrap (src/bootstrap/node-server.ts)
- * - `virtual:flue/providers` → provider registration generated from config
+ * - `virtual:amond/app`    → the user's app entry (`app.ts` default export)
+ * - `virtual:amond/db`     → the user's `db.ts` default export, or `undefined`
+ * - `virtual:amond/agents` → the scanned `'use agent'` module set
+ * - `virtual:amond/server` → the Node bootstrap (src/bootstrap/node-server.ts)
+ * - `virtual:amond/providers` → provider registration generated from config
  */
 
-declare module 'virtual:flue/app' {
+declare module 'virtual:amond/app' {
   /** The user's app.ts default export — anything with a Fetch handler. */
   const app: { fetch(request: Request, env?: unknown): Response | Promise<Response> }
   export default app
 }
 
-declare module 'virtual:flue/db' {
+declare module 'virtual:amond/db' {
   /** The user's db.ts default export, or `undefined` when no db entry exists. */
   const adapter: unknown
   export default adapter
 }
 
-declare module 'virtual:flue/agents' {
+declare module 'virtual:amond/agents' {
   export interface ScannedAgent {
     /** Agent identity (exported function name or `agentName` override); keys durable storage. */
     readonly identity: string
@@ -32,14 +32,14 @@ declare module 'virtual:flue/agents' {
   export const scannedAgents: readonly ScannedAgent[]
 }
 
-declare module 'virtual:flue/providers' {
+declare module 'virtual:amond/providers' {
   // Side-effect module: registers the configured (or default) provider set.
 }
 
-declare module 'virtual:flue/server' {
-  import type { FlueNodeServer, StartFlueNodeServerOptions } from './node-server.ts'
+declare module 'virtual:amond/server' {
+  import type { AmondNodeServer, StartAmondNodeServerOptions } from './node-server.ts'
 
-  export function startFlueNodeServer(
-    options?: StartFlueNodeServerOptions,
-  ): Promise<FlueNodeServer>
+  export function startAmondNodeServer(
+    options?: StartAmondNodeServerOptions,
+  ): Promise<AmondNodeServer>
 }

@@ -26,7 +26,7 @@ function agentPropsFor(state: RenderStateContext | undefined): AgentProps {
   Object.defineProperty(props, 'id', {
     get(): string {
       throw new Error(
-        '[flue] This render has no agent instance behind it, so `props.id` is unavailable. Pass `instanceId` in the render state to back it in tests and tooling.',
+        '[amond] This render has no agent instance behind it, so `props.id` is unavailable. Pass `instanceId` in the render state to back it in tests and tooling.',
       )
     },
   })
@@ -195,7 +195,7 @@ export function assertRenderStructureInvariance(
   const messageDataDelta = setDelta(previous.messageDataNames, next.messageDataNames)
   if (messageDataDelta) {
     throw new Error(
-      `[flue] The agent's render changed identity between turns: message data ${messageDataDelta}. ` +
+      `[amond] The agent's render changed identity between turns: message data ${messageDataDelta}. ` +
       'Message data must be declared unconditionally on every render — the named parts are the response\'s client-facing identity. Resources (tools, skills, subagents), persisted state, event hooks, and the sandbox may all be conditional.',
     )
   }
@@ -239,12 +239,12 @@ function assertUniqueToolNames(frame: RenderFrame): void {
 function assertAgentInstruction(value: unknown): asserts value is string | undefined {
   if (isPromiseLike(value)) {
     throw new Error(
-      '[flue] Agent functions must be synchronous. Move async work into tools, actions, or resource factories.',
+      '[amond] Agent functions must be synchronous. Move async work into tools, actions, or resource factories.',
     )
   }
   if (value !== undefined && typeof value !== 'string') {
     throw new Error(
-      '[flue] An agent returns its instruction string (or nothing). Everything else — model, sandbox, tools — is composed with hooks in the body.',
+      '[amond] An agent returns its instruction string (or nothing). Everything else — model, sandbox, tools — is composed with hooks in the body.',
     )
   }
 }

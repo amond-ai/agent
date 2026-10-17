@@ -95,13 +95,13 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 
 ### Phase 2: Rename to amond
 
-- [ ] T005 Rename the packages and every brand surface in source (depends on T003, T004, file: packages/agent-vite/src/amond-plugin.ts)
-  Validation: names, bin and directories match the spec's table, and `amond --help` lists `init`, `run`, `docs`, `add` and `update`. The SC-2 search returns only attribution lines and `flueframework.com` links (Phase 3's). A project with only `flue.config.ts` gets an error naming `amond.config.ts`. Build, check, lint and test pass.
+- [x] T005 Rename the packages and every brand surface in source (depends on T003, T004, file: packages/agent-vite/src/amond-plugin.ts)
+  Validation: names, bin and directories match the spec's table, and `amond --help` lists `init`, `run`, `docs`, `add` and `update`. The SC-2 search returns only attribution lines and `flueframework.com` links (Phase 3's). A project with only `flue.config.ts` runs on defaults (the old name is never read), and a missing explicit config file errors naming `amond.config.ts`. Build, check, lint and test pass.
   Method: `grep -rniE "@flue/|\bflue\b|FLUE_" packages/` plus the root commands
-- [ ] T006 Prove the Worker build on a minimal 'use agent' fixture (depends on T005, file: packages/agent-vite/src/worker-build.test.ts)
+- [x] T006 Prove the Worker build on a minimal 'use agent' fixture (depends on T005, file: packages/agent-vite/src/worker-build.test.ts)
   Validation: `vite build` with `@amond-ai/agent-vite` on a one-agent fixture emits a Worker that exports `Amond<Name>Agent`, binds it as `AMOND_<NAME>_AGENT`, and contains no `@flue/` or `virtual:flue/` string.
   Method: `bun run --filter @amond-ai/agent-vite test`
-- [ ] T007 Wire the packages into release-please at 0.1.0 (depends on T005, file: release-please-config.json)
+- [x] T007 Wire the packages into release-please at 0.1.0 (depends on T005, file: release-please-config.json)
   Validation: config and manifest list the five directories at 0.1.0, matching each package version. `scripts/publish.ts` orders the CLI after the runtime and the plugin.
   Method: `jq` over both files; a dry-run listing from `scripts/publish.ts`
 
@@ -146,7 +146,7 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 ## Review Focus
 
 - `AMOND_REGISTRY_URL` set to an unreachable host → `add` fails with the no-content message (T008)
-- A project with only `flue.config.ts` → not found, and the error names `amond.config.ts` (T005)
+- A project with only `flue.config.ts` → the old file is ignored and defaults apply, as with no config (T005)
 
 ## Progress
 
@@ -161,6 +161,16 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
 - [x] (2026-10-17 19:00 KST) T003 Type-check the packages under the repository's TypeScript
   Evidence: `bun run check` → exit 0 (15/15 tasks, all five packages included; repeated runs stable); `bun run build` → exit 0; `CI=true bun run test` → exit 0 (20/20); `bun run lint` → exit 0 (10/10) with no generated blueprints.ts, exit 1 right after a build (see Surprises)
   Commit: 273749c. Edits are config or type-level only: `check:types` renamed `check` (5 package.json); agent tsconfig `include` src and types; agent-vite and cli tsconfig `exclude` dist; provider-diagnostics.ts and telemetry/projection.ts type assertions.
+- [x] (2026-10-17 17:58 KST) T005 Rename the packages and every brand surface in source
+  Evidence: `git grep -niE "@flue/|\bflue\b|FLUE_" -- packages/{agent,agent-vite,cli,agent-sdk,agent-react}` → 44 lines: 38 README.md, 5 package.json `repository.url` (withastro/flue), 1 withastro/flue/issues/753 link; camelCase grep `[a-z0-9_@./:-]*flue[a-z0-9_./:-]*` outside READMEs → only flueframework.com (14 lines: 5 homepage, 9 code/scaffold) and withastro/flue; `node packages/cli/bin/amond.mjs --help` → `amond/2.3.0`, commands run, init, add, update, docs; `bun install --frozen-lockfile` → no changes; `bun run build` 10/10, `bun run check` 15/15, `bun run lint` 10/10, `CI=true bun run test` 20/20 (@amond-ai/agent-react 27 tests passed)
+  Config: a temp project with only `flue.config.ts` → `resolveAmondConfigPath` returns undefined, `loadAmondConfig` → `{"config":{}}` (the file is ignored); explicit lookup → `[amond] Config file not found: amond.config.ts`. See Decision Log.
+  Commit: 6bc581e. Root files beyond the packages: `eslint.config.ts` (virtual:amond/providers in a comment), `bun.lock` (new names). No false positives (influence, fluent, …) in the five packages.
+- [x] (2026-10-17 18:20 KST) T007 Wire the packages into release-please at 0.1.0
+  Evidence: `jq` over release-please-config.json and .release-please-manifest.json → nine packages listed, the five new ones at 0.1.0 matching each package.json; `bun scripts/publish.ts --dry-run` → would publish order: agent, agent-react, agent-sdk, agent-vite, amond, then the four existing packages; `bun run build && bun run lint` → 10/10 tasks successful. Release-please dry run not run: it reads config from the remote branch, so it needs the push first.
+  Release-please dry run (lead, after push): bootstrapped at 7c8f94c, considered only the 4–5 commits after it per package, and found no imported Flue commits.
+- [x] (2026-10-17 18:30 KST) T006 Prove the Worker build on a minimal 'use agent' fixture
+  Evidence: `bunx turbo run test --filter=@amond-ai/agent-vite` → 1 file, 3 tests passed (rerun by the lead after the cherry-pick); the build exports `AmondIssueTriageAgent`, binds it as `AMOND_ISSUE_TRIAGE_AGENT` in the emitted wrangler.json, and no emitted file contains `@flue/` or `virtual:flue/`. Mutation check: changing the class prefix in agent-scan.ts failed the class and binding tests; reverted.
+  Commit: dca9448 (cherry-picked from the worktree's 2c08bf6). Beyond Files: `.gitignore` and `eslint.config.ts` ignore `.wrangler/`, which the Cloudflare plugin writes into the fixture during the build. The progress record did not reach the sink; the lead wrote this entry from the executor's report.
 
 ## Decision Log
 
@@ -178,6 +188,17 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Rationale: the reformat commit has to stay mechanical; the first autofix run moved `import 'virtual:flue/providers'`, turned 26 `Error` throws into `TypeError` and reordered re-exports.
   Date/Author: 2026-10-17 / implement-executor
 
+- Decision: T005 adds no error for a project with only `flue.config.ts`; the old name is ignored, so the project runs on defaults with no config.
+  Rationale: Flue's config is optional: `resolveFlueConfigPath` returns undefined when no file is found, and only an explicit `configFile` that is missing throws. A new error would change behaviour (spec Constraints). The T005 Validation clause and the Review Focus line expect an error naming `amond.config.ts`; the orchestrator decides whether to add one.
+  Date/Author: 2026-10-17 / implement-executor
+- Decision: T005 also ran the ESLint autofix for `perfectionist/sort-named-imports` and `sort-named-exports` (26 hits).
+  Rationale: the renames changed the alphabetical order of names inside braces; reordering specifiers within one statement does not change evaluation order.
+  Date/Author: 2026-10-17 / implement-executor
+
+- Decision: anchored release-please with the top-level `bootstrap-sha` 7c8f94c (phase 1 checkpoint), not a per-package option.
+  Rationale: `bootstrap-sha` and `last-release-sha` are top-level only in the schema and manifest docs; the existing four packages have never released either, and no commit before the checkpoint touches them in a way worth a changelog. Ignored once the first release PR merges, so it can be removed then.
+  Date/Author: 2026-10-17 / implement-executor
+
 ## Surprises & Discoveries
 - Observation: `git subtree add` keeps the split commits at root-level paths, so `git log -- packages/agent`
   shows only the merge commit, not Flue's commits.
@@ -187,3 +208,10 @@ Rejected: one PR for the whole track, which cannot be merge-committed and stay r
   Evidence: `bunx eslint` on the pre-autofix tree listed them with the rules on.
 - Observation: After `bun run build`, `bun run lint` fails on the gitignored generated `packages/cli/src/generated/blueprints.ts` (7 style errors: member-delimiter, semi).
   Evidence: `bun run lint` → @flue/cli:lint 7 errors; with `src/generated` moved away → 10/10 tasks pass. Not caused by T003; needs an ESLint ignore for generated files (T004 follow-up).
+
+- Decision: corrected T005's Validation and Review Focus to the config behaviour Flue has: no config file is optional, so a stray `flue.config.ts` is ignored, and only a missing explicit config file errors (naming `amond.config.ts`).
+  Rationale: the plan's original clause assumed an error that would be a behaviour change, which the spec's Constraints rule out.
+  Date/Author: 2026-10-17 / lead
+- Decision: T004 ran before T003.
+  Rationale: the pre-commit hook lints staged files, so T003's type-level edits needed the imported packages lint-clean first.
+  Date/Author: 2026-10-17 / lead

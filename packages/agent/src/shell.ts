@@ -9,11 +9,11 @@
 import type { AgentToolResult } from '@earendil-works/pi-agent-core'
 import { formatBashResult } from './agent.ts'
 import { interceptExecution } from './execution-interceptor.ts'
-import type { FlueExecutionContext } from './execution-interceptor.ts'
+import type { AmondExecutionContext } from './execution-interceptor.ts'
 import { generateToolCallId } from './runtime/ids.ts'
 import type {
-  FlueEventInput,
-  FlueObservationDetail,
+  AmondEventInput,
+  AmondObservationDetail,
   Sandbox,
   ShellOptions,
   ShellResult,
@@ -29,11 +29,11 @@ import type {
  */
 export async function execShellWithEvents(
   env: Sandbox,
-  emit: (event: FlueEventInput, detail?: FlueObservationDetail) => void,
+  emit: (event: AmondEventInput, detail?: AmondObservationDetail) => void,
   command: string,
   options: ShellOptions | undefined,
   signal: AbortSignal | undefined,
-  executionContext: FlueExecutionContext,
+  executionContext: AmondExecutionContext,
   record?: (
     toolCallId: string,
     args: Record<string, unknown>,

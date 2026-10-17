@@ -7,6 +7,8 @@ export default pleaseai({
     '**/dist',
     '**/node_modules',
     '**/coverage',
+    // Wrangler state the Worker build test writes into its fixture.
+    '**/.wrangler',
     'vendor/**',
     // Written by the CLI's prebuild from blueprints/ and gitignored.
     'packages/cli/src/generated/**',
@@ -25,7 +27,7 @@ export default pleaseai({
     'packages/agent-react/**',
   ],
   rules: {
-    // Reordering moves side-effect imports (`import 'virtual:flue/providers'`) and the imports
+    // Reordering moves side-effect imports (`import 'virtual:amond/providers'`) and the imports
     // around them, changing module evaluation order; leave Flue's import order as written.
     'perfectionist/sort-imports': 'off',
     // These autofixes change runtime behaviour, not just layout: a different thrown error class,

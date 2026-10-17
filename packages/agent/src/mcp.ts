@@ -28,7 +28,7 @@ interface McpRequestOptions {
 export interface McpConnection {
   /** Server name supplied to {@link createMcpConnection}. */
   name: string
-  /** MCP tools adapted into ordinary Flue tool definitions. */
+  /** MCP tools adapted into ordinary amond tool definitions. */
   tools: ToolDefinition[]
   /** Close the underlying MCP client connection. */
   close(): Promise<void>
@@ -86,7 +86,7 @@ type McpClient = Pick<Client, 'callTool' | 'close' | 'connect' | 'listTools'>
 /**
  * Connects to a remote MCP server described by a
  * {@link McpConnectionDefinition} and adapts its listed tools into ordinary
- * Flue tool definitions.
+ * amond tool definitions.
  *
  * Adapted tool names use `mcp__<server>__<tool>`. Unsupported characters are
  * replaced with underscores, and duplicate adapted names are rejected. Close
@@ -105,7 +105,7 @@ export async function createMcpConnection(
     definition.auth === undefined ? undefined : createAuthProvider(definition.auth),
   )
   const client = new Client({
-    name: 'flue',
+    name: 'amond',
     version: runtimeVersion,
   })
 
@@ -136,7 +136,7 @@ export async function createMcpConnectionWithClient(
     while (page.nextCursor !== undefined) {
       if (seenCursors.has(page.nextCursor)) {
         throw new Error(
-          `[flue] MCP server "${name}" repeated tools/list cursor ${JSON.stringify(page.nextCursor)} during tool discovery.`,
+          `[amond] MCP server "${name}" repeated tools/list cursor ${JSON.stringify(page.nextCursor)} during tool discovery.`,
         )
       }
       seenCursors.add(page.nextCursor)
@@ -190,13 +190,13 @@ function selectMcpTools(
   const duplicates = allowlist.filter((name, index) => allowlist.indexOf(name) !== index)
   if (duplicates.length > 0) {
     throw new Error(
-      `[flue] MCP server "${serverName}" tools allowlist repeats ${formatToolNames(duplicates)}.`,
+      `[amond] MCP server "${serverName}" tools allowlist repeats ${formatToolNames(duplicates)}.`,
     )
   }
   const unknown = allowlist.filter(name => !byName.has(name))
   if (unknown.length > 0) {
     throw new Error(
-      `[flue] MCP server "${serverName}" does not expose ${formatToolNames(unknown)} named in the tools allowlist. Discovered tools: ${
+      `[amond] MCP server "${serverName}" does not expose ${formatToolNames(unknown)} named in the tools allowlist. Discovered tools: ${
         discovered.map(tool => tool.name).join(', ') || '(none)'
       }.`,
     )
@@ -205,7 +205,7 @@ function selectMcpTools(
     const tool = byName.get(name) as Tool
     if (tool.execution?.taskSupport === 'required') {
       throw new Error(
-        `[flue] MCP tool "${name}" from server "${serverName}" requires task-based execution, which is not supported — remove it from the tools allowlist.`,
+        `[amond] MCP tool "${name}" from server "${serverName}" requires task-based execution, which is not supported — remove it from the tools allowlist.`,
       )
     }
     return tool
@@ -248,7 +248,7 @@ function createMcpTools(
   const callableTools = tools.filter((tool) => {
     if (tool.execution?.taskSupport !== 'required') { return true }
     console.warn(
-      `[flue] Skipping MCP tool "${tool.name}" from server "${serverName}": it requires task-based execution, which is not supported.`,
+      `[amond] Skipping MCP tool "${tool.name}" from server "${serverName}": it requires task-based execution, which is not supported.`,
     )
     return false
   })
@@ -257,7 +257,7 @@ function createMcpTools(
     const toolName = createToolName(serverName, tool.name)
     if (names.has(toolName)) {
       throw new Error(
-        `[flue] MCP tools from server "${serverName}" produced duplicate tool name "${toolName}".`,
+        `[amond] MCP tools from server "${serverName}" produced duplicate tool name "${toolName}".`,
       )
     }
     names.add(toolName)
@@ -275,7 +275,7 @@ function createMcpTools(
         ? {}
         : { annotations: Object.freeze({ ...tool.annotations }) }),
       run() {
-        throw new Error('[flue] MCP tools execute through the internal adapter.')
+        throw new Error('[amond] MCP tools execute through the internal adapter.')
       },
     }
     registerPreparedToolAdapter(definition, {

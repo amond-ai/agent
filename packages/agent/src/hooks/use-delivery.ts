@@ -54,7 +54,7 @@ export function useDelivery(): DeliveredMessage {
   const delivery = frame.state?.delivery
   if (!delivery) {
     throw new Error(
-      '[flue] useDelivery() found no delivered message behind this render. Every agent run in the runtime is triggered by one; a direct render outside the runtime (tests, tooling) must supply a `delivery` in its render-state context.',
+      '[amond] useDelivery() found no delivered message behind this render. Every agent run in the runtime is triggered by one; a direct render outside the runtime (tests, tooling) must supply a `delivery` in its render-state context.',
     )
   }
   return delivery

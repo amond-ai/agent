@@ -66,11 +66,11 @@ export function useAgentFinish(run: (ctx: AgentFinishContext) => void | Promise<
   const frame = requireRenderFrame('useAgentFinish')
   if (frame.kind === 'subagent') {
     throw new Error(
-      '[flue] useAgentFinish() is not available in a subagent render. Lifecycle hooks run against the root agent\'s durable record log; a delegate\'s contract is its task result — validate it in the parent.',
+      '[amond] useAgentFinish() is not available in a subagent render. Lifecycle hooks run against the root agent\'s durable record log; a delegate\'s contract is its task result — validate it in the parent.',
     )
   }
   if (typeof run !== 'function') {
-    throw new Error('[flue] useAgentFinish(run) takes a callback as its only argument.')
+    throw new Error('[amond] useAgentFinish(run) takes a callback as its only argument.')
   }
   frame.agentFinishes.push({ run })
 }

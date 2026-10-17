@@ -60,11 +60,11 @@ export function useAgentStart(run: (ctx: AgentStartContext) => void | Promise<vo
   const frame = requireRenderFrame('useAgentStart')
   if (frame.kind === 'subagent') {
     throw new Error(
-      '[flue] useAgentStart() is not available in a subagent render. Lifecycle hooks run against the root agent\'s durable record log; a delegate runs a detached task — do its up-front work in the task itself.',
+      '[amond] useAgentStart() is not available in a subagent render. Lifecycle hooks run against the root agent\'s durable record log; a delegate runs a detached task — do its up-front work in the task itself.',
     )
   }
   if (typeof run !== 'function') {
-    throw new Error('[flue] useAgentStart(run) takes a callback as its only argument.')
+    throw new Error('[amond] useAgentStart(run) takes a callback as its only argument.')
   }
   frame.agentStarts.push({ run })
 }

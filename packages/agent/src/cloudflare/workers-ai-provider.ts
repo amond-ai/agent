@@ -1118,7 +1118,7 @@ function warnZeroMetadataGatewayModel(model: Model<Api>): void {
   if (warnedZeroMetadataGatewayModels.has(model.id)) { return }
   warnedZeroMetadataGatewayModels.add(model.id)
   console.warn(
-    `[flue] Model "cloudflare/${model.id}" is not in pi-ai's AI Gateway catalog; ` +
+    `[amond] Model "cloudflare/${model.id}" is not in pi-ai's AI Gateway catalog; ` +
     `resolving with zero metadata. Image input is replaced with text placeholders, ` +
     `and cost and context-window data are unavailable. ` +
     `A newer @earendil-works/pi-ai release may include this model.`,
@@ -1152,7 +1152,7 @@ function toAnthropicGatewayModel(
   // to Anthropic, so tool markers are safe to emit when caching is on; the
   // 1-hour TTL (`supportsLongCacheRetention`) was not verified against the
   // binding, so 'long' falls back to the 5-minute TTL via pi's own compat
-  // check. `sendSessionAffinityHeaders` is off because flue sends the
+  // check. `sendSessionAffinityHeaders` is off because amond sends the
   // affinity header itself (buildExtraHeaders) — and a stable sessionId is
   // what makes the cache reusable across turns.
   const caching = cacheRetention !== 'none'

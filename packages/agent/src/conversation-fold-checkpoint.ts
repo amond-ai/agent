@@ -135,21 +135,21 @@ export function decodeReducedInstanceState(data: string): ReducedInstanceState {
     ),
   } as ReducedInstanceState
   if (typeof state.recordsThroughOffset !== 'string') {
-    throw new Error('[flue] Fold checkpoint state is missing its offset.')
+    throw new Error('[amond] Fold checkpoint state is missing its offset.')
   }
   return state
 }
 
 function entriesOf(value: unknown): EncodedEntries {
   if (!Array.isArray(value) || value.some(entry => !Array.isArray(entry) || entry.length !== 2)) {
-    throw new Error('[flue] Fold checkpoint state container is not an entry array.')
+    throw new Error('[amond] Fold checkpoint state container is not an entry array.')
   }
   return value as EncodedEntries
 }
 
 function arrayOf(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
-    throw new Error('[flue] Fold checkpoint state container is not an array.')
+    throw new Error('[amond] Fold checkpoint state container is not an array.')
   }
   return value
 }
@@ -163,7 +163,7 @@ const warnedPaths = new Set<string>()
 function warnFoldCheckpoint(path: string, message: string): void {
   if (warnedPaths.has(path)) { return }
   warnedPaths.add(path)
-  console.warn(`[flue] Conversation fold checkpoint for "${path}" ${message}.`)
+  console.warn(`[amond] Conversation fold checkpoint for "${path}" ${message}.`)
 }
 
 /**

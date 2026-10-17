@@ -3,7 +3,7 @@
  *
  * Offsets are formatted as `<readSeq>_<seq>` — two 16-digit zero-padded
  * integers separated by an underscore, matching the DS reference server's
- * offset format. The first component is always `0` (Flue has no file
+ * offset format. The first component is always `0` (amond has no file
  * segments); the second is the sequence number.
  */
 
@@ -17,7 +17,7 @@ const ZERO_COMPONENT = '0'.repeat(COMPONENT_PAD)
  *
  * Produces `<readSeq>_<seq>` with both components zero-padded to 16 digits,
  * matching the DS reference server's offset format. The first component is
- * always `0` (Flue uses integer sequences, not segmented files).
+ * always `0` (amond uses integer sequences, not segmented files).
  */
 export function formatOffset(seq: number): string {
   if (seq === -1) { return '-1' }
@@ -34,7 +34,7 @@ export function parseOffset(offset: string): number {
   const match = /^\d+_(\d+)$/.exec(offset)
   const sequence = match?.[1]
   if (!sequence) {
-    throw new Error(`[flue] Invalid stream offset: "${offset}".`)
+    throw new Error(`[amond] Invalid stream offset: "${offset}".`)
   }
   return parseInt(sequence, 10)
 }

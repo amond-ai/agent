@@ -1,12 +1,12 @@
-/** Global, isolate-scoped subscription to live Flue runtime activity. */
+/** Global, isolate-scoped subscription to live amond runtime activity. */
 
 import { createObservation } from '../observation.ts'
-import type { FlueObservationSubscriber } from '../observation.ts'
+import type { AmondObservationSubscriber } from '../observation.ts'
 import type {
-  FlueEvent,
-  FlueEventContext,
-  FlueEventInput,
-  FlueObservationDetail,
+  AmondEvent,
+  AmondEventContext,
+  AmondEventInput,
+  AmondObservationDetail,
 } from '../types.ts'
 
 /**
@@ -15,9 +15,9 @@ import type {
  * Subscriber failures are logged and do not halt dispatch or the originating
  * execution. Returned promises are observed for rejection but are not awaited.
  */
-export type FlueEventSubscriber = FlueObservationSubscriber
+export type AmondEventSubscriber = AmondObservationSubscriber
 
-const subscribers = new Set<FlueObservationSubscriber>()
+const subscribers = new Set<AmondObservationSubscriber>()
 
 /**
  * Subscribe to live agent-interaction activity emitted in this isolate.
@@ -27,7 +27,7 @@ const subscribers = new Set<FlueObservationSubscriber>()
  * Usage (typically at the top of `app.ts`):
  
  *
- *     import { observe } from '@flue/runtime';
+ *     import { observe } from '@amond-ai/agent';
  *
  *     observe((event, ctx) => {
  *       if (event.type === 'log' && event.level === 'error') {
@@ -45,7 +45,7 @@ const subscribers = new Set<FlueObservationSubscriber>()
  * are observed for rejection but are not awaited. Queue substantial work outside
  * the callback rather than blocking emission.
  */
-export function observe(subscriber: FlueEventSubscriber): () => void {
+export function observe(subscriber: AmondEventSubscriber): () => void {
   subscribers.add(subscriber)
   return () => {
     subscribers.delete(subscriber)
@@ -63,13 +63,13 @@ const inFlightDeliveries = new Set<Promise<unknown>>()
 
 /**
  * Internal: dispatch a single event to every registered subscriber.
- * Called from `createFlueContext`'s `emitEvent` after the per-context
+ * Called from `createAmondContext`'s `emitEvent` after the per-context
  * subscribers have run.
  */
 export function dispatchGlobalEvent(
-  event: FlueEvent,
-  ctx: FlueEventContext,
-  detail?: FlueObservationDetail,
+  event: AmondEvent,
+  ctx: AmondEventContext,
+  detail?: AmondObservationDetail,
 ): void {
   const observation = createObservation(event, detail)
   for (const subscriber of [...subscribers]) {
@@ -96,13 +96,13 @@ export function drainGlobalEventDeliveries(): Promise<void> {
 }
 
 function reportSubscriberFailure(error: unknown): void {
-  console.error('[flue:observe] subscriber failed:', error)
+  console.error('[amond:observe] subscriber failed:', error)
 }
 
 /** Emit one live event onto the `observe()` stream from coordinator code. */
 export type CoordinatorEventEmitter = (
-  event: FlueEventInput,
-  detail?: FlueObservationDetail,
+  event: AmondEventInput,
+  detail?: AmondObservationDetail,
 ) => void
 
 /**
@@ -112,7 +112,7 @@ export type CoordinatorEventEmitter = (
  * live `submission_settled`), because "context/writer creation failed" is one
  * of the failures being reported. It stamps the delivered envelope (`v`, its
  * own monotonic `eventIndex`, `timestamp`, the scope's correlation fields),
- * builds a minimal {@link FlueEventContext} (`req: undefined`, `log` backed
+ * builds a minimal {@link AmondEventContext} (`req: undefined`, `log` backed
  * by the same emitter), and dispatches to the global `observe()` subscribers.
  *
  * Infallible by contract: the emitter body can never throw into a recovery
@@ -128,7 +128,7 @@ export function createCoordinatorEventEmitter(scope: {
   let eventIndex = 0
   const emit: CoordinatorEventEmitter = (event, detail) => {
     try {
-      const decorated: FlueEvent = {
+      const decorated: AmondEvent = {
         ...event,
         ...(scope.instanceId === undefined ? {} : { instanceId: scope.instanceId }),
         ...(scope.agentName === undefined ? {} : { agentName: scope.agentName }),
@@ -152,7 +152,7 @@ export function createCoordinatorEventEmitter(scope: {
       emit({ type: 'log', level, message, ...(attributes ? { attributes } : {}) })
     }
   }
-  const ctx: FlueEventContext = {
+  const ctx: AmondEventContext = {
     id: scope.instanceId ?? '',
     agentName: scope.agentName,
     env: scope.env,

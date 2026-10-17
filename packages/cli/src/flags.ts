@@ -81,12 +81,12 @@ export function jsonOption(options: CliOptions, key: string, flag: string): unkn
 
 /**
  * cac diverts everything after a bare `--` into `options['--']` instead of
- * treating it as positionals. No flue command forwards arguments, so reject
+ * treating it as positionals. No amond command forwards arguments, so reject
  * them the way extra positionals are rejected.
  */
 export function rejectDoubleDashArgs(options: CliOptions, command: string): void {
   const rest = options['--']
   if (Array.isArray(rest) && rest.length > 0) {
-    throw new UsageError(`Unexpected extra arguments for \`flue ${command}\`: ${rest.join(' ')}`)
+    throw new UsageError(`Unexpected extra arguments for \`amond ${command}\`: ${rest.join(' ')}`)
   }
 }
