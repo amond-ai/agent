@@ -23,10 +23,11 @@ export function registerBlueprintCommands(cli: CAC): void {
         ? 'Fetch a blueprint implementation guide (no args: list blueprints)'
         : NO_BLUEPRINTS_MESSAGE,
     )
-    .usage('add [<kind> <name|url>] [options]')
+    // Registered either way, so `--print` still reaches the empty-index guard.
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
   if (hasBlueprints) {
     add
+      .usage('add [<kind> <name|url>] [options]')
       .example('  $ amond add')
       .example('  $ amond add sandbox daytona | claude')
       .example('  $ amond add channel https://developers.notion.com/reference/webhooks | codex')
@@ -37,17 +38,20 @@ export function registerBlueprintCommands(cli: CAC): void {
 
   const update = cli
     .command(
-      'update <kind> <name|url>',
+      // Optional when nothing is bundled, so bare `amond update` reaches the
+      // empty-index guard instead of failing on missing arguments.
+      hasBlueprints ? 'update <kind> <name|url>' : 'update [kind] [name|url]',
       hasBlueprints
         ? 'Fetch an updated blueprint implementation guide'
         : NO_BLUEPRINTS_MESSAGE,
     )
-    .usage('update <kind> <name|url> [options]')
     .option('--print', 'Print the raw blueprint Markdown to stdout even for a non-agent caller')
   if (hasBlueprints) {
-    update.example('  $ amond update channel slack | claude')
+    update
+      .usage('update <kind> <name|url> [options]')
+      .example('  $ amond update channel slack | claude')
   }
-  update.action((kind: string, name: string, options: CliOptions) =>
+  update.action((kind: string | undefined, name: string | undefined, options: CliOptions) =>
     blueprintAction('update', kind, name, options),
   )
 }

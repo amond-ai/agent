@@ -26,7 +26,9 @@ describe('commands that need bundled content', () => {
     ['add'],
     ['add', 'channel', 'slack'],
     ['add', 'channel', 'https://example.com/docs'],
+    ['update'],
     ['update', 'channel', 'slack'],
+    ['update', 'channel', 'slack', '--print'],
   ]
 
   it.each(docsCases)('amond %s... reports that no docs are bundled', (...args) => {
