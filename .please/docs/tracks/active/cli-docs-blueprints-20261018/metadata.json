@@ -5,7 +5,10 @@
   "created_at": "2026-10-17T19:35:29Z",
   "updated_at": "2026-10-18T12:08:59Z",
   "issue": "#20",
-  "pr": "",
+  "pr": "https://github.com/amond-ai/agent/pull/33",
   "project": "",
-  "project_item_id": ""
+  "project_item_id": "",
+  "code_pr": "https://github.com/amond-ai/agent/pull/33",
+  "code_branch": "tracks/cli-docs-blueprints-20261018",
+  "stack_tool": "gh-stack"
 }
