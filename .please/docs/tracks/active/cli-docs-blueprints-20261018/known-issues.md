@@ -25,7 +25,39 @@ was fixed automatically. None blocks this track.
   the registry instead of falling back to the default. The error names the URL.
 
 Coverage: the `greptile` review engine is enabled but its CLI is not installed, so it did not run.
-PR #33 (phase 1, the docs pages) has not been through the review loop.
+
+## Phase 1 (PR #33, the docs pages)
+
+Recorded 2026-10-19, after the review loop on PR #33 at d0aafc82: 3 iterations to
+`max_iterations`, then a re-run of 2 iterations to exit `needs_human_read`. `guide/migration.md`
+was dropped during the review: it was Flue's beta-to-2.0 upgrade guide and described releases
+amond never had. These findings were validated as real but low impact, so none was fixed
+automatically:
+
+- Leftover references to things amond does not ship: channel packages wrapping
+  `channel.route()` (`reference/agent-api.md:375`), the Ecosystem catalog page
+  (`ecosystem/deploy/node.md:254`), the channel catalog section (`guide/channels.md:7`), a docs
+  website (`cli/docs.md:17-19`), per-integration Sentry and OpenTelemetry guides
+  (`guide/observability.md:175`), and Sentry and OpenTelemetry exporters
+  (`ecosystem/deploy/cloudflare.md:578`).
+- `guide/observability.md:160` says amond ships no packaged exporters, but the Cloudflare tracing
+  adapter is one.
+- `guide/getting-started.md:19`: the setup prompt runs a bare `amond init`, which is not on
+  `PATH` in a fresh directory and errors without `--target` when there is no TTY.
+- `ecosystem/deploy/docker.md:63` ends in a colon whose code block was removed.
+- `packages/cli/NOTICE` says the pages were edited to drop pages, not that remaining pages were
+  edited too.
+- `packages/cli/src/lib/docs-content.test.ts`: the link guard does not check `#anchors`, bare
+  relative links or reference-style links. Every current anchor resolves.
+- No test covers the missing-docs error path in `packages/cli/src/commands/docs.ts`.
+- `packages/cli/src/commands/docs.test.ts`: the listing test would miscount a page whose
+  description contained ` -- `. None does.
+
+Outside the phase 1 diff, for follow-up issues: the engines found defects in Flue's own docs text
+(the approval bypass in `guide/tools.md`, Cloudflare setups without `amondWorkerConfig()`,
+examples without a sandbox or model, the GitLab token name, and others), `amond dev` named in
+`reference/errors.md` and `packages/agent/src/errors.ts`, the search index stripping `<path>`-style
+placeholders, and the "No documentation is bundled" message for a broken install (TD-001).
 
 Outside this diff, for follow-up issues:
 
