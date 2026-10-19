@@ -122,8 +122,8 @@ the imported CLI:
 
 | Item | Choice |
 | --- | --- |
-| CI | GitHub Actions `ci.yml`: lint, build, type check, test. Actions are SHA-pinned |
-| Workflow security | `zizmor.yml` |
+| CI | GitHub Actions `ci.yml`: lint, build, type check, test. Workflows reference actions by release tag, and `.github/workflows/actions.lock` (written by `gh actions-lock`) pins each one, transitive dependencies included, to a commit that the runner enforces |
+| Workflow security | `jactionlint.yml`: [jactionlint](https://jactionlint.jdx.dev) checks the workflows, the Dependabot configuration and the actions lockfile, and uploads its findings to code scanning. Fork pull requests get annotations instead |
 | Dependency updates | Dependabot for GitHub Actions only. npm `catalog` versions are bumped by hand in `package.json`. `.github/dependabot.yml` records why |
 | Versioning | release-please with the `node-workspace` plugin, driven by Conventional Commits |
 | Publishing | npm trusted publishing with provenance |

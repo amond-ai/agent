@@ -1,0 +1,32 @@
+name: jactionlint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jactionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write # SARIF upload to code scanning
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      # Checks the workflows, the Dependabot configuration and actions.lock.
+      - uses: jdx/jactionlint@v2.2.0
+        with:
+          # Fork PRs get a read-only GITHUB_TOKEN, so the SARIF upload would fail.
+          # There the action annotates the pull request instead.
+          advanced-security: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
