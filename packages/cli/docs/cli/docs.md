@@ -14,9 +14,9 @@ amond docs search <query>
 
 ## Description
 
-`amond docs` browses the documentation that ships inside the `amond` package — the same pages published on this site. With no arguments it lists every page (`<path> -- <title>`, one per line). `read` prints one page as markdown. `search` runs a full-text query and prints JSON results.
+`amond docs` browses the documentation that ships inside the `amond` package. With no arguments it lists every page as `<path> -- <title>`; pages outside `ecosystem/` add an indented description line below. `read` prints one page as markdown. `search` runs a full-text query and prints JSON results.
 
-The command reads from the local installation and makes no network requests, so the content always matches the installed CLI version rather than the live website.
+The command reads from the local installation and makes no network requests, so the content always matches the installed CLI version.
 
 ## amond docs read
 
@@ -46,7 +46,7 @@ Pass a result's `path` to `amond docs read`.
 ## Examples
 
 ```bash
-# List every page with its path and description
+# List every page with its path, title, and description
 amond docs
 
 # Print one page as markdown
