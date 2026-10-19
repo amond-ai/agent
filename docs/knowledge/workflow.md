@@ -77,6 +77,19 @@ bun run check       # bun check across the workspace
 A package's `exports` point at `dist/`, so a package has to be built before anything resolves it.
 `check` builds only a package's dependencies, not the package being checked.
 
+### Blueprint registry
+
+```bash
+bun run --filter @amond-ai/registry build   # blueprints/ → apps/registry/dist/<slug>.md
+bun run --filter @amond-ai/registry dev     # serve it locally with wrangler dev
+```
+
+`apps/registry` is a private, assets-only Cloudflare Worker served at `https://blueprints.amond.ai`.
+`.github/workflows/deploy-registry.yml` deploys it on a push to `main` that touches `blueprints/**`,
+`apps/registry/**` or `packages/cli/src/lib/blueprint-index.ts`, using `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` from the `registry` environment. Point the CLI at a local build with
+`AMOND_REGISTRY_URL=http://127.0.0.1:8787`.
+
 ### Testing
 
 ```bash
