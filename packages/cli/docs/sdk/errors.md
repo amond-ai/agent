@@ -38,7 +38,7 @@ class AmondApiError extends Error {
 }
 ```
 
-Rejection value of every SDK JSON request that returns a non-2xx response: [`send()`, `abort()`, and `history()`](/docs/sdk/amond-client/). The SDK performs exactly one fetch per JSON request — no retries — so a `AmondApiError` reflects a single server response.
+Rejection value of every SDK JSON request that returns a non-2xx response: [`send()`, `abort()`, and `history()`](/docs/sdk/amond-client/). The SDK performs exactly one fetch per JSON request — no retries — so an `AmondApiError` reflects a single server response.
 
 | Field    | Description                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ The `message` is composed from the status, the envelope's `type` and `message` w
 Two methods never produce `AmondApiError`:
 
 - `wait()` reads a durable stream rather than making JSON requests; its transport failures are the [stream errors](#stream-errors) below.
-- `observe()` never throws at all; a `AmondApiError` from its internal history reads lands on the observation snapshot instead (see [Errors in `observe()`](#errors-in-observe)).
+- `observe()` never throws at all; an `AmondApiError` from its internal history reads lands on the observation snapshot instead (see [Errors in `observe()`](#errors-in-observe)).
 
 ### The HTTP error envelope
 
@@ -102,7 +102,7 @@ class AmondExecutionError extends Error {
 }
 ```
 
-Rejection value of [`wait()`](/docs/sdk/amond-client/): the message was admitted and executed, but the submission settled with an outcome other than `completed`. A `AmondApiError` means the request never got in; a `AmondExecutionError` means the agent ran and did not finish successfully.
+Rejection value of [`wait()`](/docs/sdk/amond-client/): the message was admitted and executed, but the submission settled with an outcome other than `completed`. An `AmondApiError` means the request never got in; an `AmondExecutionError` means the agent ran and did not finish successfully.
 
 | Field      | Description                                                                                                                                                                                                                              |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -124,7 +124,7 @@ Rejection value of [`wait()`](/docs/sdk/amond-client/): the message was admitted
 
 `type`, `details`, and `meta` are present when the underlying failure was a typed runtime error (the same identity vocabulary as the [runtime errors reference](/docs/reference/errors/)); plain errors serialize as `name` and `message` only.
 
-`wait()` distinguishes server-side abortion from caller-side cancellation: a conversation aborted via `abort()` rejects with `AmondExecutionError` (`failure: 'aborted'`), while firing the caller's own `AbortSignal` rejects with the signal's reason — a `DOMException` named `AbortError` when the signal carries no reason — and is not a `AmondExecutionError`. See [Aborts are not SDK errors](#aborts-are-not-sdk-errors).
+`wait()` distinguishes server-side abortion from caller-side cancellation: a conversation aborted via `abort()` rejects with `AmondExecutionError` (`failure: 'aborted'`), while firing the caller's own `AbortSignal` rejects with the signal's reason — a `DOMException` named `AbortError` when the signal carries no reason — and is not an `AmondExecutionError`. See [Aborts are not SDK errors](#aborts-are-not-sdk-errors).
 
 The conversation wire (`wait()`, `observe()`) validates each chunk against the materialized-conversation protocol, and a protocol mismatch raises an internal `ConversationStreamError` (`name: 'ConversationStreamError'`, not exported). `observe()` recovers from it by rehydrating a fresh snapshot; from `wait()` it propagates as a rejection.
 

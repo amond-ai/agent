@@ -4,7 +4,7 @@ description: The runtime event vocabulary — the observe() and instrument() reg
 lastReviewedAt: 2026-07-30
 ---
 
-This page documents the runtime event surface of `@amond-ai/agent`: the `observe()` and `instrument()` registration contracts, the `AmondEvent` envelope, every event type and its payload, and the live-only fields a `AmondObservation` adds. For the consumer-oriented walkthrough — subscribing, metering usage, exporting telemetry — see [Observability](/docs/guide/observability/). The per-conversation message stream a chat UI reads is a different surface with a different schema; see the [Streaming Protocol Reference](/docs/reference/streaming-protocol/) and the [amond Agent SDK events page](/docs/sdk/events/).
+This page documents the runtime event surface of `@amond-ai/agent`: the `observe()` and `instrument()` registration contracts, the `AmondEvent` envelope, every event type and its payload, and the live-only fields an `AmondObservation` adds. For the consumer-oriented walkthrough — subscribing, metering usage, exporting telemetry — see [Observability](/docs/guide/observability/). The per-conversation message stream a chat UI reads is a different surface with a different schema; see the [Streaming Protocol Reference](/docs/reference/streaming-protocol/) and the [amond Agent SDK events page](/docs/sdk/events/).
 
 All symbols on this page are imported from `@amond-ai/agent` unless noted otherwise.
 
@@ -286,7 +286,7 @@ Bounds of one session operation — a `prompt()`, `skill()`, `task()`, `shell()`
 
 - `operationId` — generated per operation; every event emitted inside the operation carries it as a correlation field.
 - `durationMs` — wall-clock duration of the operation.
-- `isError` / `error` — `error` is present on failure, serialized without stacks: a `AmondError` becomes `{ name, message, type, details?, meta? }`, a plain `Error` becomes `{ name, message }`, and a non-`Error` thrown value passes through as-is.
+- `isError` / `error` — `error` is present on failure, serialized without stacks: an `AmondError` becomes `{ name, message, type, details?, meta? }`, a plain `Error` becomes `{ name, message }`, and a non-`Error` thrown value passes through as-is.
 - `result` — the operation's return value on success (for example a `PromptResponse`). Payloads can be large; exporters should project what they need.
 - `usage` — the operation result's aggregated `PromptUsage`, present when the result carries one (`prompt`, `skill`, `task`). Roll-up semantics: `usage` here already includes the operation's `turn`-level usage — sum one level only.
 
@@ -613,7 +613,7 @@ interface AmondInstrumentation {
 
 Installs an instrumentation bundle: an event subscriber (registered exactly as `observe()` would) paired with an [execution interceptor](#amondexecutioninterceptor) that wraps live agent, model, tool, and task execution — the registration used by tracing adapters such as the Cloudflare tracing adapter ([`createCloudflareTracing()`](/docs/guide/cloudflare-target/#createcloudflaretracing)). Returns a dispose function.
 
-- `key` — optional identity symbol. While an instrumentation with a given key is installed, installing another with the same key throws `InstrumentationAlreadyInstalledError` (a `AmondError` with `type: 'instrumentation_already_installed'`) in production; in dev the newest install wins and the prior one is disposed, which is what makes module-scope installations safe across dev-server reloads. Adapters use this to prevent double installation.
+- `key` — optional identity symbol. While an instrumentation with a given key is installed, installing another with the same key throws `InstrumentationAlreadyInstalledError` (an `AmondError` with `type: 'instrumentation_already_installed'`) in production; in dev the newest install wins and the prior one is disposed, which is what makes module-scope installations safe across dev-server reloads. Adapters use this to prevent double installation.
 - `observe` — receives every event, with the same delivery, containment, and ordering contract as [`observe()`](#observe).
 - `interceptor` — joins the process-wide interceptor chain for the duration of the installation.
 - `dispose` — the bundle's own teardown (flush exporters, shut down providers). Called by the returned dispose function after the subscriber and interceptor are unregistered.
@@ -666,7 +666,7 @@ type AttachedAgentEvent = AmondEvent & {
 };
 ```
 
-A `AmondEvent` from a direct attached-agent interaction, with `instanceId` required rather than optional. A typing convenience for consumers of per-instance live streams; attached-agent events are live activity, not durable history.
+An `AmondEvent` from a direct attached-agent interaction, with `instanceId` required rather than optional. A typing convenience for consumers of per-instance live streams; attached-agent events are live activity, not durable history.
 
 ## Stable contract versus internal shapes
 

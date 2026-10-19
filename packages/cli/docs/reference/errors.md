@@ -123,7 +123,7 @@ class AgentRunError extends Error {
 }
 ```
 
-The rejection of an awaited `init().read()` call whose submission settled `failed` or `aborted`. Not a `AmondError`.
+The rejection of an awaited `init().read()` call whose submission settled `failed` or `aborted`. Not an `AmondError`.
 
 - `outcome` — the non-completed settlement outcome.
 - `submissionId` — the settled submission.
@@ -222,7 +222,7 @@ class ResultUnavailableError extends Error {
 }
 ```
 
-Thrown by `prompt()`, `skill()`, and `task()` when the call set `options.result` and the model invoked the framework's give-up tool instead of producing schema-conforming data. Not a `AmondError`.
+Thrown by `prompt()`, `skill()`, and `task()` when the call set `options.result` and the model invoked the framework's give-up tool instead of producing schema-conforming data. Not an `AmondError`.
 
 - `reason` — the model-supplied explanation.
 - `assistantText` — the assistant transcript accumulated before the give-up.
@@ -372,7 +372,7 @@ The `submission_settled` event, the durable settlement record, and the `submissi
 }
 ```
 
-A `AmondError` serializes with its `name`, `message`, `type`, `details`, and `meta`. Any other failure cause is redacted to a generic `internal_error` entry — non-amond error messages never reach settlement records or the wire. Settlement errors never carry a stack.
+An `AmondError` serializes with its `name`, `message`, `type`, `details`, and `meta`. Any other failure cause is redacted to a generic `internal_error` entry — non-amond error messages never reach settlement records or the wire. Settlement errors never carry a stack.
 
 ## `WORKERS_AI_OVERFLOW_MARKER` and `RETRYABLE_INTERRUPTION_MARKER`
 
@@ -407,7 +407,7 @@ errorInfo?: {
 Classification rules, applied to the thrown value:
 
 - A `DOMException` named `AbortError` → `type: 'AbortError'`.
-- A `AmondError` → `type` is the error's stable code; `meta` is the error's framework-owned metadata (for example validation issues), so observers get structured failure detail without parsing the message.
+- An `AmondError` → `type` is the error's stable code; `meta` is the error's framework-owned metadata (for example validation issues), so observers get structured failure detail without parsing the message.
 - Any other object → `type` is its string `type`, else `code`, else `name`, else `'_OTHER'`; `name`, `code`, and `message` are carried when they are strings.
 - A string → `{ type: '_OTHER', message }`; anything else → `{ type: '_OTHER' }`.
 - `stack` — the throw-site stack, present only when the failure was observed live from a real `Error` instance, never from arbitrary thrown objects.
@@ -453,7 +453,7 @@ interface ModelResponse {
 - `type` strings are the stable machine contract. `message`, `details`, and `dev` prose may change between versions; do not parse them.
 - There is no exported enum or list of error codes; the codes live on the classes and on this page.
 - There is no per-provider error hierarchy. Provider failures normalize into turn results and, terminally, `operation_failed` or the durable submission errors. The one provider-specific class is `CloudflareAIBindingError`.
-- Cancellation is never a `AmondError`: aborted operations and dispatches reject with a `DOMException` named `AbortError`.
+- Cancellation is never an `AmondError`: aborted operations and dispatches reject with a `DOMException` named `AbortError`.
 - The wire never carries `cause`, stacks, or non-amond error messages; all three stay in server-side logs.
 - CLI, configuration, and build diagnostics (`amond` commands, `amond.config.*` validation, the Vite plugin) are human-oriented stderr prose without stable machine-readable codes.
 - Application-owned routes and middleware in an authored `app.ts` return whatever statuses and bodies they choose; amond imposes no envelope or category (for example, no `unauthorized` type) on them.

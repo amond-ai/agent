@@ -195,16 +195,17 @@ Same-origin deployments — the common setup, where `app.ts` serves both the UI 
 
 ## Mounting a channel
 
-Channel objects expose their own `.route()` factory — a separate API from the agent router, but the same kind of pure, mountable sub-router. It serves the provider's declared routes relative to the mount point:
+`createChannelRouter` from `@amond-ai/agent` turns a channel's `routes` into a pure, mountable sub-router — a separate API from the agent router. It serves the provider's declared routes relative to the mount point:
 
 ```ts title="src/app.ts"
+import { createChannelRouter } from '@amond-ai/agent';
 import { channel as slack } from './channels/slack.ts';
 
-app.route('/channels/slack', slack.route());
+app.route('/channels/slack', createChannelRouter(slack.routes));
 // Slack's Events API endpoint is now POST /channels/slack/events
 ```
 
-The channel package declares its route suffixes (`/events`, `/webhook`, `/interactions`, …); the mount point is yours. See [Channels](/docs/guide/channels/#mounting).
+The channel module declares its route suffixes (`/events`, `/webhook`, `/interactions`, …); the mount point is yours. See [Channels](/docs/guide/channels/#mounting).
 
 ## Mounting a directory of agents
 

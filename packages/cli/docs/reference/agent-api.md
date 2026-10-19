@@ -673,7 +673,7 @@ One MCP server, as `defineMcpConnection(...)`, `useMcpConnection(...)`, and [`cr
 - `name` — the server's `mcp__<server>__` tool namespace. Required, non-empty.
 - `url` — the MCP server endpoint. Required; a string must parse as an absolute URL.
 - `transport` — defaults to `'streamable-http'` (modern streamable HTTP). Use `'sse'` for legacy MCP servers.
-- `auth` — bearer credential, sent as `Authorization: Bearer <token>` on every request. A **function** is resolved fresh per request, for per-user and rotating credentials; on a 401 the transport re-resolves once and retries. See [Authentication](/docs/guide/mcp/#authentication).
+- `auth` — bearer credential, sent as `Authorization: Bearer <token>` on every request. A **function** is resolved fresh per request, for per-user and rotating credentials; on a 401 the transport re-resolves once and retries. See [Authentication](/docs/guide/mcp/#authenticate-with-an-mcp-server).
 - `headers` — **static** extra headers merged into every transport request (set-wins over `requestInit` headers). For credentials, prefer `auth`.
 - `requestInit` — additional transport request configuration.
 - `fetch` — custom fetch implementation for the transport.

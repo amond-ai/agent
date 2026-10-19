@@ -47,7 +47,7 @@ interface AmondEventStream<T = ConversationStreamChunk> extends AsyncIterable<T>
 }
 ```
 
-An async iterable of events backed by a Durable Streams connection, with automatic reconnection, offset-based replay, and live tailing. The SDK constructs these internally (`wait()` consumes a `AmondEventStream<ConversationStreamChunk>`); the type is exported so first-party presenters can type streams of their own. `for await...of` is the consumption interface; breaking out of the loop cleans up the underlying connection.
+An async iterable of events backed by a Durable Streams connection, with automatic reconnection, offset-based replay, and live tailing. The SDK constructs these internally (`wait()` consumes an `AmondEventStream<ConversationStreamChunk>`); the type is exported so first-party presenters can type streams of their own. `for await...of` is the consumption interface; breaking out of the loop cleans up the underlying connection.
 
 - `cancel(reason?)` — cancels the stream and aborts the underlying connection. Iteration then ends (`done: true`) rather than throwing.
 - `offset` — the resume checkpoint. It advances per delivered batch: it moves to a batch's next-offset only once every event in that batch has been yielded, so resuming from a checkpointed value never skips undelivered events — at worst it re-delivers the batch that was in flight when the checkpoint was taken (at-least-once).

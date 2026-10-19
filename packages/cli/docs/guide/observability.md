@@ -62,7 +62,7 @@ Streaming deltas are live progress signals, not authoritative message state; the
 
 Two properties of the live stream go beyond what is durably recorded:
 
-- **Live observations carry extra detail.** `observe()` delivers each event as a `AmondObservation` — the event plus live-only fields such as normalized tool arguments, effective results, and classified `errorInfo` including the throw-site stack. These exporter-oriented fields are never persisted or replayed.
+- **Live observations carry extra detail.** `observe()` delivers each event as an `AmondObservation` — the event plus live-only fields such as normalized tool arguments, effective results, and classified `errorInfo` including the throw-site stack. These exporter-oriented fields are never persisted or replayed.
 - **`turn_request` is in-process only.** It contains the full model-visible request — provider identity, settings, system prompt, messages, and tools — and is delivered to `observe()` subscribers but never persisted or served over HTTP.
 
 The [Events Reference](/docs/reference/events/) documents every event's fields and which payloads are stable contract.

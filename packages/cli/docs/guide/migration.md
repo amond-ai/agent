@@ -68,12 +68,13 @@ export default app;
 import { createAgentRouter } from '@amond-ai/agent/routing';
 import { Hono } from 'hono';
 import { Triage } from './agents/triage.ts';
+import { createChannelRouter } from '@amond-ai/agent';
 import { channel } from './channels/slack.ts';
 
 const app = new Hono();
 app.use('/agents/*', requireUser);
 app.route('/agents/triage', createAgentRouter(Triage)); // explicit, per agent
-app.route('/channels/slack', channel.route()); // explicit, per channel
+app.route('/channels/slack', createChannelRouter(channel.routes)); // explicit, per channel
 export default app;
 ```
 
@@ -156,7 +157,7 @@ New capabilities you will likely reach for while migrating — durable per-insta
 The tool contract keeps `defineTool({ name, description, input, output, run })`, with a new return shape, one rename, and two new flags:
 
 - **`run()` returns a result envelope: `{ output?, terminate? }`.** Where a tool returned a bare value, return `{ output: <value> }`. Returning a bare `string` still works — it is sugar for `{ output: <string> }` — and returning nothing is still allowed for tools without an `output` schema, but any other bare value (object, number, boolean, array, `null`) now throws at runtime with instructions to wrap it. The optional `terminate: true` sibling ends the agent's turn once the current tool batch settles — the same loop-ending contract the built-in `finish` tool uses.
-- **`run({ input })` → `run({ data })`.** The parsed-arguments field on `ToolContext` is now `data`; `signal` is unchanged, and `log` (a `AmondLogger`) and `toolCallId` are always present. The pre-beta `parameters`/`execute` markers still throw.
+- **`run({ input })` → `run({ data })`.** The parsed-arguments field on `ToolContext` is now `data`; `signal` is unchanged, and `log` (an `AmondLogger`) and `toolCallId` are always present. The pre-beta `parameters`/`execute` markers still throw.
 - **`harness: true`** replaces session plumbing: the tool receives `harness` (`harness.prompt()` for model calls in the tool's own scratch conversation, `harness.sandbox` for the environment). `harness.session()` and `AmondSession`/`AmondSessions` are gone — `prompt()` lives directly on the harness, and `session.task()` delegation is now the model-driven `task` tool over `useSubagent` declarations. The `task` tool's `agent` parameter is required, and an unnamed task no longer clones the parent's configuration — declare `useSubagent(GeneralSubagent)` for a blank fresh-context delegate (see [Subagents](/docs/guide/subagents/#the-general-purpose-delegate)).
 - **`durable: true`** opts a tool into checkpointed execution: `run` receives `step`, side effects go through `step.do(name, fn)`, and recovery replays recorded step values instead of re-running them. This is the in-agent replacement for small workflow orchestration.
 
@@ -199,7 +200,7 @@ See [Sandboxes](/docs/guide/sandboxes/).
    return reply.data.summary;
    ```
 
-   A `signal` on the beta workflow call aborted the run itself; on the handle, `read(receipt, { signal })` cancels only the local wait — the submission keeps running and spending. Carrying the option over mechanically converts a durable abort into a local cancel. When cancelling the read should also stop the run, call [`abort()`](/docs/reference/agent-api/#agenthandle).
+   A `signal` on the beta workflow call aborted the run itself; on the handle, `read(receipt, { signal })` cancels only the local wait — the submission keeps running and spending. Carrying the option over mechanically converts a durable abort into a local cancel. When cancelling the read should also stop the run, call [`abort()`](/docs/reference/agent-api/#init).
 
 2. **Checkpointed side-effect sequences inside an agent**: a `durable: true` tool with `step.do(...)`.
 
@@ -223,17 +224,16 @@ A bare string is user-message shorthand everywhere a message is accepted. `dispa
 
 ## Channels
 
-Every channel connector package changed the same way:
+Channels are project-owned modules that export `{ routes: [...] }`; two things changed:
 
-- **Mount explicitly.** Channels are no longer auto-served from `src/channels/`. Each connector now exposes `channel.route()`; mount it in `app.ts` at the old auto-mount path (`app.route('/channels/slack', channel.route())`) so registered webhooks keep working.
-- **`conversationKey` → `instanceId`.** `channel.conversationKey(ref)` is now `channel.instanceId(ref)` and `parseConversationKey()` is `parseInstanceId()`, across all connectors, with no aliases; error classes renamed to match (`Invalid<Channel>InstanceIdError`). Zendesk's `ticketKey`/`parseTicketKey` keep their names.
-- Most connectors now pass structured facts as `initialData` at dispatch instead of encoding them in the id — prefer `useInitialData()` over id parsing in channel agents; `parseInstanceId()` remains as an escape hatch.
+- **Mount explicitly.** Channels are no longer auto-served from `src/channels/`. Mount each channel's routes in `app.ts` at the old auto-mount path (`app.route('/channels/slack', createChannelRouter(channel.routes))`) so registered webhooks keep working.
+- **`conversationKey` → `instanceId`.** Name the agent instance for an incoming event with `instanceId`; pass structured facts as `initialData` at dispatch instead of encoding them in the id, and prefer `useInitialData()` over id parsing in channel agents.
 
 Hand-written channels build on the new `createChannelRouter(routes)` from `@amond-ai/agent` — see [Channels](/docs/guide/channels/).
 
 ## Database
 
-- Ecosystem adapters now take your driver instead of a connection string: `postgres(process.env.DATABASE_URL!)` becomes `postgres({ query, transaction, close })` wrapping your own `pg` pool. The same runner pattern applies to libsql, mysql, mongodb, and redis; each [ecosystem database page](/docs/guide/database/) shows the wrapper.
+- amond ships no external database adapters. To use an external database, own a `PersistenceAdapter` in your project — generate one with `amond add database <url>` or write it against the persistence API. See [Database](/docs/guide/database/).
 - `db.ts` moved from `.amond/db.ts` to the source root (`src/db.ts`), matching the general source-root rule. Standalone `start()` scripts take `db:` directly and do not read `db.ts`.
 - Custom adapters: `RunStore` and `EventStreamStore` are deleted, `AgentSubmissionStore` grew settlement and lease methods, and `@amond-ai/agent/test-utils` now ships contract test suites to verify an adapter against the new obligations.
 
@@ -305,7 +305,7 @@ Messages remain amond-owned parts-based values; new part kinds (`data-*` from `u
 
 ## Cloudflare deployments
 
-- **`AmondRegistry` is gone.** The beta's deployment-wide registry DO indexed workflow runs; nothing replaces it. Append a `deleted_classes` migration for it, and for every `amond<Name>Workflow` class.
+- **`AmondRegistry` is gone.** The beta's deployment-wide registry DO indexed workflow runs; nothing replaces it. Append a `deleted_classes` migration for it, and for every `Amond<Name>Workflow` class.
 - Generated classes are per-agent only: `export function Triage()` → class `AmondTriageAgent`, binding `AMOND_TRIAGE_AGENT` (one class per agent function; a file can carry several). Migration history stays user-authored — adding an agent is always the triple: the exported agent function in a `'use agent'` module, the mount (unless dispatch-only), and a `new_sqlite_classes` entry. Renames use `renamed_classes` — but remember the [schema reset](#before-you-start-persisted-state-resets): a beta-era database is rejected even under a renamed class, so beta agents are usually retired (`deleted_classes`) in favor of fresh identities.
 - Your authored `wrangler.jsonc` is never modified; the build merges it into the generated, gitignored `.amond-vite.wrangler.jsonc`, and `vite build` writes the finalized config into `dist/` with a deploy redirect — deploy with plain `wrangler deploy` from the project root, no `--config` flag.
 - `cloudflare.ts` moved from `.amond/cloudflare.ts` to `src/cloudflare.ts`. The generated entry exports every agent class plus your `app.ts` fetch handler; application-owned exports (your own DOs, Workflows, the `scheduled` handler) come from `cloudflare.ts`, and scheduled work starts with `dispatch()`, not `invoke()`.
@@ -333,12 +333,12 @@ amond run src/agents/support.ts --message "Handle ticket 42." --id ticket-42
 
 1. **Pins.** Replace the beta packages with the current `@amond-ai/*` versions; add `vite`, `@amond-ai/agent-vite`, `hono`, and (Cloudflare) `@cloudflare/vite-plugin`. Drop beta-era patches and vendored builds — re-verify each patched behavior against the new runtime before porting anything.
 2. **Build.** Author `vite.config.ts` (`amond()` before `cloudflare()`); move package scripts to `vite dev`/`vite build`; fix `amond.config.ts` (`@amond-ai/agent/config`, no `root`/`output`); gitignore the generated files.
-3. **Routing.** Author explicit mounts in `app.ts`; delete `amond()` router usage; mount each channel's `route()`; decide which agents are dispatch-only.
+3. **Routing.** Author explicit mounts in `app.ts`; delete `amond()` router usage; mount each channel with `createChannelRouter(channel.routes)`; decide which agents are dispatch-only.
 4. **Agents.** Convert each initializer to an exported capitalized agent function in a `'use agent'` module: hooks for behavior, statics (`agentName`, `initialData`, `durability`) for the contract, `AgentProps` for the id, platform env instead of `ctx.env`. Convert profiles to `useSubagent` agent functions. Agents that used the implicit virtual sandbox declare one: `useSandbox(bash(() => new Bash({ fs: new InMemoryFs() })))`.
 5. **Tools.** Rename `run({ input })` to `run({ data })`; adopt `harness: true` where tools prompted sessions; consider `durable: true` for side-effect sequences.
 6. **Skills.** Delete import attributes; let `SKILL.md` imports package themselves; wrap other markdown with `defineSkill` where needed.
 7. **Workflows.** Replace each with the smallest fit: awaited `init()` handle, durable tool, or an application-owned orchestrator.
-8. **Channels and database.** Rename `conversationKey`/`parseConversationKey` to `instanceId`/`parseInstanceId`; rewrite database adapters around your own driver; move `db.ts` to the source root.
+8. **Channels and database.** Rename `conversationKey` to `instanceId`; own any external-database `PersistenceAdapter` in your project; move `db.ts` to the source root.
 9. **Providers.** Replace `registerProvider()`/`registerApiProvider()` calls with Pi's `createProvider()` + `setProvider()` (add `@earendil-works/pi-ai` to your dependencies); replace the Cloudflare binding registration with `cloudflareBindingProvider()` from `@amond-ai/agent/cloudflare/workers-ai`; optionally narrow the shipped providers with `amond({ providers: [...] })` (name `'cloudflare'` to keep Workers AI).
 10. **Observability.** Migrate `run_*` handling to `agent_start`/`agent_end`/`submission_settled` and the `instanceId`/`submissionId` correlation fields.
 11. **Clients.** Move SDK and React usage to conversation-scoped clients and `useAmondAgent({ url | client })`.

@@ -167,7 +167,7 @@ export default defineConfig({
 });
 ```
 
-The plugin options are a `AmondConfig`. During Vite config resolution the plugin:
+The plugin options are an `AmondConfig`. During Vite config resolution the plugin:
 
 1. Validates the inline options (failures name `inline amond() options` as the source).
 2. Discovers and loads `amond.config.*` from the Vite root.
