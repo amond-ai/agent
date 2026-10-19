@@ -63,7 +63,7 @@ The code behind `amond docs`, `add` and `update` came over from Flue v2.3.0, but
 
 ### Phase 2: Blueprints from the registry site
 
-- [ ] T003 Import the renamed blueprint snapshot into blueprints/ (file: blueprints/README.md) (depends on T001) [FR-3, FR-5, FR-6, FR-7, FR-8, AC-010]
+- [x] T003 Import the renamed blueprint snapshot into blueprints/ (file: blueprints/README.md) (depends on T001) [FR-3, FR-5, FR-6, FR-7, FR-8, AC-010]
   Validation: `blueprints/` holds the spec's 16 files and a README that credits Flue and records `deee93b`; markers read `// amond-blueprint:`; the generator indexes 12 blueprints and 4 kind roots with no validation error; the content test covers `blueprints/` and passes.
   Method: `bun --filter amond check` plus `bun --filter amond test -- docs-content`
 - [ ] T004 Build and serve blueprint text from the registry site (file: apps/registry/wrangler.jsonc) (depends on T003) [FR-10]
