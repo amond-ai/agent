@@ -19,7 +19,7 @@ The content is a snapshot of Flue v2.3.0, the same upstream commit as the code i
 ### Functional Requirements
 
 - [ ] FR-1: let users list, read and search the documentation pages through `amond docs`, `amond docs read <page>` and `amond docs search <query>`
-- [ ] FR-2: include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages FR-5 leaves out
+- [ ] FR-2: include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages that depend on packages this repository did not import
 - [ ] FR-3: include Flue's sandbox and tooling blueprints and the build-from-scratch guides for the sandbox, tooling, channel and database kinds, and list them when `amond add` runs with no arguments
 - [ ] FR-4: deliver blueprint text to `amond add` and `amond update` from a hosted registry site on an amond-owned domain, which the CLI uses by default, with `AMOND_REGISTRY_URL` overriding that default
 - [ ] FR-10: publish the included blueprints to that registry site, so that every blueprint the CLI lists can be fetched

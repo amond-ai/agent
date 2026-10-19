@@ -119,8 +119,9 @@ SDK is a dependency, and `vite` is a peer. The build is `vite build`.
 The CLI, imported from `@flue/cli`, with the `amond` binary. Its commands are `init`, `run`,
 `docs`, `add`, and `update`. `docs` serves the pages bundled in `packages/cli/docs`
 (`src/lib/docs-pages.ts`). `add` and `update` use the blueprint index that
-`scripts/generate-blueprint-index.ts` builds from repo-root `blueprints/`, and fetch blueprint text
-from `https://blueprints.amond.ai` (`apps/registry/`); `AMOND_REGISTRY_URL` overrides the registry.
+`packages/cli/scripts/generate-blueprint-index.ts` builds from repo-root `blueprints/`, and fetch
+blueprint text from `https://blueprints.amond.ai` (`apps/registry/`); `AMOND_REGISTRY_URL`
+overrides the registry.
 
 ### `packages/agent-sdk/` — `@amond-ai/agent-sdk`
 

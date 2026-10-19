@@ -128,6 +128,13 @@ describe('buildRegistry rejects invalid input', () => {
     await expect(buildRegistry(dir, out)).rejects.toThrow(/daytona\.md.*kind/)
     expect(await readdir(out)).toEqual(['keep.md'])
   })
+
+  it('fails on a filename with no blueprint name after the separator', async () => {
+    const dir = await fixture('empty-slug', async (d) => {
+      await writeFile(join(d, 'sandbox--.md'), await sourceFor(d, 'sandbox--daytona.md'), 'utf-8')
+    })
+    await expect(buildRegistry(dir, join(work, 'out-empty-slug'))).rejects.toThrow(/sandbox--\.md: blueprint name ""/)
+  })
 })
 
 /** A port the OS reports free, for the dev server to bind. */

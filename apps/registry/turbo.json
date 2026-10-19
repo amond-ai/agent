@@ -9,6 +9,9 @@
         "$TURBO_ROOT$/packages/cli/src/lib/blueprint-index.ts"
       ]
     },
+    "check": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/cli/src/lib/blueprint-index.ts"]
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",

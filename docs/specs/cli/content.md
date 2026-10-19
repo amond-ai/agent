@@ -34,10 +34,10 @@ The system MUST let users list, read and search the documentation pages through 
 - WHEN a user runs `amond docs search sandbox`
 - THEN list the pages that match
 
-### Requirement: include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages FR-5 leaves out
+### Requirement: include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages that depend on packages this repository did not import
 <!-- req: REQ-002 tracks=cli-docs-blueprints-20261018 -->
 
-The system MUST include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages FR-5 leaves out.
+The system MUST include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages that depend on packages this repository did not import.
 
 ### Requirement: include Flue's sandbox and tooling blueprints and the build-from-scratch guides for the sandbox, tooling, channel and database kinds, and list them when `amond add` runs with no arguments
 <!-- req: REQ-003 tracks=cli-docs-blueprints-20261018 -->

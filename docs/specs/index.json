@@ -20,7 +20,7 @@
         {
           "id": "REQ-002",
           "kind": "functional",
-          "statement": "include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages FR-5 leaves out"
+          "statement": "include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages that depend on packages this repository did not import"
         },
         {
           "id": "REQ-003",

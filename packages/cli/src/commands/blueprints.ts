@@ -137,9 +137,9 @@ export const DEFAULT_REGISTRY_URL = 'https://blueprints.amond.ai'
 
 // AMOND_REGISTRY_URL is a user-facing override of the default registry. It is the
 // user's own explicit choice, so any URL is accepted (including plain http for a
-// local registry); only the default is held to HTTPS.
+// local registry); only the default is held to HTTPS. A blank value counts as unset.
 export function registryUrlFor(slug: string): string {
-  const registry = process.env.AMOND_REGISTRY_URL || DEFAULT_REGISTRY_URL
+  const registry = process.env.AMOND_REGISTRY_URL?.trim() || DEFAULT_REGISTRY_URL
   const base = registry.replace(/\/+$/, '')
   return `${base}/${slug}.md`
 }

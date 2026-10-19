@@ -9,7 +9,7 @@
 
 # Add an amond Sandbox Adapter: Daytona
 
-You are an AI coding agent installing the Daytona sandbox adapter for a
+You are an AI coding agent installing the Daytona sandbox adapter for an
 amond project. Follow these instructions exactly. Confirm with the user only
 when something is genuinely ambiguous (e.g. an unusual project layout).
 

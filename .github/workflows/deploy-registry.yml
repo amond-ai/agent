@@ -13,14 +13,19 @@ on:
 
 permissions: {}
 
-# Never cancel: a deploy killed mid-upload could leave the site half-updated.
+# Never cancel: a deploy killed mid-upload could leave the site half-updated. The ref keeps a
+# skipped non-main dispatch out of main's group, where it would replace a pending main deploy.
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   deploy:
+    # workflow_dispatch can run on any branch; only main may publish to the production domain.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # The concurrency group never cancels, so a stalled deploy must not hold it for 6 hours.
+    timeout-minutes: 15
     # Lets the Cloudflare secrets be scoped to this environment instead of the whole repository.
     environment: registry
     permissions:

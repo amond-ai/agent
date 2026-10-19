@@ -256,12 +256,14 @@ describe('the default registry', () => {
     expect(DEFAULT_REGISTRY_URL).toBe('https://blueprints.amond.ai')
   })
 
-  it('is used when AMOND_REGISTRY_URL is unset or empty', () => {
+  it('is used when AMOND_REGISTRY_URL is unset, empty or blank', () => {
     const saved = process.env.AMOND_REGISTRY_URL
     try {
       delete process.env.AMOND_REGISTRY_URL
       expect(registryUrlFor('daytona')).toBe('https://blueprints.amond.ai/daytona.md')
       process.env.AMOND_REGISTRY_URL = ''
+      expect(registryUrlFor('channel')).toBe('https://blueprints.amond.ai/channel.md')
+      process.env.AMOND_REGISTRY_URL = '  '
       expect(registryUrlFor('channel')).toBe('https://blueprints.amond.ai/channel.md')
     }
     finally {

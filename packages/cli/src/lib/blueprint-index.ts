@@ -220,6 +220,12 @@ export function buildBlueprintIndex(files: readonly BlueprintSourceFile[]): Blue
       }
       const kind = stem.slice(0, dashIndex)
       const slug = stem.slice(dashIndex + 2)
+      // The slug becomes the registry filename and the `<registry>/<slug>.md` URL path.
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+        throw new Error(
+          `[blueprints] ${file}: blueprint name "${slug}" after '--' must be lowercase letters, digits and hyphens, starting with a letter or digit.`,
+        )
+      }
       if (kind !== frontmatter.kind) {
         throw new Error(
           `[blueprints] ${file}: filename kind "${kind}" does not match frontmatter kind "${frontmatter.kind}".`,
