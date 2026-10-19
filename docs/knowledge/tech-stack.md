@@ -16,7 +16,7 @@ choices were made. Update this file before a change that adds or replaces any of
 
 | Item | Choice | Notes |
 | --- | --- | --- |
-| Workspaces | bun workspaces (`packages/*`) | Shared versions through the root `catalog` and `catalogs` |
+| Workspaces | bun workspaces (`packages/*`, `apps/*`) | Shared versions through the root `catalog` and `catalogs`. `apps/*` holds deployed sites that are never published to npm |
 | Task runner | Turborepo 2.8 | `build` depends on `^build`. `test` depends on its own `build`. `check` depends on `^build` only |
 
 ## Build, type check, and test
@@ -92,6 +92,14 @@ renames an upstream commit no longer applies directly.
 | Cloudflare Workers, Durable Objects, and Sandbox containers | First deployment target. Each agent is a Durable Object; each harness turn runs in a Sandbox container | Planned |
 | Node | Development target, kept because Flue keeps it | Planned |
 | Other platforms | Out of scope until the Cloudflare path ships | Not planned |
+| Cloudflare Workers static assets, wrangler 4.147 | The blueprint registry site, `apps/registry`, at `blueprints.amond.ai` | Configured |
+
+The registry site is an assets-only Worker because it serves flat Markdown files with no
+per-request logic. A Worker script would be code with nothing to do, and a site toolchain such as
+Flue's Astro site would be a whole build just to copy files. Raw GitHub file URLs were rejected in
+favour of an amond domain. The site has its own subdomain so that a future `amond.ai` website keeps
+the apex. Workers assets serve `.md` as `text/markdown`, so the site needs no `_headers` file.
+`wrangler` is pinned exactly in the root `catalog`.
 
 ## Packages
 

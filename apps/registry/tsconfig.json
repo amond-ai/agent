@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": true,
+    "composite": false,
+    "target": "ES2022",
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "noUncheckedIndexedAccess": true,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "sourceMap": false,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["scripts", "src", "*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

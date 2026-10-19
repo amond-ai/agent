@@ -1,0 +1,21 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/blueprints/**",
+        "$TURBO_ROOT$/packages/cli/src/lib/blueprint-index.ts"
+      ]
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.shared.ts",
+        "$TURBO_ROOT$/blueprints/**",
+        "$TURBO_ROOT$/packages/cli/src/lib/blueprint-index.ts"
+      ]
+    }
+  }
+}

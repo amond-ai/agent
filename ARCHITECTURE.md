@@ -179,6 +179,20 @@ A second adapter, kept as a spike to test whether `HarnessAdapter` holds for mor
 harness. It is `private: true` and absent from `release-please-config.json`, so it is never
 published. `codex(options)` throws.
 
+### `apps/registry/` — `@amond-ai/registry`
+
+The blueprint registry site that `amond add` and `amond update` fetch from, served at
+`https://blueprints.amond.ai`. It is an assets-only Cloudflare Worker: `wrangler.jsonc` names
+`./dist` and no Worker script. `bun run build` reads repo-root `blueprints/` and writes one
+`dist/<slug>.md` per blueprint and kind root, with the JSON frontmatter removed. It derives slugs
+with `buildBlueprintIndex` from `packages/cli/src/lib/blueprint-index.ts`, the same function
+that writes the CLI's bundled index, so the CLI and the site cannot disagree on a name. An
+alias gets no file, because the CLI resolves an alias to its slug before it fetches. An unknown
+path returns a plain 404.
+
+The package is `private: true` and absent from `release-please-config.json`, so it is never
+published to npm.
+
 ### `scripts/`
 
 `publish.ts` publishes the workspace packages to npm in dependency order. It is safe to re-run

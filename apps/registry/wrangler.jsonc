@@ -1,0 +1,13 @@
+{
+  "name": "amond-blueprints",
+  "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "blueprints.amond.ai", "custom_domain": true }],
+  // Assets only, no Worker script: every request is answered from ./dist, which the build fills
+  // with one <slug>.md per blueprint. "none" makes an unknown path a plain 404 instead of an
+  // index.html or 404 page fallback.
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "none",
+    "not_found_handling": "none"
+  }
+}
