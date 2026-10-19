@@ -227,7 +227,7 @@ A bare string is user-message shorthand everywhere a message is accepted. `dispa
 Channels are project-owned modules that export `{ routes: [...] }`; two things changed:
 
 - **Mount explicitly.** Channels are no longer auto-served from `src/channels/`. Mount each channel's routes in `app.ts` at the old auto-mount path (`app.route('/channels/slack', createChannelRouter(channel.routes))`) so registered webhooks keep working.
-- **`conversationKey` → `instanceId`.** Name the agent instance for an incoming event with `instanceId`; pass structured facts as `initialData` at dispatch instead of encoding them in the id, and prefer `useInitialData()` over id parsing in channel agents.
+- **`conversationKey` → dispatch `id`.** The old connector's `conversationKey(...)` becomes your own destination-to-id function; pass its result as the dispatch request's `id`. Pass structured facts as `initialData` at dispatch instead of encoding them in the id, and prefer `useInitialData()` over id parsing in channel agents.
 
 Hand-written channels build on the new `createChannelRouter(routes)` from `@amond-ai/agent` — see [Channels](/docs/guide/channels/).
 
@@ -338,7 +338,7 @@ amond run src/agents/support.ts --message "Handle ticket 42." --id ticket-42
 5. **Tools.** Rename `run({ input })` to `run({ data })`; adopt `harness: true` where tools prompted sessions; consider `durable: true` for side-effect sequences.
 6. **Skills.** Delete import attributes; let `SKILL.md` imports package themselves; wrap other markdown with `defineSkill` where needed.
 7. **Workflows.** Replace each with the smallest fit: awaited `init()` handle, durable tool, or an application-owned orchestrator.
-8. **Channels and database.** Rename `conversationKey` to `instanceId`; own any external-database `PersistenceAdapter` in your project; move `db.ts` to the source root.
+8. **Channels and database.** Derive each channel's dispatch `id` in application code (replacing `conversationKey`); own any external-database `PersistenceAdapter` in your project; move `db.ts` to the source root.
 9. **Providers.** Replace `registerProvider()`/`registerApiProvider()` calls with Pi's `createProvider()` + `setProvider()` (add `@earendil-works/pi-ai` to your dependencies); replace the Cloudflare binding registration with `cloudflareBindingProvider()` from `@amond-ai/agent/cloudflare/workers-ai`; optionally narrow the shipped providers with `amond({ providers: [...] })` (name `'cloudflare'` to keep Workers AI).
 10. **Observability.** Migrate `run_*` handling to `agent_start`/`agent_end`/`submission_settled` and the `instanceId`/`submissionId` correlation fields.
 11. **Clients.** Move SDK and React usage to conversation-scoped clients and `useAmondAgent({ url | client })`.
