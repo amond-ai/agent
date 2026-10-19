@@ -1,2 +1,3 @@
 {"id":"flue-import-rename-20261017","type":"chore","status":"completed","phase":"implement","issue":"#20","created":"2026-10-17","section":"completed"}
 {"id":"cli-docs-blueprints-20261018","type":"feature","status":"completed","phase":"review","issue":"#20","created":"2026-10-18","section":"completed"}
+{"id":"blueprint-findings-20261020","type":"bugfix","status":"planned","phase":"spec","issue":"#37","created":"2026-10-20","section":"active"}

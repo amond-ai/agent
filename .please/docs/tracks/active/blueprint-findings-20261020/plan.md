@@ -1,0 +1,126 @@
+# Plan: fix the defects in the imported Flue blueprints
+
+> Track: blueprint-findings-20261020
+> Spec: [spec.md](./spec.md)
+
+## Overview
+
+- **Source**: /please:plan
+- **Track**: blueprint-findings-20261020
+- **Issue**: #37
+- **Created**: 2026-10-20
+- **Approach**: one task per blueprint, each fixing that blueprint's confirmed findings and bumping its version once where generated code changes. Then record every change from Flue `deee93b` and update the attribution.
+- **Plan Depth**: standard
+- **Planned At**: 87f8e91
+
+## Context
+
+### Problem
+
+[investigation.md](./investigation.md) Section 3 holds the verdict, evidence, check and fix for findings #1–#23 and N1. Tasks cite them by number. The checks run from `/tmp/bp-verify/<group>/`; investigation.md → Feedback Loop says how to rebuild one.
+
+### Constraints
+
+- **Version contract.** `validateBlueprintBody` (`packages/cli/src/lib/blueprint-index.ts:38`) enforces it, following upstream `blueprints/README.md` → Versions. A bump to 2:
+  - sets frontmatter `version: 2`;
+  - updates every `// amond-blueprint: …@1` marker example (none exist in `sandbox--cloudflare.md`);
+  - appends `### Version 2 — <implementation date>` to `## Upgrade Guide`, with prose and a fenced unified `diff` of the generated-file change. Template: `blueprints/sandbox--e2b.md`, Version 2.
+- **No bump for editorial changes**, such as comments and wording that don't change generated behavior: #16, #21 and #23.
+- **Fix only what the finding describes.** investigation.md Section 5 stays untouched.
+
+### Non-Goals
+
+The spec's Out of Scope applies.
+
+Considered and not built:
+- **A permanent sample type-check suite.** It needs 8 provider SDKs as dev dependencies. A second round of sample defects would change this call.
+- **Stdin piping for the islo `writeFile`.** It is unverified whether the islo CLI forwards stdin. Chunked appends assume nothing about the CLI. Documented stdin forwarding would change this call.
+
+### STOP Conditions
+
+- A finding's check passes before any edit.
+- A fix needs a change outside `blueprints/` and the attribution files.
+
+## Architecture Decision
+
+**Phases group whole blueprints, ordered by priority.** Each blueprint gets one bump, covering all its fixes. Splitting a blueprint across phases would ship a v2 and then a v3 of code nobody has generated yet. Phase 1 has the P1 blueprints, Phase 2 the other generated-code changes, and Phase 3 the text fixes and the record, which has to see every change.
+
+**One change record in `blueprints/README.md`.** Upgrade Guide entries miss the unbumped Daytona and `sandbox.md` changes. A `PATCHES` file or a frontmatter field would add a format the index generator must ignore.
+
+**The footer points to the record.** `attributionFooter` (`apps/registry/src/build.ts`) is the same for every file, and a per-file list would drift from the README.
+
+## Tasks
+
+### Phase 1: Blueprints with a P1 finding
+
+- [ ] T001 Fix the exe.dev adapter and bump it to version 2 (file: blueprints/sandbox--exedev.md) [FR-1, FR-11, AC-001, AC-002, AC-003, AC-004, AC-021]
+  Validation: the checks for #1–#4 pass against the fixed text. A bad `cwd` gives a non-zero exit with no output, including for a multi-statement command or one ending in `# c`. A missing exit status or an exit signal rejects. A failed recursive `mkdir` rejects with its stderr. The snippets type-check under `strict`.
+  Method: `bash cd.sh`, `bun repro.ts`, `bun close.cjs` and `bunx tsc -p .` in `/tmp/bp-verify/exedev` after re-extracting; `bun --filter amond test`
+- [ ] T002 Fix the Cloudflare image tag and agent wiring, and bump it to version 2 (file: blueprints/sandbox--cloudflare.md) [FR-2, FR-11, AC-005, AC-021]
+  Validation: the Dockerfile tag matches the installed `@cloudflare/sandbox` version (#5). The agent example wires the sandbox as `packages/cli/docs/ecosystem/sandboxes/cloudflare.md:36-52` does, with no `../cloudflare-sandbox` and no claim that platform `env` is unreachable (#6).
+  Method: `bash /tmp/bp-verify/cloudflare/check1.sh` prints PASS; `grep -c "cloudflare-sandbox'"` prints 0 and `grep -c cloudflare:workers` prints at least 1; `bun --filter amond test`
+- [ ] T003 Fix the vitest-evals harness, port and starter eval, and bump it to version 2 (file: blueprints/tooling--vitest-evals.md) [FR-5, FR-11, AC-011, AC-012, AC-021]
+  Validation: the re-extracted harness and eval type-check under `strict` against the `vitest-evals` version the install step now pins (#12, N1). The default URL uses port 5173 (#13). An eval against an agent without usage metadata passes (#14).
+  Method: `bunx tsc -p .` and `bunx vitest run` in `/tmp/bp-verify/vitest-evals` with the pinned version; `grep -c 3583` prints 0; `bun --filter amond test`
+
+### Phase 2: Other blueprints whose generated code changes
+
+- [ ] T004 Cancel a Cloudflare Computer exec aborted while starting, and bump it to version 2 (file: blueprints/sandbox--cloudflare-computer.md) [FR-3, FR-11, AC-006, AC-021]
+  Validation: when the signal is already aborted as `settleExec` runs, the exec rejects with `AbortError` and the run is killed once and disposed (#7).
+  Method: `bun sim.ts` in `/tmp/bp-verify/cloudflare` after re-extracting; case B prints `rejected:AbortError killed= true`; `bun --filter amond test`
+- [ ] T005 Fix the Mirage install steps, `readdir` and `rm`, and bump it to version 2 (file: blueprints/sandbox--mirage.md) [FR-4, FR-11, AC-007, AC-008, AC-009, AC-010, AC-020, AC-021]
+  Validation: the install steps make the blueprint's own `tsc --noEmit` pass under pnpm (#8). `/data/sub/` lists as `sub` (#9). `rm` with `force` on a missing path resolves, and with `recursive` alone it rejects (#10). A failed file removal reports the `unlink` reason (#11).
+  Method: the pnpm `tsc` check, the `readdir` one-liner and `bun stub.ts` in `/tmp/bp-verify/mirage`; `bun --filter amond test`
+  STOP: with `mirage-node` installed, Mirage's shell `rm` rejects `-r`, `-f` or `--`, or its missing-path exit codes differ from coreutils.
+- [ ] T006 Bound the boxd readiness probe and retry it after a failure, and bump it to version 2 (file: blueprints/sandbox--boxd.md) [FR-6, FR-11, AC-013, AC-014, AC-021]
+  Validation: a probe that never answers fails the check within the budget plus one poll interval (#17). A later `createSandbox()` probes again after a failed check (#18).
+  Method: `bun extract.ts <fixed blueprint> && bun test boxd.test.ts` in `/tmp/bp-verify/daytona-boxd/sim`; `bun --filter amond test`
+- [ ] T007 Validate islo env names and chunk large writes, and bump it to version 2 (file: blueprints/sandbox--islo.md) [FR-7, FR-11, AC-015, AC-016, AC-021]
+  Validation: the key `X=1; echo hi; Y` rejects before spawning, and `FOO` still passes (#19). A 200 KB write passes no argument over the per-argument limit and decodes byte-identical (#20).
+  Method: `bash inj.sh` and the `e2big` harness in `/tmp/bp-verify/islo-modal`, with `/bin/echo` standing in for the islo CLI; `bun --filter amond test`
+- [ ] T008 Surface Modal's `stat` error and correct its comment, and bump it to version 2 (file: blueprints/sandbox--modal.md) [FR-8, FR-11, AC-017, AC-021]
+  Validation: `stat` on a missing path throws with "No such file or directory" (#22). The comments say one `stat -c` call serves GNU and BusyBox (#21).
+  Method: run the fixed command on a missing path; `grep -c "Fall back"` prints 0; `bun --filter amond test`
+
+### Phase 3: Text fixes, change record, attribution
+
+- [ ] T009 Align the Daytona create examples and the sandbox directive wording (file: blueprints/sandbox.md) [FR-9, FR-10]
+  Validation: both Daytona examples call `client.create()` (#16). `sandbox.md` says the directive prologue must contain `'use agent';` (#23). Neither version changes.
+  Method: `grep -n "client.create" blueprints/sandbox--daytona.md`; `bun /tmp/bp-verify/islo-modal/scan-check.ts` from `packages/agent-vite`; `bun --filter amond test`
+- [ ] T010 Record every change from Flue deee93b (file: blueprints/README.md) (depends on T001, T002, T003, T004, T005, T006, T007, T008, T009) [FR-12, AC-018, AC-019]
+  Validation: for each blueprint, the record lists every change other than #35's rename and left-out-package edits, with the finding it fixes and the version it shipped in. Every such hunk in a diff against `vendor/flue/blueprints/` has an entry. With every fix in place, the CLI index and the registry build accept all blueprints.
+  Method: diff each file against `vendor/flue/blueprints/` with the rename reverted, then check each remaining hunk against the record; `bun run lint`; `bun --filter amond test` and `bun --filter @amond-ai/registry test`
+- [ ] T011 Say in the registry attribution that amond corrected the blueprints (file: apps/registry/src/build.ts) [FR-13]
+  Validation: the footer still names the license, the notice and `deee93b`, and adds that amond corrected the file and lists its changes in the source repository's `blueprints/README.md`. `apps/registry/NOTICE`, the README's Attribution section and `ARCHITECTURE.md` agree.
+  Method: `bun --filter @amond-ai/registry test`; `bun run lint`
+- [ ] T012 Draft the upstream reports and the #37 outcomes (file: .please/docs/tracks/active/blueprint-findings-20261020/upstream-reports.md) (depends on T010) [FR-14, FR-15]
+  Validation: one report per changed blueprint, with the defect, a reproduction and the fix. An outcome table covers all 24 findings: fixed, with file and version; or declined, with the reason (#15 cites `sandbox-api.md:116,219`). Nothing is posted.
+  Method: the table rows match investigation.md Section 3's numbering one to one
+
+## Key Files
+
+- `blueprints/*.md` (the 10 files above): the fixes. `blueprints/README.md`: the record (T010).
+- `apps/registry/src/build.ts`, `apps/registry/src/build.test.ts`, `apps/registry/NOTICE`, `ARCHITECTURE.md`: the attribution (T011).
+- `packages/cli/src/lib/blueprint-index.ts`, `packages/cli/docs/reference/sandbox-api.md`: the version contract and the sandbox contract (read only).
+
+## Verification
+
+- [ ] Each task's `Method:` passes against the fixed text, with the output recorded in Progress.
+- [ ] `bun run lint`, `bun run build`, `bun run check` and `CI=true bun run test` pass; the CLI index and the registry build parse every blueprint (AC-018).
+- [ ] `bun --filter @amond-ai/registry build`, then `dist/exedev.md` ends with the new footer and its Upgrade Guide shows Version 2.
+
+## Review Focus
+
+- T001: an exe.dev `cwd` or `env` value with shell syntax, or a command ending in `&` or `# c`, never runs outside the `cd` guard.
+- T007: an islo env key or write chunk with shell syntax never runs as a command.
+- T005: a Mirage `rm` path starting with `-` is removed as a path, not read as a flag.
+- Mirage `rm` with `force` on a directory without `recursive` still fails, as `fs.rm` does (T005).
+
+## Progress
+
+## Decision Log
+
+- 2026-10-20: #15 (Daytona `exists()`) declined. The contract says `exists` never throws (`sandbox-api.md:116,219`).
+- 2026-10-20: vitest-evals pinned to the 0.13 line, not ported to 0.17 (spec Out of Scope).
+
+## Surprises & Discoveries
