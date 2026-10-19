@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 1,
+  "version": 2,
   "website": "https://developers.cloudflare.com/sandbox",
   "aliases": ["@cloudflare/sandbox"]
 }
@@ -116,40 +116,41 @@ The short version, for your reference:
    `@cloudflare/sandbox` version:
 
    ```dockerfile
-   FROM docker.io/cloudflare/sandbox:0.9.2
+   FROM docker.io/cloudflare/sandbox:0.11.0
    ```
 
-   (Replace `0.9.2` with whatever version was actually installed in step
+   (Replace `0.11.0` with whatever version was actually installed in step
    1 — Cloudflare publishes the base image with the same version tag as
    the npm package.)
 
 5. Use it in an agent. The binding name from `wrangler.jsonc` (`Sandbox`
-   above) is the key on `env`. `cloudflareSandbox(getSandbox(env.Sandbox, id))`
-   needs this Worker's `env` bindings and the agent's instance id, both of
-   which are only available where your application already has request/DO
-   scope — there's no stable hook-level API for reaching platform env from
-   inside the agent body yet (that's a pending design question). Build the
-   `SandboxFactory` value there and pass it in:
+   above) is the key on the Worker `env`, which you import from
+   `cloudflare:workers`. The agent function receives its instance id as
+   `{ id }: AgentProps`; pass both to `getSandbox` and wrap the result with
+   `cloudflareSandbox`:
 
    ```ts
    'use agent';
-   import { useModel, useSandbox } from '@amond-ai/agent';
-   import { cloudflareSandboxFactory } from '../cloudflare-sandbox'; // your own module — see note above
+   import { env } from 'cloudflare:workers';
+   import { type AgentProps, useModel, useSandbox } from '@amond-ai/agent';
+   import { cloudflareSandbox } from '@amond-ai/agent/cloudflare';
+   import { getSandbox } from '@cloudflare/sandbox';
 
-   export function Assistant() {
+   interface Env {
+     Sandbox: DurableObjectNamespace;
+   }
+
+   export function Assistant({ id }: AgentProps) {
      useModel('anthropic/claude-opus-4-7');
-     useSandbox(cloudflareSandboxFactory);
+     const { Sandbox } = env as unknown as Env;
+     useSandbox(cloudflareSandbox(getSandbox(Sandbox, id)));
      return 'You are a helpful assistant with a full sandbox.';
    }
    ```
 
-   `cloudflareSandboxFactory` above stands in for whatever `SandboxFactory`
-   value your application constructs from
-   `cloudflareSandbox(getSandbox(env.Sandbox, id))` wherever it has access to
-   those bindings. The wrapper itself is provided by
-   `@amond-ai/agent/cloudflare`, so no project-owned adapter file is needed.
-   The `'use agent'` directive is what registers the agent; mount its
-   router in `app.ts`
+   The wrapper is provided by `@amond-ai/agent/cloudflare`, so no
+   project-owned adapter file is needed. The `'use agent'` directive is
+   what registers the agent; mount its router in `app.ts`
    (`app.route('/agents/<name>', createAgentRouter(Assistant))`, with
    `createAgentRouter` from `@amond-ai/agent/routing`) if it needs an HTTP
    endpoint.
@@ -258,3 +259,35 @@ When updating an existing integration, inspect and compare it against this compl
 ### Version 1 — 2026-06-14
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Pin the `Dockerfile` base image to the `@cloudflare/sandbox` version the install step installs (`0.11.0`, not `0.9.2`). Wire the agent from the Worker `env` and the agent id, as the deploy guide does, instead of importing a project-owned `cloudflareSandboxFactory` module that no step creates. Delete that import from the agent file.
+
+```diff
+--- a/Dockerfile
++++ b/Dockerfile
+-FROM docker.io/cloudflare/sandbox:0.9.2
++FROM docker.io/cloudflare/sandbox:0.11.0
+--- a/src/agents/assistant.ts
++++ b/src/agents/assistant.ts
+ 'use agent';
++import { env } from 'cloudflare:workers';
+-import { useModel, useSandbox } from '@amond-ai/agent';
++import { type AgentProps, useModel, useSandbox } from '@amond-ai/agent';
++import { cloudflareSandbox } from '@amond-ai/agent/cloudflare';
++import { getSandbox } from '@cloudflare/sandbox';
++
++interface Env {
++  Sandbox: DurableObjectNamespace;
++}
+ 
+-export function Assistant() {
++export function Assistant({ id }: AgentProps) {
+   useModel('anthropic/claude-opus-4-7');
+-  useSandbox(cloudflareSandboxFactory);
++  const { Sandbox } = env as unknown as Env;
++  useSandbox(cloudflareSandbox(getSandbox(Sandbox, id)));
+   return 'You are a helpful assistant with a full sandbox.';
+ }
+```
