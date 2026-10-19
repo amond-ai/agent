@@ -2,6 +2,11 @@
 bun = "1.4.3"
 node = "24"
 
+# Keeps mise.lock up to date whenever mise installs or upgrades a tool, on every
+# machine, not only where the global config turns lockfiles on.
+[settings]
+lockfile = true
+
 [tasks.setup]
 description = "Initialize project (dependencies + git hooks)"
 run = "bun install"
