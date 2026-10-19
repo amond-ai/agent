@@ -23,7 +23,7 @@ When invoked by a coding agent (detected from environment markers) or with `--pr
 | Argument      | Description                                                                                                                                                                                                                                                                           |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `<kind>`      | The integration category: `channel`, `database`, `sandbox`, or `tooling`.                                                                                                                                                                                                             |
-| `<name\|url>` | A blueprint name (`slack`, `postgres`, `daytona`, `sentry`, …; run `amond add` with no arguments for the catalog), or an absolute URL to provider documentation, which selects the kind's generic build-from-scratch guide with the URL as the coding agent's research starting point. |
+| `<name\|url>` | A blueprint name (`daytona`, `e2b`, `braintrust`, `vitest-evals`, …; run `amond add` with no arguments for the catalog), or an absolute URL to provider documentation, which selects the kind's generic build-from-scratch guide with the URL as the coding agent's research starting point. |
 
 ## Options
 
