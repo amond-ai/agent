@@ -53,13 +53,13 @@ Considered and not built:
 
 ### Phase 1: Blueprints with a P1 finding
 
-- [ ] T001 Fix the exe.dev adapter and bump it to version 2 (file: blueprints/sandbox--exedev.md) [FR-1, FR-11, AC-001, AC-002, AC-003, AC-004, AC-021]
+- [x] T001 Fix the exe.dev adapter and bump it to version 2 (file: blueprints/sandbox--exedev.md) [FR-1, FR-11, AC-001, AC-002, AC-003, AC-004, AC-021]
   Validation: the checks for #1–#4 pass against the fixed text. A bad `cwd` gives a non-zero exit with no output, including for a multi-statement command or one ending in `# c`. A missing exit status or an exit signal rejects. A failed recursive `mkdir` rejects with its stderr. The snippets type-check under `strict`.
   Method: `bash cd.sh`, `bun repro.ts`, `bun close.cjs` and `bunx tsc -p .` in `/tmp/bp-verify/exedev` after re-extracting; `bun --filter amond test`
-- [ ] T002 Fix the Cloudflare image tag and agent wiring, and bump it to version 2 (file: blueprints/sandbox--cloudflare.md) [FR-2, FR-11, AC-005, AC-021]
+- [x] T002 Fix the Cloudflare image tag and agent wiring, and bump it to version 2 (file: blueprints/sandbox--cloudflare.md) [FR-2, FR-11, AC-005, AC-021]
   Validation: the Dockerfile tag matches the installed `@cloudflare/sandbox` version (#5). The agent example wires the sandbox as `packages/cli/docs/ecosystem/sandboxes/cloudflare.md:36-52` does, with no `../cloudflare-sandbox` and no claim that platform `env` is unreachable (#6).
   Method: `bash /tmp/bp-verify/cloudflare/check1.sh` prints PASS; `grep -c "cloudflare-sandbox'"` prints 0 and `grep -c cloudflare:workers` prints at least 1; `bun --filter amond test`
-- [ ] T003 Fix the vitest-evals harness, port and starter eval, and bump it to version 2 (file: blueprints/tooling--vitest-evals.md) [FR-5, FR-11, AC-011, AC-012, AC-021]
+- [x] T003 Fix the vitest-evals harness, port and starter eval, and bump it to version 2 (file: blueprints/tooling--vitest-evals.md) [FR-5, FR-11, AC-011, AC-012, AC-021]
   Validation: the re-extracted harness and eval type-check under `strict` against the `vitest-evals` version the install step now pins (#12, N1). The default URL uses port 5173 (#13). An eval against an agent without usage metadata passes (#14).
   Method: `bunx tsc -p .` and `bunx vitest run` in `/tmp/bp-verify/vitest-evals` with the pinned version; `grep -c 3583` prints 0; `bun --filter amond test`
 
@@ -118,9 +118,20 @@ Considered and not built:
 
 ## Progress
 
+- [x] (2026-10-20 04:12 KST) T001 Fix the exe.dev adapter and bump it to version 2 (SHA: `d8286023`)
+  Evidence: `bun repro.ts` (v2 extract) → F1 bad cwd+env exit 1 with empty stdout; F1b multi-statement and F1c `# c` exit 1 with empty stdout; F1d good cwd exit 4; F2 recursive mkdir rejects with the stderr; F3 no exit status rejects. `bunx tsc -p . | grep -c ^src/` → 0 (was 3× TS2322). `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 11 passed.
+  Deferred: a signal-killed command is covered by the `typeof code !== 'number'` branch plus `close.cjs` showing ssh2 delivers `close(null, signal)`; the fake server maps signals to exit 255, so no end-to-end signal run.
+- [x] (2026-10-20 04:12 KST) T002 Fix the Cloudflare image tag and agent wiring, and bump it to version 2 (SHA: `bc2bd571`, `e6012dfc`)
+  Evidence: `bash /tmp/bp-verify/cloudflare/check1.sh` → install=0.11.0 tag=0.11.0, PASS; body-scoped `grep -c "cloudflare-sandbox'"` → 0; `grep -c cloudflare:workers` → 3; `bun --filter amond test` → 61 passed.
+- [x] (2026-10-20 04:12 KST) T003 Fix the vitest-evals harness, port and starter eval, and bump it to version 2 (SHA: `53b0e289`)
+  Evidence: `bunx tsc -p .` against vitest-evals 0.13.1 → exit 0 (was 6× TS2339); `bunx vitest run` → probe2 (no usage, v2 guard) and nocost (usage without cost) pass, the v1 probe still fails as the before-case; body-scoped `grep -c 3583` → 0; `bun --filter amond test` → 61 passed.
+
 ## Decision Log
 
 - 2026-10-20: #15 (Daytona `exists()`) declined. The contract says `exists` never throws (`sandbox-api.md:116,219`).
 - 2026-10-20: vitest-evals pinned to the 0.13 line, not ported to 0.17 (spec Out of Scope).
+- 2026-10-20: The T002 and T003 `grep` checks cover only the body above `## Upgrade Guide`. The Version 2 diff must keep each removed line, the `../cloudflare-sandbox` import and the `3583` default, so it applies mechanically (upstream `blueprints/README.md` → Versions).
 
 ## Surprises & Discoveries
+
+- Worktree executors are cut from `main`, not the track branch, and can't write the main-tree progress sink. Their commits are cherry-picked and their Progress entries written by the lead. A fresh worktree also needs `bun install` and `bunx turbo run build --filter=amond` before `bun --filter amond test`.
