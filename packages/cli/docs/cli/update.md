@@ -14,7 +14,7 @@ amond update <kind> <name|url> [--print]
 
 `amond update` fetches the Markdown implementation guide for a blueprint, for piping to a coding agent that will bring an existing integration up to the current blueprint version. The command does not inspect or modify your project — the guide carries the update instructions, including how to compare the existing integration against the current blueprint and preserve customizations.
 
-[`amond add`](/docs/cli/add/) emits the same guide; the two commands differ only in intent and argument handling (`amond update` requires both arguments, while `amond add` alone lists the catalog). Output behavior matches `amond add`: the guide prints to stdout for coding agents or with `--print`.
+[`amond add`](/docs/cli/add/) emits the same guide; the two commands differ only in intent and argument handling (`amond update` requires both arguments, while `amond add` alone lists the catalog). Output behavior matches `amond add`: the guide prints to stdout for coding agents or with `--print`. Like `amond add`, it fetches from `https://blueprints.amond.ai` unless `AMOND_REGISTRY_URL` names another registry.
 
 ## Arguments
 

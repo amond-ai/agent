@@ -97,6 +97,8 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 
 ## Progress
 
+- [x] (2026-10-19 12:00 KST) T005 Default amond add and update to the registry site
+  Evidence: `CI=true bun --filter amond test` → 4 files, 55 tests passed (22 new in blueprints.test.ts, local node:http registry + unreachable + blackhole + default-URL unit tests); `bunx tsc --noEmit -p packages/cli` clean; `bun run lint` 10/10 tasks successful
 - [x] (2026-10-19 11:00 KST) T003 Import the renamed blueprint snapshot into blueprints/
   Evidence: `bun packages/cli/scripts/generate-blueprint-index.ts` → "(12 blueprints, 4 kind roots)"; `bun --filter amond test -- docs-content` → 14 tests passed; `bunx tsc --noEmit -p packages/cli` clean (`bun check` half skipped: pre-existing E2BIG recursion)
 - [x] (2026-10-19 10:30 KST) T002 Serve the bundled pages through amond docs
@@ -124,5 +126,12 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 - Decision: code samples in `blueprints/**/*.md` are ignored by ESLint, as for the docs pages.
   Rationale: the samples are templates for a coding agent, not compiled project code.
   Date/Author: 2026-10-19 / luna-implementer
+
+- Decision: `amond add channel slack` needed no special handling. `slack` is not an absolute URL, so it is looked up among channel blueprints; none are bundled, so it reports "not found" and lists `(none)` plus the `amond add channel <url>` hint.
+  Rationale: this already matches AC-009 and keeps one rule (absolute URL means kind root, anything else is a name).
+  Date/Author: 2026-10-19 / implement-executor
+- Decision: kept the `NO_BLUEPRINTS_MESSAGE` guard and exported `registryUrlFor`/`DEFAULT_REGISTRY_URL` for a network-free default-URL test.
+  Rationale: the guard still protects an install whose generated index is empty; the export is the smallest way to assert the default.
+  Date/Author: 2026-10-19 / implement-executor
 
 ## Surprises & Discoveries

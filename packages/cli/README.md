@@ -1,7 +1,7 @@
 # amond
 
 The command-line interface for amond agent projects: scaffold a project and run an agent locally.
-Blueprint and documentation commands exist but are not usable yet. See [Commands](#commands).
+Blueprint guides and documentation pages are available through `amond add`, `amond update`, and `amond docs`.
 
 ```sh
 npm install --save-dev amond
@@ -19,8 +19,10 @@ npm install --save-dev amond
 | `amond docs read <page>`             | Print one documentation page.                               |
 | `amond docs search <query>`          | Search the documentation.                                   |
 
-`amond add` and `amond update` currently exit with an error. This version bundles no blueprints.
-A later release adds that content.
+`amond docs` reads the pages bundled in the package. `amond add` and `amond update` fetch blueprint text
+from `https://blueprints.amond.ai`. Set `AMOND_REGISTRY_URL` to fetch from another registry instead, for
+example `AMOND_REGISTRY_URL=http://127.0.0.1:8787 amond add sandbox daytona --print`. Trailing slashes are
+ignored, and the registry must serve `<slug>.md` files.
 
 ```sh
 amond init ./my-agent-app
