@@ -14,25 +14,15 @@ export interface DocsPage {
 }
 
 /**
- * Locate the documentation markdown tree.
+ * Locate the documentation markdown tree: `<package root>/docs`.
  *
- * For users of the published package this is always `<package root>/docs`,
- * placed there by `scripts/prepare-publish.mjs` at release time.
- *
- * The `apps/docs` candidate exists only for development inside the amond
- * monorepo itself and can never resolve in a user's `node_modules`. It is
- * checked first because in a repo checkout the docs site content is the
- * source of truth, and a stale `<package root>/docs` snapshot left behind by
- * a local release (gitignored, only refreshed at the next release) must not
- * shadow it.
+ * The pages are committed in the package and published through its `files`
+ * list, so the same tree serves a repo checkout and an installed package.
+ * Returns `undefined` only when that directory is missing — a broken install.
  */
 export function resolveDocsRoot(): string | undefined {
-  const packageRoot = cliPackageRoot()
-  const candidates = [
-    path.join(packageRoot, '../../apps/docs/src/content/docs'),
-    path.join(packageRoot, 'docs'),
-  ]
-  return candidates.find(candidate => fs.existsSync(candidate))
+  const root = path.join(cliPackageRoot(), 'docs')
+  return fs.existsSync(root) ? root : undefined
 }
 
 function parseDocsFrontmatter(source: string): {
@@ -139,18 +129,25 @@ export function buildDocsExcerpt(content: string, terms: string[]): string {
   return `${prefix}${content.slice(start, end).trim()}${suffix}`
 }
 
-/** Accepts `guide/sandboxes`, `/docs/guide/sandboxes/`, full website URLs, and `.md`/`.mdx` paths. */
+/**
+ * Accepts `guide/sandboxes`, `/docs/guide/sandboxes/`, links with a `#fragment`
+ * or `?query`, full website URLs (anything from the first `/docs/` segment),
+ * and `.md`/`.mdx` paths.
+ */
 export function normalizeDocsPath(input: string): string {
   let value = input.trim()
   if (/^https?:\/\//.test(value)) {
     try {
-      value = new URL(value).pathname
+      const pathname = new URL(value).pathname
+      const docsIndex = pathname.indexOf('/docs/')
+      value = docsIndex === -1 ? pathname : pathname.slice(docsIndex)
     }
     catch {
       // fall through with the raw value
     }
   }
   return value
+    .replace(/[?#].*$/, '')
     .replace(/^\.?\/+/, '')
     .replace(/^docs\//, '')
     .replace(/\/+$/, '')

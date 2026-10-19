@@ -19,8 +19,8 @@ npm install --save-dev amond
 | `amond docs read <page>`             | Print one documentation page.                               |
 | `amond docs search <query>`          | Search the documentation.                                   |
 
-`amond docs`, `amond add`, and `amond update` currently exit with an error. This version bundles
-no documentation and no blueprints. A later release adds that content.
+`amond add` and `amond update` currently exit with an error. This version bundles no blueprints.
+A later release adds that content.
 
 ```sh
 amond init ./my-agent-app

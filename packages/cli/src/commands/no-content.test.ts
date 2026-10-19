@@ -17,11 +17,6 @@ function runAmond(args: string[], env: Record<string, string> = {}) {
 }
 
 describe('commands that need bundled content', () => {
-  const docsCases = [
-    ['docs'],
-    ['docs', 'read', 'guide/tools'],
-    ['docs', 'search', 'tools'],
-  ]
   const blueprintCases = [
     ['add'],
     ['add', 'channel', 'slack'],
@@ -30,12 +25,6 @@ describe('commands that need bundled content', () => {
     ['update', 'channel', 'slack'],
     ['update', 'channel', 'slack', '--print'],
   ]
-
-  it.each(docsCases)('amond %s... reports that no docs are bundled', (...args) => {
-    const result = runAmond(args)
-    expect(result.status).not.toBe(0)
-    expect(result.stderr).toContain('No documentation is bundled with this version of amond.')
-  })
 
   describe.each([
     ['no registry override', {}],

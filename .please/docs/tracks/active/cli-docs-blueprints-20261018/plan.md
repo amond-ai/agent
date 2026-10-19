@@ -54,7 +54,7 @@ The code behind `amond docs`, `add` and `update` came over from Flue v2.3.0, but
 
 ### Phase 1: Docs in `amond docs`
 
-- [ ] T001 Import the renamed docs snapshot into packages/cli/docs (file: packages/cli/docs/guide/tools.md) [FR-2, FR-5, FR-6, FR-7, FR-8, AC-010]
+- [x] T001 Import the renamed docs snapshot into packages/cli/docs (file: packages/cli/docs/guide/tools.md) [FR-2, FR-5, FR-6, FR-7, FR-8, AC-010]
   Validation: `packages/cli/docs` holds the spec's page set from `deee93b` as plain Markdown, with the pages that mention left-out packages edited; the new content test passes (brand search clean except attribution, no MDX syntax, every `/docs/<path>/` link resolves); `packages/cli/NOTICE` and `tech-stack.md` credit Flue and record `deee93b`.
   Method: `bun --filter amond test -- docs-content`
 - [ ] T002 Serve the bundled pages through amond docs (file: packages/cli/src/lib/docs-pages.ts) (depends on T001) [FR-1, FR-9, NFR-1, AC-001, AC-002, AC-003, AC-011]
@@ -97,6 +97,8 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 
 ## Progress
 
+- [x] (2026-10-19 10:30 KST) T002 Serve the bundled pages through amond docs
+  Evidence: `bun --filter amond test` → 4 files, 39 tests passed; `bun pm pack --dry-run` in packages/cli → 75 files, 68 under docs/
 - [x] (2026-10-19 10:00 KST) T001 Import the renamed docs snapshot into packages/cli/docs
   Evidence: `bun --filter amond test -- docs-content` → 8 tests passed; page count 68, no `.mdx`; brand grep over packages/cli/docs → no matches
 
