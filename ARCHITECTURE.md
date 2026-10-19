@@ -267,8 +267,8 @@ repository through `git subtree` into `packages/`, and upstream changes are port
 Flue. `agent-core`, `agent-durable`, and `agent-durable-cloudflare` are removed in #18.
 
 **Users see amond names only.** The imported packages' brand surfaces are renamed in source: `amond`, `amond.config.ts`, `AMOND_*`, `virtual:amond/*`, `Amond<Name>Agent`. No
-publish-time rewrite exists. Flue's name appears only in `NOTICE` and in each imported package's
-README.
+publish-time rewrite exists. Flue's name appears only in `NOTICE`, in each imported package's
+README, and in the attribution footer the registry build appends to every served blueprint.
 
 ## API boundaries
 

@@ -20,8 +20,9 @@ const noticeSource = fileURLToPath(new URL('../NOTICE', import.meta.url))
 
 /**
  * Apache-2.0 §4(a) and §4(b): each served copy of a derived blueprint names its license and says
- * it was modified. An HTML comment keeps that out of the guide a coding agent follows. It names
- * the license and notice by file name, not URL, so it holds for any registry, not only the default.
+ * it was modified. As an HTML comment it doesn't render in Markdown; `amond add` passes it to a
+ * coding agent as raw text, after the steps. It names the license and notice by file name, not
+ * URL, so it holds for any registry, not only the default.
  */
 export function attributionFooter(file: string): string {
   return [
