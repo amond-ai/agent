@@ -274,6 +274,7 @@ Pin the `Dockerfile` base image to the `@cloudflare/sandbox` version the install
  'use agent';
 +import { env } from 'cloudflare:workers';
 -import { useModel, useSandbox } from '@amond-ai/agent';
+-import { cloudflareSandboxFactory } from '../cloudflare-sandbox';
 +import { type AgentProps, useModel, useSandbox } from '@amond-ai/agent';
 +import { cloudflareSandbox } from '@amond-ai/agent/cloudflare';
 +import { getSandbox } from '@cloudflare/sandbox';
