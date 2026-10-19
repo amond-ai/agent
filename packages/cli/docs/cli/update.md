@@ -32,8 +32,8 @@ amond update <kind> <name|url> [--print]
 ## Examples
 
 ```bash
-amond update channel slack --print | claude
-amond update database mysql --print | codex
+amond update sandbox daytona --print | claude
+amond update tooling braintrust --print | codex
 amond update sandbox @cloudflare/computer --print | opencode
 amond update channel https://developers.notion.com/reference/webhooks --print | claude
 ```

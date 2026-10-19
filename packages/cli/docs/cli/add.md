@@ -37,12 +37,12 @@ When invoked by a coding agent (detected from environment markers) or with `--pr
 # List every available blueprint
 amond add
 
-# Add a Slack channel with Claude Code
-amond add channel slack --print | claude
+# Add the Daytona sandbox with Claude Code
+amond add sandbox daytona --print | claude
 
 # Build a channel from scratch, starting the agent from a provider docs URL
 amond add channel https://developers.notion.com/reference/webhooks --print | codex
 
-# Add a Postgres persistence adapter
-amond add database postgres --print | claude
+# Build a database adapter from scratch, starting from a provider docs URL
+amond add database https://node-postgres.com/ --print | claude
 ```
