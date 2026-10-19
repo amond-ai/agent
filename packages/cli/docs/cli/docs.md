@@ -46,7 +46,7 @@ Pass a result's `path` to `amond docs read`.
 ## Examples
 
 ```bash
-# List every page with its path, title, and description
+# List every page with its path and title (and a description outside ecosystem/)
 amond docs
 
 # Print one page as markdown
