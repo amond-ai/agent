@@ -1,5 +1,5 @@
 ---
-{ "kind": "tooling", "version": 1, "website": "https://vitest-evals.sentry.dev" }
+{ "kind": "tooling", "version": 2, "website": "https://vitest-evals.sentry.dev" }
 ---
 
 # Add vitest-evals to amond
@@ -16,7 +16,7 @@ The primary agent used below must already be mounted on an HTTP route by the app
 
 ## Install dependencies
 
-Install `@amond-ai/agent-sdk`, `vitest`, and `vitest-evals` as development dependencies using the project's package manager. Preserve existing version and workspace conventions. Do not install a runtime-specific `@vitest-evals/harness-*` package: the custom harness below evaluates the deployed amond application rather than amond's underlying model runtime.
+Install `@amond-ai/agent-sdk`, `vitest`, and `vitest-evals@^0.13.1` as development dependencies using the project's package manager. Preserve existing version and workspace conventions. The harness targets the `vitest-evals` 0.13 API; 0.14 and later drop `SimpleToolCallRecord`, so keep the version pinned. Do not install a runtime-specific `@vitest-evals/harness-*` package: the custom harness below evaluates the deployed amond application rather than amond's underlying model runtime.
 
 ## Create the eval configuration
 
@@ -54,9 +54,24 @@ Ensure the project's TypeScript configuration includes `src/evals/**/*.ts` and `
 Create `src/evals/harness.ts`:
 
 ```ts title="src/evals/harness.ts"
-// amond-blueprint: tooling/vitest-evals@1
+// amond-blueprint: tooling/vitest-evals@2
 import { createAmondClient, type AmondConversationMessage } from '@amond-ai/agent-sdk';
 import { createHarness, type SimpleToolCallRecord } from 'vitest-evals';
+
+// The runtime attaches no usage or model metadata itself: `reply.metadata` is
+// `Record<string, unknown>`, so these shapes are the app convention an agent's
+// response hooks follow when they attach usage.
+interface ReplyUsage {
+  input: number;
+  output: number;
+  totalTokens: number;
+  cost?: { total: number };
+}
+
+interface ReplyModel {
+  provider: string;
+  id: string;
+}
 
 export interface AmondAgentHarnessOptions {
   /**
@@ -126,8 +141,8 @@ export function createAmondAgentHarness(options: AmondAgentHarnessOptions) {
       await conversation.wait(admission, { signal });
       const history = await conversation.history({ signal });
       const reply = lastAssistantMessage(history.messages);
-      const usage = reply?.metadata?.usage;
-      const model = reply?.metadata?.model;
+      const usage = reply?.metadata?.usage as ReplyUsage | undefined;
+      const model = reply?.metadata?.model as ReplyModel | undefined;
 
       return {
         output: messageText(reply),
@@ -143,7 +158,7 @@ export function createAmondAgentHarness(options: AmondAgentHarnessOptions) {
                       inputTokens: usage.input,
                       outputTokens: usage.output,
                       totalTokens: usage.totalTokens,
-                      metadata: { cost: usage.cost.total },
+                      ...(usage.cost ? { metadata: { cost: usage.cost.total } } : {}),
                     }
                   : {}),
               },
@@ -157,7 +172,7 @@ export function createAmondAgentHarness(options: AmondAgentHarnessOptions) {
 
 Agent prompts are fire-and-forget: `send()` admits the prompt and `wait()` only awaits completion, so the following `history()` snapshot — read after `wait()` resolves — contains the completed messages and tool activity for that fresh conversation. The `agentUrl` is the agent's mount URL, taken from where the application's `app.ts` mounts the agent's router (`createAgentRouter(...)`) — derive it from the route map, not from the agent's name. The harness opens a new conversation for every `run(...)` by appending a fresh id to that mount URL; reuse a conversation id only inside an application-specific harness for a case that intentionally evaluates conversation memory.
 
-Do not remove the abort signal or derive tool calls from runtime-internal events. Preserve output, token usage, cost, and tool activity unless project-specific data policy requires omitting them.
+Do not remove the abort signal or derive tool calls from runtime-internal events. Preserve output, tool activity, and any token usage, model, and cost the agent attaches unless project-specific data policy requires omitting them.
 
 ## Add a starter eval
 
@@ -171,7 +186,7 @@ import { createAmondAgentHarness } from './harness.ts';
 // The conversation URL base: where app.ts mounts the agent. Point
 // AMOND_AGENT_URL at a deployed application to evaluate it instead.
 const harness = createAmondAgentHarness({
-  agentUrl: process.env.AMOND_AGENT_URL ?? 'http://127.0.0.1:3583/agents/service-status',
+  agentUrl: process.env.AMOND_AGENT_URL ?? 'http://127.0.0.1:5173/agents/service-status',
 });
 
 describeEval('amond service status agent', { harness }, (it) => {
@@ -180,7 +195,11 @@ describeEval('amond service status agent', { harness }, (it) => {
 
     expect(result.output).toContain('operational');
     expect(toolCalls(result).map((call) => call.name)).toContain('get_service_status');
-    expect(result.usage.totalTokens).toBeGreaterThan(0);
+    // Usage appears only when the agent attaches it (a response hook that
+    // returns `metadata.usage`); `usage` is `{}` otherwise, so check the field.
+    if (result.usage.totalTokens !== undefined) {
+      expect(result.usage.totalTokens).toBeGreaterThan(0);
+    }
   });
 });
 ```
@@ -220,7 +239,7 @@ Use the project's package-manager equivalents. Provider credentials belong to th
 1. Type-check the project and run its existing lint checks.
 2. Build the project with `vite build` and confirm the selected agent module is discovered.
 3. Start the application with provider credentials and run the starter eval.
-4. Confirm the report includes output, usage, and the expected tool calls.
+4. Confirm the report includes output and the expected tool calls, plus usage when the agent attaches usage metadata.
 5. Intentionally break one assertion and confirm the eval command exits non-zero, then restore it.
 6. Run against `AMOND_AGENT_URL` when deployed-target evaluation is required.
 7. If the target is protected, confirm the eval succeeds only with the intended authentication.
@@ -233,3 +252,47 @@ When updating an existing integration, inspect and compare it against this compl
 ### Version 1 — 2026-06-18
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Fix the harness under `strict` TypeScript, the default agent URL, and the starter eval. Pin `vitest-evals@^0.13.1`, because 0.14 and later drop `SimpleToolCallRecord`. Type the reply's usage and model metadata locally and make `cost` optional. Point the default URL at the dev server port 5173. Assert on `usage.totalTokens` only when the agent attaches usage.
+
+```diff
+--- a/src/evals/harness.ts
++++ b/src/evals/harness.ts
+-// amond-blueprint: tooling/vitest-evals@1
++// amond-blueprint: tooling/vitest-evals@2
+ import { createAmondClient, type AmondConversationMessage } from '@amond-ai/agent-sdk';
+@@
++interface ReplyUsage {
++  input: number;
++  output: number;
++  totalTokens: number;
++  cost?: { total: number };
++}
++
++interface ReplyModel {
++  provider: string;
++  id: string;
++}
++
+ export interface AmondAgentHarnessOptions {
+@@
+-      const usage = reply?.metadata?.usage;
+-      const model = reply?.metadata?.model;
++      const usage = reply?.metadata?.usage as ReplyUsage | undefined;
++      const model = reply?.metadata?.model as ReplyModel | undefined;
+@@
+-                      metadata: { cost: usage.cost.total },
++                      ...(usage.cost ? { metadata: { cost: usage.cost.total } } : {}),
+--- a/src/evals/service-health.eval.ts
++++ b/src/evals/service-health.eval.ts
+@@
+-  agentUrl: process.env.AMOND_AGENT_URL ?? 'http://127.0.0.1:3583/agents/service-status',
++  agentUrl: process.env.AMOND_AGENT_URL ?? 'http://127.0.0.1:5173/agents/service-status',
+@@
+-    expect(result.usage.totalTokens).toBeGreaterThan(0);
++    if (result.usage.totalTokens !== undefined) {
++      expect(result.usage.totalTokens).toBeGreaterThan(0);
++    }
+```
