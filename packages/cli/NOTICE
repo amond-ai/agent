@@ -6,3 +6,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE for the full text.
 This product includes software derived from Flue (https://github.com/withastro/flue),
 which is licensed under the Apache License, Version 2.0. The Flue repository's LICENSE file
 is the unfilled Apache template and names no copyright holder, so this notice reproduces none.
+
+The documentation pages in `docs/` are derived from Flue's documentation at commit `deee93b` (v2.3.0),
+which is licensed under the Apache License, Version 2.0. They were renamed to amond and edited
+to drop pages for packages this repository does not ship.
