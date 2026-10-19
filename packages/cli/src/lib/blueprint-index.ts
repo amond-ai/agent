@@ -176,3 +176,106 @@ export function parseBlueprintFrontmatter(source: string, file: string): Bluepri
   }
   return { kind: data.kind, version, website: data.website, aliases }
 }
+
+/** The body of a blueprint source, without its JSON frontmatter block or the blank lines after it. */
+export function stripBlueprintFrontmatter(source: string, file: string): string {
+  const normalized = normalizeLineEndings(source)
+  // Parsing first keeps the offsets honest: a source with no valid frontmatter throws here.
+  parseBlueprintFrontmatter(normalized, file)
+  const end = normalized.indexOf('\n---\n', 4)
+  return normalized.slice(end + '\n---\n'.length).replace(/^\n+/, '')
+}
+
+export interface BlueprintSourceFile {
+  file: string
+  source: string
+}
+
+export interface BlueprintIndex {
+  blueprints: BlueprintRecord[]
+  kindRoots: KindRootRecord[]
+}
+
+/**
+ * Validates every `<kind>.md` / `<kind>--<name>.md` source and derives the slugs the CLI and the
+ * registry site share. Throws on the first invalid file or name collision. `files` must not
+ * contain `README.md`.
+ */
+export function buildBlueprintIndex(files: readonly BlueprintSourceFile[]): BlueprintIndex {
+  const blueprints: BlueprintRecord[] = []
+  const kindRoots: KindRootRecord[] = []
+  const seenNames = new Map<string, string>()
+
+  for (const { file, source } of files) {
+    const stem = file.slice(0, -'.md'.length)
+    const dashIndex = stem.indexOf('--')
+    const frontmatter = parseBlueprintFrontmatter(source, file)
+    validateBlueprintBody(source, file, frontmatter.version)
+
+    if (dashIndex >= 0) {
+      if (frontmatter.root) {
+        throw new Error(
+          `[blueprints] ${file}: filename uses '--' separator but frontmatter has "root": true. Kind roots use the bare filename "<kind>.md".`,
+        )
+      }
+      const kind = stem.slice(0, dashIndex)
+      const slug = stem.slice(dashIndex + 2)
+      if (kind !== frontmatter.kind) {
+        throw new Error(
+          `[blueprints] ${file}: filename kind "${kind}" does not match frontmatter kind "${frontmatter.kind}".`,
+        )
+      }
+      const normalizedSlug = slug.toLowerCase()
+      if (seenNames.has(normalizedSlug)) {
+        throw new Error(
+          `[blueprints] name collision: both "${seenNames.get(normalizedSlug)}" and "${file}" resolve to "${slug}". Rename one.`,
+        )
+      }
+      seenNames.set(normalizedSlug, file)
+      for (const alias of frontmatter.aliases) {
+        const normalizedAlias = alias.toLowerCase()
+        if (normalizedAlias === normalizedSlug) {
+          throw new Error(
+            `[blueprints] ${file}: alias "${alias}" duplicates the blueprint's own slug. Remove it from "aliases".`,
+          )
+        }
+        if (seenNames.has(normalizedAlias)) {
+          throw new Error(
+            `[blueprints] name collision: alias "${alias}" in ${file} is already taken by ${seenNames.get(normalizedAlias)}.`,
+          )
+        }
+        seenNames.set(normalizedAlias, file)
+      }
+      blueprints.push({
+        slug,
+        kind,
+        version: frontmatter.version,
+        website: frontmatter.website,
+        aliases: frontmatter.aliases,
+        file,
+      })
+    }
+    else {
+      if (!frontmatter.root) {
+        throw new Error(
+          `[blueprints] ${file}: bare-named file (no '--') must declare "root": true in frontmatter.`,
+        )
+      }
+      if (stem !== frontmatter.kind) {
+        throw new Error(
+          `[blueprints] ${file}: filename "${stem}" does not match frontmatter kind "${frontmatter.kind}". Kind roots must be named "<kind>.md".`,
+        )
+      }
+      const normalizedStem = stem.toLowerCase()
+      if (seenNames.has(normalizedStem)) {
+        throw new Error(
+          `[blueprints] name collision: "${seenNames.get(normalizedStem)}" already uses "${stem}".`,
+        )
+      }
+      seenNames.set(normalizedStem, file)
+      kindRoots.push({ kind: frontmatter.kind, version: frontmatter.version, file })
+    }
+  }
+
+  return { blueprints, kindRoots }
+}
