@@ -168,7 +168,8 @@ The Braintrust [blueprint](/docs/cli/add/) generates a source-root module that `
 import { instrument } from '@amond-ai/agent';
 import { createTracingInstrumentation } from './tracing.ts';
 
-// createTracingInstrumentation() returns { observer, interceptor } for your tracing backend.
+// createTracingInstrumentation() returns { observe, interceptor, dispose } for your tracing backend;
+// dispose() can be a no-op when there is nothing to flush.
 instrument(createTracingInstrumentation());
 ```
 

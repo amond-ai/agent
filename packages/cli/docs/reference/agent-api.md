@@ -303,7 +303,7 @@ Most callers never need this — unconditional sends work without a uid, a creat
 ```ts
 import { start } from '@amond-ai/agent/node';
 
-function start(options: StartOptions): Promise<amond>;
+function start(options: StartOptions): Promise<Amond>;
 
 interface StartOptions {
   agents: readonly StartAgentEntry[];
@@ -319,7 +319,7 @@ interface StartAgentConfig {
   name?: string;
 }
 
-interface amond {
+interface Amond {
   stop(): Promise<void>;
   [Symbol.asyncDispose](): Promise<void>;
 }
@@ -343,7 +343,7 @@ The Node bootstrap for running amond outside a generated server entry — standa
 
   Omitted, the default registration skips any ID already registered, so a `setProvider()` call made before `start()` overrides a same-ID built-in regardless of ordering. Given explicitly, `providers` registers unconditionally — an entry here overwrites a same-ID provider set before `start()`, since `setProvider()` always replaces on ID.
 
-- Returns a `amond` handle. `stop()` drains in-flight work, then disconnects persistence; the async-dispose symbol makes `await using amond = await start(...)` clean up automatically.
+- Returns an `Amond` handle. `stop()` drains in-flight work, then disconnects persistence; the async-dispose symbol makes `await using amond = await start(...)` clean up automatically.
 - One process holds at most one amond runtime. `start()` throws when a runtime is already configured — inside an amond server, call `init()`/`dispatch()` directly.
 
 `@amond-ai/agent/node` also exports the `local()` sandbox factory and the `sqlite()` persistence adapter; both are documented in the [Node.js target guide's reference section](/docs/guide/node-target/#reference).
