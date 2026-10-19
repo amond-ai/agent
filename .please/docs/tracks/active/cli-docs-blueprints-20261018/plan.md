@@ -97,6 +97,9 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 
 ## Progress
 
+- [x] (2026-10-19 13:00 KST) T006 Deploy the registry site from main
+  Evidence: `uvx zizmor .github/workflows/` (v1.31.1) → "No findings to report"; `node ../../node_modules/wrangler/bin/wrangler.js deploy --dry-run` in apps/registry → read 16 files from dist, "--dry-run: exiting now"; `bunx eslint .github/workflows/deploy-registry.yml` clean
+  Deferred: first deploy and `curl -fsS https://blueprints.amond.ai/daytona.md` — waiting on the user adding `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (as `registry` environment secrets) and on the `amond.ai` zone check
 - [x] (2026-10-19 10:20 KST) T004 Build and serve blueprint text from the registry site
   Evidence: `bun --bun vitest run` in apps/registry → 9 tests passed (exact 16-file set, no alias file, byte-identical frontmatter-free bodies, collision/invalid-frontmatter failures, real `wrangler dev`: daytona.md 200 text/markdown, unknown/alias/bare paths 404); `bunx wrangler deploy --dry-run` in apps/registry → "Read 16 files from the assets directory ... No bindings found. --dry-run: exiting now." exit 0; manual `wrangler dev` + curl → /daytona.md 200 `Content-Type: text/markdown; charset=utf-8`, /slack.md 404 Content-Length 0
 
@@ -149,6 +152,10 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
   Date/Author: 2026-10-19 / implement-executor
 - Decision: Add apps/registry/turbo.json extending root with inputs on $TURBO_ROOT$/blueprints/** and blueprint-index.ts for build and test.
   Rationale: Turbo's default inputs are package-local, so a blueprint edit would otherwise replay a stale cached dist/.
+  Date/Author: 2026-10-19 / implement-executor
+
+- Decision: the deploy job uses a GitHub `environment: registry`, and wrangler runs as `node ../../node_modules/wrangler/bin/wrangler.js deploy`.
+  Rationale: the environment lets the user scope the Cloudflare secrets to this job; running the bin with node avoids wrangler hanging under bun's runtime, and uses the workspace-pinned version with no third-party action.
   Date/Author: 2026-10-19 / implement-executor
 
 ## Surprises & Discoveries
