@@ -97,6 +97,9 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 
 ## Progress
 
+- [x] (2026-10-19 10:00 KST) T001 Import the renamed docs snapshot into packages/cli/docs
+  Evidence: `bun --filter amond test -- docs-content` → 8 tests passed; page count 68, no `.mdx`; brand grep over packages/cli/docs → no matches
+
 ## Decision Log
 
 - Decision: designed inline from one exploration pass instead of spawning an architect agent.
@@ -105,5 +108,11 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 - Decision: serve the registry at `blueprints.amond.ai`.
   Rationale: chosen at approval over the apex `amond.ai` and an `amond.ai/blueprints` route; a subdomain keeps the apex free for a website and works as a Worker custom domain.
   Date/Author: 2026-10-18 / approval
+- Decision: code samples inside `packages/cli/docs/**/*.md` are ignored by ESLint (`packages/cli/docs/**/*.md/**` in `eslint.config.ts`); prose stays linted.
+  Rationale: the samples are elided fragments in Flue's own style (semicolons, `...` bodies, mixed languages); dozens fail to parse and autofix would rewrite the teaching code.
+  Date/Author: 2026-10-19 / luna-implementer
+- Decision: the Braintrust page's abridged snippet no longer imports a named observer from `braintrust`.
+  Rationale: the upstream name embeds the Flue brand and an amond-named export cannot be verified here; the snippet forwards events through a placeholder and says the blueprint writes the real import.
+  Date/Author: 2026-10-19 / luna-implementer
 
 ## Surprises & Discoveries
