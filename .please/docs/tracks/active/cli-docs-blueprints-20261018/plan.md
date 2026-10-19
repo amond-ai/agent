@@ -69,7 +69,7 @@ The code behind `amond docs`, `add` and `update` came over from Flue v2.3.0, but
 - [ ] T004 Build and serve blueprint text from the registry site (file: apps/registry/wrangler.jsonc) (depends on T003) [FR-10]
   Validation: the build writes exactly one frontmatter-free `<slug>.md` per indexed blueprint and kind root, and none for an alias; served locally, a slug returns Markdown and an unknown name returns 404; `apps/*` is a turbo-built workspace; `ARCHITECTURE.md` and `tech-stack.md` describe the site.
   Method: `bun --filter @amond-ai/registry test` plus `bunx wrangler deploy --dry-run` in `apps/registry`
-- [ ] T005 Default amond add and update to the registry site (file: packages/cli/src/commands/blueprints.ts) (depends on T003) [FR-4, NFR-2, NFR-3, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009]
+- [x] T005 Default amond add and update to the registry site (file: packages/cli/src/commands/blueprints.ts) (depends on T003) [FR-4, NFR-2, NFR-3, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009]
   Validation: against a local HTTP registry, `amond add` lists the bundled blueprints and kinds, `amond add sandbox daytona --print` prints that blueprint, and `amond add channel <url>` fills in the URL; `AMOND_REGISTRY_URL` overrides the default even with a trailing slash or a plain `http://127.0.0.1` URL; an unreachable registry fails with its URL in the message; `amond add channel slack` reports an unknown blueprint; the built-in default is `https://blueprints.amond.ai`; the CLI README and tech-debt tracker (TD-004, TD-005) are updated.
   Method: `bun --filter amond test`
 - [ ] T006 Deploy the registry site from main (file: .github/workflows/deploy-registry.yml) (depends on T004) [FR-10]
@@ -133,5 +133,9 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 - Decision: kept the `NO_BLUEPRINTS_MESSAGE` guard and exported `registryUrlFor`/`DEFAULT_REGISTRY_URL` for a network-free default-URL test.
   Rationale: the guard still protects an install whose generated index is empty; the export is the smallest way to assert the default.
   Date/Author: 2026-10-19 / implement-executor
+
+- Decision: T006 commits the deploy workflow without the first deploy; its `curl` check is deferred.
+  Rationale: the repository has no `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` secret (T006's STOP). The user chose to add both secrets before merge, so the first deploy, and the `amond.ai` zone check with it, runs after that.
+  Date/Author: 2026-10-19 / user at implement
 
 ## Surprises & Discoveries
