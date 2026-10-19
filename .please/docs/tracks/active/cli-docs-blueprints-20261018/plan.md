@@ -54,25 +54,25 @@ The code behind `amond docs`, `add` and `update` came over from Flue v2.3.0, but
 
 ### Phase 1: Docs in `amond docs`
 
-- [ ] T001 Import the renamed docs snapshot into packages/cli/docs (file: packages/cli/docs/guide/tools.md)
+- [ ] T001 Import the renamed docs snapshot into packages/cli/docs (file: packages/cli/docs/guide/tools.md) [FR-2, FR-5, FR-6, FR-7, FR-8, AC-010]
   Validation: `packages/cli/docs` holds the spec's page set from `deee93b` as plain Markdown, with the pages that mention left-out packages edited; the new content test passes (brand search clean except attribution, no MDX syntax, every `/docs/<path>/` link resolves); `packages/cli/NOTICE` and `tech-stack.md` credit Flue and record `deee93b`.
   Method: `bun --filter amond test -- docs-content`
-- [ ] T002 Serve the bundled pages through amond docs (file: packages/cli/src/lib/docs-pages.ts) (depends on T001)
+- [ ] T002 Serve the bundled pages through amond docs (file: packages/cli/src/lib/docs-pages.ts) (depends on T001) [FR-1, FR-9, NFR-1, AC-001, AC-002, AC-003, AC-011]
   Validation: `amond docs read guide/tools` prints the page and exits 0; `amond docs search sandbox` lists matching pages; every `amond docs read <page>` pointer in `init.ts`'s scaffolds resolves; link-style paths taken from page text resolve too; `bun pm pack` includes `docs/`; `resolveDocsRoot()` no longer looks at `apps/docs`, and the CLI README drops the "exits with an error" note for `docs`.
   Method: `bun --filter amond test` plus `bun pm pack --dry-run` in `packages/cli`
 
 ### Phase 2: Blueprints from the registry site
 
-- [ ] T003 Import the renamed blueprint snapshot into blueprints/ (file: blueprints/README.md) (depends on T001)
+- [ ] T003 Import the renamed blueprint snapshot into blueprints/ (file: blueprints/README.md) (depends on T001) [FR-3, FR-5, FR-6, FR-7, FR-8, AC-010]
   Validation: `blueprints/` holds the spec's 16 files and a README that credits Flue and records `deee93b`; markers read `// amond-blueprint:`; the generator indexes 12 blueprints and 4 kind roots with no validation error; the content test covers `blueprints/` and passes.
   Method: `bun --filter amond check` plus `bun --filter amond test -- docs-content`
-- [ ] T004 Build and serve blueprint text from the registry site (file: apps/registry/wrangler.jsonc) (depends on T003)
+- [ ] T004 Build and serve blueprint text from the registry site (file: apps/registry/wrangler.jsonc) (depends on T003) [FR-10]
   Validation: the build writes exactly one frontmatter-free `<slug>.md` per indexed blueprint and kind root, and none for an alias; served locally, a slug returns Markdown and an unknown name returns 404; `apps/*` is a turbo-built workspace; `ARCHITECTURE.md` and `tech-stack.md` describe the site.
   Method: `bun --filter @amond-ai/registry test` plus `bunx wrangler deploy --dry-run` in `apps/registry`
-- [ ] T005 Default amond add and update to the registry site (file: packages/cli/src/commands/blueprints.ts) (depends on T003)
+- [ ] T005 Default amond add and update to the registry site (file: packages/cli/src/commands/blueprints.ts) (depends on T003) [FR-4, NFR-2, NFR-3, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009]
   Validation: against a local HTTP registry, `amond add` lists the bundled blueprints and kinds, `amond add sandbox daytona --print` prints that blueprint, and `amond add channel <url>` fills in the URL; `AMOND_REGISTRY_URL` overrides the default even with a trailing slash or a plain `http://127.0.0.1` URL; an unreachable registry fails with its URL in the message; `amond add channel slack` reports an unknown blueprint; the built-in default is `https://blueprints.amond.ai`; the CLI README and tech-debt tracker (TD-004, TD-005) are updated.
   Method: `bun --filter amond test`
-- [ ] T006 Deploy the registry site from main (file: .github/workflows/deploy-registry.yml) (depends on T004)
+- [ ] T006 Deploy the registry site from main (file: .github/workflows/deploy-registry.yml) (depends on T004) [FR-10]
   Validation: the workflow runs `wrangler deploy` for `apps/registry` on a push to `main` that touches `blueprints/**` or `apps/registry/**`, and on manual dispatch, never on a pull request; it runs with `permissions: contents: read`, its actions are pinned, and zizmor passes; after the first deploy, `curl -fsS https://blueprints.amond.ai/daytona.md` returns that blueprint's body.
   Method: zizmor in CI, then the `curl` check after merge
   STOP: the repository has no `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` secret, or the first deploy rejects the `blueprints.amond.ai` custom domain because `amond.ai` is not a zone in that account

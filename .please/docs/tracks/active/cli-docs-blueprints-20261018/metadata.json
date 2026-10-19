@@ -1,9 +1,9 @@
 {
   "track_id": "cli-docs-blueprints-20261018",
   "type": "feature",
-  "status": "planned",
+  "status": "in_progress",
   "created_at": "2026-10-17T19:35:29Z",
-  "updated_at": "2026-10-18T12:08:59Z",
+  "updated_at": "2026-10-19T00:40:08Z",
   "issue": "#20",
   "pr": "https://github.com/amond-ai/agent/pull/33",
   "project": "",
