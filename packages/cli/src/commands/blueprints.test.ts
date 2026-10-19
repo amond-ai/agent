@@ -24,6 +24,30 @@ function loadRegistryBodies(): Map<string, string> {
   return bodies
 }
 
+// Every env var @vercel/detect-agent reads to detect a calling agent; keep in sync with
+// node_modules/@vercel/detect-agent/dist/index.js.
+const AGENT_ENV_VARS = [
+  'AI_AGENT',
+  'CURSOR_TRACE_ID',
+  'CURSOR_AGENT',
+  'CURSOR_EXTENSION_HOST_ROLE',
+  'GEMINI_CLI',
+  'CODEX_SANDBOX',
+  'CODEX_CI',
+  'CODEX_THREAD_ID',
+  'ANTIGRAVITY_AGENT',
+  'AUGMENT_AGENT',
+  'OPENCODE',
+  'OPENCODE_CLIENT',
+  'CLAUDECODE',
+  'CLAUDE_CODE',
+  'CLAUDE_CODE_IS_COWORK',
+  'REPL_ID',
+  'COPILOT_MODEL',
+  'COPILOT_ALLOW_ALL',
+  'COPILOT_GITHUB_TOKEN',
+]
+
 function runAmond(args: string[], env: Record<string, string> = {}) {
   // Drop any inherited override so each case controls the registry itself.
   const { AMOND_REGISTRY_URL: _inherited, ...baseEnv } = process.env
@@ -159,16 +183,12 @@ describe('amond add / update against a registry', () => {
     // Agent markers in the environment would switch to stdout mode.
     const result = await runAmond(['add', 'sandbox', 'daytona'], {
       AMOND_REGISTRY_URL: registry,
-      AI_AGENT: '',
-      CLAUDECODE: '',
-      CLAUDE_CODE: '',
-      CURSOR_TRACE_ID: '',
-      CODEX_SANDBOX: '',
-      GEMINI_CLI: '',
-      OPENCODE: '',
+      ...Object.fromEntries(AGENT_ENV_VARS.map(name => [name, ''])),
     })
     expect(result.status).toBe(0)
     expect(result.stdout).not.toContain(bodies.get('daytona')!.slice(0, 40))
+    expect(result.stderr).toContain('amond add sandbox \'daytona\' --print | claude')
+    expect(result.stderr).toContain('Run "amond add sandbox \'daytona\' --print" and follow the instructions.')
   })
 
   describe('update', () => {
