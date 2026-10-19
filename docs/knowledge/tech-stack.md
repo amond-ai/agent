@@ -77,7 +77,7 @@ Planned by [ADR-0003](../adr/0003-build-on-flue-with-ai-sdk-harness.md), not yet
 | --- | --- | --- |
 | `vendor/flue` | `withastro/flue` at `deee93b` (2.3.0) | Read-only reference, and the source of the five imported packages |
 | `vendor/eve` | `vercel/eve` at `0857ff4` | Read-only reference |
-| `packages/cli/docs` | Flue's documentation pages (`apps/docs/src/content/docs`) at `deee93b` (2.3.0) | The `amond docs` pages, renamed to amond and edited by hand as plain Markdown; pages for channel, database, OpenTelemetry, and Sentry packages are left out |
+| `packages/cli/docs` | Flue's documentation pages (`apps/docs/src/content/docs`) at `deee93b` (2.3.0) | The `amond docs` pages, renamed to amond and edited by hand as plain Markdown; pages for channel, database, OpenTelemetry, and Sentry packages and the beta-to-2.0 migration guide are left out |
 
 Flue's packages entered `packages/` from v2.3.0 with their history ([ADR-0004](../adr/0004-ship-flue-as-amond-packages.md),
 [#20](https://github.com/amond-ai/agent/issues/20)) and were renamed in source. Flue builds with

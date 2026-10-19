@@ -112,7 +112,7 @@ export function findBrokenLinks(root: string): string[] {
 describe('bundled documentation pages', () => {
   it('ships the expected set of pages', () => {
     const pages = loadDocsPages(DOCS_ROOT)
-    expect(pages).toHaveLength(68)
+    expect(pages).toHaveLength(67)
     expect(pages.map(page => page.path)).toContain('guide/tools')
     for (const page of pages) {
       expect(page.title, `${page.path} title`).not.toBe('')
