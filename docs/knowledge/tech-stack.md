@@ -10,7 +10,7 @@ choices were made. Update this file before a change that adds or replaces any of
 | Language | TypeScript 5.9 | `strict`, ES modules, `moduleResolution: bundler` |
 | Package manager | Bun 1.4.3 | Pinned in `.mise.toml` and `packageManager` |
 | Node | 24 (dev), `>=22` (published `engines`) | Pinned in `.mise.toml` |
-| Tool versions | mise | `mise.lock` records the exact version, download URL and checksum of each tool per platform, so `node = "24"` resolves to the same release on every machine. `jdx/mise-action` installs with `--locked`, so CI fails when `.mise.toml` changes without `mise.lock`; commit the two together |
+| Tool versions | mise | `mise.lock` records the exact version, download URL and checksum of each tool per platform, so `node = "24"` resolves to the same release on every machine. `jdx/mise-action` installs with `--locked`, so CI fails when tool declarations in `.mise.toml` change without `mise.lock`; commit the two together |
 
 ## Monorepo
 
