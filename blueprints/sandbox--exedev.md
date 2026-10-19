@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 1,
+  "version": 2,
   "website": "https://exe.dev",
   "aliases": ["exe"]
 }
@@ -44,7 +44,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxDriver` contract.
 
 ```ts
-// amond-blueprint: sandbox/exedev@1
+// amond-blueprint: sandbox/exedev@2
 /**
  * exe.dev adapter for amond.
  *
@@ -90,7 +90,9 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
  *     // cheap; the expensive VM creation happens once, inside
  *     // createSandbox(), at initialization — never on a re-render.
  *     async createSandbox(options) {
- *       const vm = await createExeVm({ apiToken: process.env.EXE_API_TOKEN });
+ *       const apiToken = process.env.EXE_API_TOKEN;
+ *       if (!apiToken) throw new Error('EXE_API_TOKEN is required');
+ *       const vm = await createExeVm({ apiToken });
  *       return exedev(vm).createSandbox(options);
  *     },
  *   });
@@ -450,7 +452,10 @@ export interface SshLike {
 
 export interface SshExecStream {
   on(event: "data", listener: (data: Buffer) => void): unknown;
-  on(event: "close", listener: (code: number) => void): unknown;
+  on(
+    event: "close",
+    listener: (code: number | null | undefined, signal?: string) => void,
+  ): unknown;
   on(event: "error", listener: (err: Error) => void): unknown;
   stderr: { on(event: "data", listener: (data: Buffer) => void): unknown };
   close(): void;
@@ -642,7 +647,13 @@ export class ExeDevSandboxDriver implements SandboxDriver {
 
   async mkdir(dirPath: string, options?: { recursive?: boolean }): Promise<void> {
     if (options?.recursive) {
-      await this.exec(`mkdir -p '${shellEscape(dirPath)}'`);
+      const result = await this.exec(`mkdir -p '${shellEscape(dirPath)}'`);
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `[amond:exedev] mkdir -p failed for ${dirPath}: ` +
+            (result.stderr || result.stdout || `exit ${result.exitCode}`),
+        );
+      }
       return;
     }
     const sftp = await this.getSftp();
@@ -692,7 +703,10 @@ export class ExeDevSandboxDriver implements SandboxDriver {
       cmd = `${envPrefix}; ${cmd}`;
     }
     if (options?.cwd) {
-      cmd = `cd '${shellEscape(options.cwd)}' && ${cmd}`;
+      // Group the env prefix and the command so a failed `cd` skips all of
+      // it. The braces sit on their own lines so a trailing `# comment` or
+      // `&` in the command cannot swallow the closing brace.
+      cmd = `cd '${shellEscape(options.cwd)}' && {\n${cmd}\n}`;
     }
 
     // ssh2 cannot cancel a remote command mid-flight, so `options?.signal`
@@ -733,8 +747,23 @@ export class ExeDevSandboxDriver implements SandboxDriver {
         stream.stderr.on("data", (data: Buffer) => {
           stderr += data.toString();
         });
-        stream.on("close", (code: number) => {
-          finish({ stdout, stderr, exitCode: code ?? 0 });
+        stream.on("close", (code: number | null | undefined, signal?: string) => {
+          if (settled) return;
+          // No numeric exit status means the command was killed by a signal
+          // (code is null) or the channel closed without one (undefined).
+          // Neither is a success, so reject instead of reporting exit 0.
+          if (typeof code !== "number") {
+            settled = true;
+            if (timer) clearTimeout(timer);
+            reject(
+              new Error(
+                "[amond:exedev] command ended without an exit status" +
+                  (signal ? ` (signal ${signal})` : ""),
+              ),
+            );
+            return;
+          }
+          finish({ stdout, stderr, exitCode: code });
         });
         stream.on("error", (streamErr: Error) => {
           if (settled) return;
@@ -855,7 +884,9 @@ import { exedev } from "../sandboxes/exedev";
 
 export function Assistant() {
 	useModel("anthropic/claude-sonnet-4-6");
-	useSandbox(exedev({ host: process.env.EXE_VM_HOST }));
+	const host = process.env.EXE_VM_HOST;
+	if (!host) throw new Error("EXE_VM_HOST is required");
+	useSandbox(exedev({ host }));
 	return "You are a helpful assistant with a full sandbox.";
 }
 ```
@@ -880,7 +911,9 @@ export function Assistant() {
 	useModel("anthropic/claude-sonnet-4-6");
 	useSandbox({
 		async createSandbox(options) {
-			const vm = await createExeVm({ apiToken: process.env.EXE_API_TOKEN });
+			const apiToken = process.env.EXE_API_TOKEN;
+			if (!apiToken) throw new Error("EXE_API_TOKEN is required");
+			const vm = await createExeVm({ apiToken });
 			return exedev(vm).createSandbox(options);
 		},
 	});
@@ -903,8 +936,10 @@ export function Assistant() {
 	useModel("anthropic/claude-sonnet-4-6");
 	useSandbox({
 		async createSandbox(options) {
+			const apiToken = process.env.EXE_API_TOKEN;
+			if (!apiToken) throw new Error("EXE_API_TOKEN is required");
 			const vm = await cloneExeVm({
-				apiToken: process.env.EXE_API_TOKEN,
+				apiToken,
 				source: "my-dev-vm",
 			});
 			return exedev(vm).createSandbox(options);
@@ -935,3 +970,83 @@ When updating an existing integration, inspect and compare it against this compl
 ### Version 1 — 2026-06-14
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Stop a command when its `cwd` is invalid, and stop reporting failures as success. A failed `cd` now skips the whole env prefix and command, including a multi-statement command or one ending in a comment. A recursive `mkdir` throws with its stderr on a non-zero exit. An exec channel that closes with no exit status, or after a signal, now rejects instead of returning exit 0. The wiring snippets check `EXE_VM_HOST` and `EXE_API_TOKEN` before use so they type-check under `strict`.
+
+```diff
+--- a/src/sandboxes/exedev.ts
++++ b/src/sandboxes/exedev.ts
+@@ -1,3 +1,3 @@
+-// amond-blueprint: sandbox/exedev@1
++// amond-blueprint: sandbox/exedev@2
+ /**
+  * exe.dev adapter for amond.
+@@ -45,5 +45,7 @@
+  *     // createSandbox(), at initialization — never on a re-render.
+  *     async createSandbox(options) {
+- *       const vm = await createExeVm({ apiToken: process.env.EXE_API_TOKEN });
++ *       const apiToken = process.env.EXE_API_TOKEN;
++ *       if (!apiToken) throw new Error('EXE_API_TOKEN is required');
++ *       const vm = await createExeVm({ apiToken });
+  *       return exedev(vm).createSandbox(options);
+  *     },
+@@ -405,5 +407,8 @@
+ export interface SshExecStream {
+   on(event: "data", listener: (data: Buffer) => void): unknown;
+-  on(event: "close", listener: (code: number) => void): unknown;
++  on(
++    event: "close",
++    listener: (code: number | null | undefined, signal?: string) => void,
++  ): unknown;
+   on(event: "error", listener: (err: Error) => void): unknown;
+   stderr: { on(event: "data", listener: (data: Buffer) => void): unknown };
+@@ -597,5 +602,11 @@
+   async mkdir(dirPath: string, options?: { recursive?: boolean }): Promise<void> {
+     if (options?.recursive) {
+-      await this.exec(`mkdir -p '${shellEscape(dirPath)}'`);
++      const result = await this.exec(`mkdir -p '${shellEscape(dirPath)}'`);
++      if (result.exitCode !== 0) {
++        throw new Error(
++          `[amond:exedev] mkdir -p failed for ${dirPath}: ` +
++            (result.stderr || result.stdout || `exit ${result.exitCode}`),
++        );
++      }
+       return;
+     }
+@@ -647,5 +658,8 @@
+     }
+     if (options?.cwd) {
+-      cmd = `cd '${shellEscape(options.cwd)}' && ${cmd}`;
++      // Group the env prefix and the command so a failed `cd` skips all of
++      // it. The braces sit on their own lines so a trailing `# comment` or
++      // `&` in the command cannot swallow the closing brace.
++      cmd = `cd '${shellEscape(options.cwd)}' && {\n${cmd}\n}`;
+     }
+ 
+@@ -688,6 +702,21 @@
+           stderr += data.toString();
+         });
+-        stream.on("close", (code: number) => {
+-          finish({ stdout, stderr, exitCode: code ?? 0 });
++        stream.on("close", (code: number | null | undefined, signal?: string) => {
++          if (settled) return;
++          // No numeric exit status means the command was killed by a signal
++          // (code is null) or the channel closed without one (undefined).
++          // Neither is a success, so reject instead of reporting exit 0.
++          if (typeof code !== "number") {
++            settled = true;
++            if (timer) clearTimeout(timer);
++            reject(
++              new Error(
++                "[amond:exedev] command ended without an exit status" +
++                  (signal ? ` (signal ${signal})` : ""),
++              ),
++            );
++            return;
++          }
++          finish({ stdout, stderr, exitCode: code });
+         });
+         stream.on("error", (streamErr: Error) => {
+```
