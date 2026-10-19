@@ -97,6 +97,8 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 
 ## Progress
 
+- [x] (2026-10-19 11:00 KST) T003 Import the renamed blueprint snapshot into blueprints/
+  Evidence: `bun packages/cli/scripts/generate-blueprint-index.ts` → "(12 blueprints, 4 kind roots)"; `bun --filter amond test -- docs-content` → 14 tests passed; `bunx tsc --noEmit -p packages/cli` clean (`bun check` half skipped: pre-existing E2BIG recursion)
 - [x] (2026-10-19 10:30 KST) T002 Serve the bundled pages through amond docs
   Evidence: `bun --filter amond test` → 4 files, 39 tests passed; `bun pm pack --dry-run` in packages/cli → 75 files, 68 under docs/
 - [x] (2026-10-19 10:00 KST) T001 Import the renamed docs snapshot into packages/cli/docs
@@ -115,6 +117,12 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
   Date/Author: 2026-10-19 / luna-implementer
 - Decision: the Braintrust page's abridged snippet no longer imports a named observer from `braintrust`.
   Rationale: the upstream name embeds the Flue brand and an amond-named export cannot be verified here; the snippet forwards events through a placeholder and says the blueprint writes the real import.
+  Date/Author: 2026-10-19 / luna-implementer
+- Decision: the Braintrust blueprint and docs page keep the import name `braintrustFlueObserver`; the brand check exempts exactly that identifier.
+  Rationale: it is the real export of the pinned `braintrust@3.17.0` SDK (the vendored example uses it), so renaming it would tell an agent to import a name that does not exist. This supersedes the placeholder the docs page used in T001.
+  Date/Author: 2026-10-19 / luna-implementer
+- Decision: code samples in `blueprints/**/*.md` are ignored by ESLint, as for the docs pages.
+  Rationale: the samples are templates for a coding agent, not compiled project code.
   Date/Author: 2026-10-19 / luna-implementer
 
 ## Surprises & Discoveries

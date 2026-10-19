@@ -10,8 +10,13 @@ import { loadDocsPages, normalizeDocsPath } from './docs-pages.ts'
  */
 
 const DOCS_ROOT = fileURLToPath(new URL('../../docs', import.meta.url))
+const BLUEPRINTS_ROOT = fileURLToPath(new URL('../../../../blueprints', import.meta.url))
 
 const BRAND_PATTERNS = [/@flue\//i, /\bflue\b/i, /flue\.config/i, /FLUE_/i, /flueframework/i]
+
+// A third-party export that still carries the upstream name. Braintrust's SDK exposes its observer
+// as `braintrustFlueObserver`, and the blueprint and docs must import it by that exact name.
+const THIRD_PARTY_IDENTIFIERS = /braintrustFlueObserver/g
 
 // The only lines allowed to name the upstream project: one that credits Flue
 // and links its repository. Keep this narrow so the brand check still bites.
@@ -54,7 +59,10 @@ function describeLine(line: SourceLine, detail: string): string {
 export function findBrandViolations(root: string): string[] {
   return readLines(root)
     .filter(line => !ATTRIBUTION_LINE.test(line.text))
-    .filter(line => BRAND_PATTERNS.some(pattern => pattern.test(line.text)))
+    .filter((line) => {
+      const text = line.text.replace(THIRD_PARTY_IDENTIFIERS, '')
+      return BRAND_PATTERNS.some(pattern => pattern.test(text))
+    })
     .map(line => describeLine(line, line.text.trim()))
 }
 
@@ -138,6 +146,33 @@ describe('bundled documentation pages', () => {
   })
 })
 
+describe('bundled blueprints', () => {
+  it('ships the sandbox and tooling blueprints and the four kind roots', () => {
+    const files = listFiles(BLUEPRINTS_ROOT).map(file => path.basename(file)).sort()
+    expect(files).toHaveLength(17)
+    expect(files).toEqual(expect.arrayContaining(['README.md', 'channel.md', 'database.md', 'sandbox.md', 'tooling.md']))
+    expect(files.filter(file => /^(?:channel|database)--/.test(file))).toEqual([])
+  })
+
+  it('carries no upstream brand outside attribution lines', () => {
+    expect(findBrandViolations(BLUEPRINTS_ROOT)).toEqual([])
+  })
+
+  it('marks files with the amond-blueprint marker only', () => {
+    const markers = readLines(BLUEPRINTS_ROOT).filter(line => /-blueprint:/.test(line.text))
+    expect(markers.length).toBeGreaterThan(0)
+    expect(markers.filter(line => !/\/\/ amond-blueprint: /.test(line.text) && !/`amond-blueprint`/.test(line.text))).toEqual([])
+  })
+
+  it('is plain Markdown with no MDX syntax', () => {
+    expect(findMdxViolations(BLUEPRINTS_ROOT)).toEqual([])
+  })
+
+  it('links only to pages that exist', () => {
+    expect(findBrokenLinks(BLUEPRINTS_ROOT)).toEqual([])
+  })
+})
+
 describe('content guards', () => {
   function withTree(files: Record<string, string>, run: (root: string) => void) {
     const root = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR ?? '/tmp'), 'docs-content-'))
@@ -162,6 +197,15 @@ describe('content guards', () => {
       'c.md': page('Visit https://flueframework.com for Flue.'),
     }, (root) => {
       expect(findBrandViolations(root).map(v => v.split(' ')[0])).toEqual(['a.md:6', 'c.md:6'])
+    })
+  })
+
+  it('allows the third-party Braintrust export but nothing else carrying the brand', () => {
+    withTree({
+      'a.md': page('import { braintrustFlueObserver } from \'braintrust\';'),
+      'b.md': page('call braintrustFlueObserver and use FLUE_TOKEN'),
+    }, (root) => {
+      expect(findBrandViolations(root).map(v => v.split(' ')[0])).toEqual(['b.md:6'])
     })
   })
 

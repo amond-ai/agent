@@ -18,7 +18,7 @@ The Braintrust blueprint creates a source-root `braintrust.ts` and imports it on
 
 ```ts title="src/braintrust.ts (abridged)"
 import { observe } from '@amond-ai/agent';
-import { initLogger } from 'braintrust';
+import { braintrustFlueObserver, initLogger } from 'braintrust';
 
 if (process.env.BRAINTRUST_API_KEY) {
   initLogger({
@@ -28,9 +28,7 @@ if (process.env.BRAINTRUST_API_KEY) {
 
   observe((event, ctx) => {
     const compatible = compatibleEvent(event);
-    // Forward each compatible event and its context to Braintrust's amond observer.
-    // The exact import comes from the installed Braintrust version; the blueprint writes it for you.
-    if (compatible) forwardToBraintrust(compatible, ctx);
+    if (compatible) braintrustFlueObserver(compatible, ctx);
   });
 }
 ```
