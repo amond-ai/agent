@@ -57,7 +57,7 @@ The code behind `amond docs`, `add` and `update` came over from Flue v2.3.0, but
 - [x] T001 Import the renamed docs snapshot into packages/cli/docs (file: packages/cli/docs/guide/tools.md) [FR-2, FR-5, FR-6, FR-7, FR-8, AC-010]
   Validation: `packages/cli/docs` holds the spec's page set from `deee93b` as plain Markdown, with the pages that mention left-out packages edited; the new content test passes (brand search clean except attribution, no MDX syntax, every `/docs/<path>/` link resolves); `packages/cli/NOTICE` and `tech-stack.md` credit Flue and record `deee93b`.
   Method: `bun --filter amond test -- docs-content`
-- [ ] T002 Serve the bundled pages through amond docs (file: packages/cli/src/lib/docs-pages.ts) (depends on T001) [FR-1, FR-9, NFR-1, AC-001, AC-002, AC-003, AC-011]
+- [x] T002 Serve the bundled pages through amond docs (file: packages/cli/src/lib/docs-pages.ts) (depends on T001) [FR-1, FR-9, NFR-1, AC-001, AC-002, AC-003, AC-011]
   Validation: `amond docs read guide/tools` prints the page and exits 0; `amond docs search sandbox` lists matching pages; every `amond docs read <page>` pointer in `init.ts`'s scaffolds resolves; link-style paths taken from page text resolve too; `bun pm pack` includes `docs/`; `resolveDocsRoot()` no longer looks at `apps/docs`, and the CLI README drops the "exits with an error" note for `docs`.
   Method: `bun --filter amond test` plus `bun pm pack --dry-run` in `packages/cli`
 
