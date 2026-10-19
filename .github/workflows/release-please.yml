@@ -9,7 +9,9 @@ on:
 permissions: {}
 
 # A release must not be cancelled halfway through tagging or publishing: a newer
-# push waits for the running release instead.
+# push waits for the running release instead. Only the newest push waits; an
+# older waiting run is dropped, which loses nothing because release-please reads
+# the whole of main on every run.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
