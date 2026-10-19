@@ -77,14 +77,15 @@ export function findMdxViolations(root: string): string[] {
 /**
  * Resolve internal page links the way `amond docs read` does: absolute
  * `/docs/<path>/` links go through `normalizeDocsPath`; relative links are
- * resolved against the linking page first.
+ * resolved against the linking page first, with or without an extension.
  */
 export function findBrokenLinks(root: string): string[] {
   const pagePaths = new Set(loadDocsPages(root).map(page => page.path))
   const broken: string[] = []
   for (const line of readLines(root)) {
     if (line.inFence) { continue }
-    for (const match of line.text.matchAll(/\]\(([^)\s]+)\)/g)) {
+    // Inline code such as `handlers[0](ctx)` looks like a link but is not one.
+    for (const match of line.text.replace(/`[^`]*`/g, '').matchAll(/\]\(([^)\s]+)\)/g)) {
       const target = match[1]!.split('#')[0]!
       if (target === '' || /^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//')) { continue }
       let resolved: string | undefined
@@ -98,7 +99,7 @@ export function findBrokenLinks(root: string): string[] {
         broken.push(describeLine(line, `absolute link outside /docs/: ${target}`))
         continue
       }
-      else if (/\.mdx?$/.test(target)) {
+      else {
         resolved = normalizeDocsPath(path.posix.join(path.posix.dirname(line.file), target))
       }
       if (resolved !== undefined && !pagePaths.has(resolved)) {
@@ -179,11 +180,12 @@ describe('content guards', () => {
 
   it('flags links that do not resolve to a page', () => {
     withTree({
-      'guide/a.md': page('[ok](/docs/guide/b/#x) [bad](/docs/guide/missing/) [rel](./b.md) [ext](https://example.com)'),
+      'guide/a.md': page('[ok](/docs/guide/b/#x) [bad](/docs/guide/missing/) [rel](./b.md) [bare](b) [bare-bad](missing) [ext](https://example.com) `handlers[0](ctx)`'),
       'guide/b.md': page('body'),
     }, (root) => {
       expect(findBrokenLinks(root)).toEqual([
         'guide/a.md:6 link does not resolve: /docs/guide/missing/',
+        'guide/a.md:6 link does not resolve: missing',
       ])
     })
   })

@@ -51,7 +51,7 @@ Every error response from an agent route, a mounted `createAgentRouter()` app, o
 - `type`, `message`, `details` — always present.
 - `dev` — present only when the server runs in local development (`amond dev`, `amond run`) and the error class populated it. Its presence is not a reliable mode signal: errors whose class set `dev: ''` omit the field in every mode.
 - `meta` — present whenever the error class set it, in development and production alike.
-- `ref` — a server-minted correlation ref (`err_` + ULID), present exactly when the server logged the error (the two 500-class renders below). The same value is sent as a `amond-error-ref` response header and prefixes the matching server-side log line. Never present on unlogged caller-mistake (4xx) responses.
+- `ref` — a server-minted correlation ref (`err_` + ULID), present exactly when the server logged the error (the two 500-class renders below). The same value is sent as an `amond-error-ref` response header and prefixes the matching server-side log line. Never present on unlogged caller-mistake (4xx) responses.
 - `cause` and stack traces — never present.
 
 Status resolution:

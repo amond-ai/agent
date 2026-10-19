@@ -56,7 +56,7 @@ See [Observability](/docs/guide/observability/#choose-an-observability-provider)
 
 ## What Braintrust traces
 
-- A prompt, skill, or compaction operation becomes a `amond.<kind>` task span.
+- A prompt, skill, or compaction operation becomes an `amond.<kind>` task span.
 - A model turn becomes an `llm:<model>` span with input, output, errors, and usage metrics.
 - A tool call becomes a nested `tool:<name>` span.
 - A delegated task becomes a nested task span.

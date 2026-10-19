@@ -51,7 +51,7 @@ And finally, create your first `src/agents/assistant.ts`:
 import { useModel } from '@amond-ai/agent';
 
 // This is your first agent: `Assistant`.
-// It's return value is your agent's instructions, which become the agent's "system" instructions.
+// Its return value is your agent's instructions, which become the agent's "system" instructions.
 // amond Hooks like `useModel()` allow you to customize and modify your agent abilities.
 export function Assistant() {
 	useModel('anthropic/claude-haiku-4-5');
@@ -61,7 +61,7 @@ export function Assistant() {
 
 Congratulations, you just built your first agent! From here you can shape its behavior and add capabilities — or keep going and put it behind a real server.
 
-You can use any [Model/Provider](/docs/guide/models/) that Pi supports. In the example above, we use Claude Haiku. Whichever you choose, just be sure to provide the required API keys to the agent runtime. Its recommended to use a `.env` file to manage your API keys:
+You can use any [Model/Provider](/docs/guide/models/) that Pi supports. In the example above, we use Claude Haiku. Whichever you choose, just be sure to provide the required API keys to the agent runtime. It's recommended to use a `.env` file to manage your API keys:
 
 ```
 # .env
@@ -137,7 +137,7 @@ As mentioned, amond leverages Vite to power its dev and build pipeline. To spin 
 npx vite dev
 ```
 
-Vite spins up your `app.ts` (by default at `http://localhost:5173`) application and servers your agents at the routes that you defined. Test your setup by sending your agent a message — one `POST` per message, `202` on admission:
+Vite spins up your `app.ts` (by default at `http://localhost:5173`) application and serves your agents at the routes that you defined. Test your setup by sending your agent a message — one `POST` per message, `202` on admission:
 
 ```bash
 curl -X POST http://localhost:5173/agents/assistant/hello-1 \

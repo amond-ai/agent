@@ -8,7 +8,7 @@ An amond server is a long-running HTTP service, not a serverless function, so de
 
 ## Launch from the Dockerfile
 
-With a [amond Dockerfile](/docs/ecosystem/deploy/docker/) at the project root, `fly launch` detects it, registers the build, and generates a `fly.toml`. The image is built and deployed by `fly deploy` — `fly launch` only records how to build it.
+With an [amond Dockerfile](/docs/ecosystem/deploy/docker/) at the project root, `fly launch` detects it, registers the build, and generates a `fly.toml`. The image is built and deployed by `fly deploy` — `fly launch` only records how to build it.
 
 ```bash
 fly launch
