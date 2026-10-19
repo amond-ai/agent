@@ -86,7 +86,7 @@ bun run --filter @amond-ai/registry dev     # serve it locally with wrangler dev
 
 `apps/registry` is a private, assets-only Cloudflare Worker served at `https://blueprints.amond.ai`.
 `.github/workflows/deploy-registry.yml` deploys it on a push to `main` that touches `blueprints/**`,
-`apps/registry/**` or `packages/cli/src/lib/blueprint-index.ts`, using `CLOUDFLARE_API_TOKEN` and
+`apps/registry/**`, `packages/cli/src/lib/blueprint-index.ts` or `LICENSE`, using `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` from the `registry` environment. Point the CLI at a local build with
 `AMOND_REGISTRY_URL=http://127.0.0.1:8787`.
 

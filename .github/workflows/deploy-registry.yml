@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - main
-    # blueprint-index.ts is imported by the registry build, so a change to it changes the output.
+    # blueprint-index.ts and LICENSE feed the registry build, so a change to either changes the output.
     paths:
       - blueprints/**
       - apps/registry/**
       - packages/cli/src/lib/blueprint-index.ts
+      - LICENSE
   workflow_dispatch:
 
 permissions: {}

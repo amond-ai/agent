@@ -8,7 +8,7 @@ import { basename, delimiter, dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { buildRegistry } from './build.ts'
+import { attributionFooter, buildRegistry, LICENSE_FILE, NOTICE_FILE } from './build.ts'
 
 const blueprintsDir = fileURLToPath(new URL('../../../blueprints', import.meta.url))
 const packageDir = fileURLToPath(new URL('..', import.meta.url))
@@ -50,10 +50,10 @@ describe('buildRegistry over the repository blueprints', () => {
     await buildRegistry(blueprintsDir, outDir)
   })
 
-  it('writes exactly one file per blueprint and kind root', async () => {
+  it('writes exactly one file per blueprint and kind root, plus the license and notice', async () => {
     const written = (await readdir(outDir)).sort()
-    expect(written).toEqual(expectedSlugs(sourceFiles))
-    expect(written).toHaveLength(16)
+    expect(written).toEqual([...expectedSlugs(sourceFiles), LICENSE_FILE, NOTICE_FILE].sort())
+    expect(written).toHaveLength(18)
     expect(written).toContain('daytona.md')
     expect(written).toContain('sandbox.md')
   })
@@ -67,7 +67,7 @@ describe('buildRegistry over the repository blueprints', () => {
     expect(written).not.toContain('README.md')
   })
 
-  it('serves the body without frontmatter, byte-identical to the source body', async () => {
+  it('serves the source body without frontmatter, followed by the attribution footer', async () => {
     for (const file of sourceFiles.filter(name => name !== 'README.md')) {
       const source = await sourceFor(blueprintsDir, file)
       const end = source.indexOf('\n---\n', 4)
@@ -75,11 +75,21 @@ describe('buildRegistry over the repository blueprints', () => {
       const stem = file.slice(0, -'.md'.length)
       const dash = stem.indexOf('--')
       const output = await readFile(join(outDir, `${dash >= 0 ? stem.slice(dash + 2) : stem}.md`), 'utf-8')
-      expect(output, file).toBe(body)
+      expect(output, file).toBe(`${body.trimEnd()}\n\n${attributionFooter(file)}`)
+      expect(output, file).toContain(`Flue's blueprint \`${file}\``)
       expect(output.startsWith('# '), file).toBe(true)
       expect(output, file).not.toContain(source.slice(0, end + '\n---\n'.length))
       expect(output, file).not.toMatch(/^\s*"kind":/m)
     }
+  })
+
+  it('serves the repository license and a notice that credits Flue', async () => {
+    const license = fileURLToPath(new URL('../../../LICENSE', import.meta.url))
+    expect(await readFile(join(outDir, LICENSE_FILE), 'utf-8')).toBe(await readFile(license, 'utf-8'))
+    const notice = await readFile(join(outDir, NOTICE_FILE), 'utf-8')
+    expect(notice).toContain('Apache License, Version 2.0')
+    expect(notice).toContain('https://github.com/withastro/flue')
+    expect(notice).toContain('deee93b')
   })
 
   it('removes a file left from an earlier build', async () => {
