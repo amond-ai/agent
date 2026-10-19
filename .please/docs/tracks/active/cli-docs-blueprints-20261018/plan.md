@@ -66,7 +66,7 @@ The code behind `amond docs`, `add` and `update` came over from Flue v2.3.0, but
 - [x] T003 Import the renamed blueprint snapshot into blueprints/ (file: blueprints/README.md) (depends on T001) [FR-3, FR-5, FR-6, FR-7, FR-8, AC-010]
   Validation: `blueprints/` holds the spec's 16 files and a README that credits Flue and records `deee93b`; markers read `// amond-blueprint:`; the generator indexes 12 blueprints and 4 kind roots with no validation error; the content test covers `blueprints/` and passes.
   Method: `bun --filter amond check` plus `bun --filter amond test -- docs-content`
-- [ ] T004 Build and serve blueprint text from the registry site (file: apps/registry/wrangler.jsonc) (depends on T003) [FR-10]
+- [x] T004 Build and serve blueprint text from the registry site (file: apps/registry/wrangler.jsonc) (depends on T003) [FR-10]
   Validation: the build writes exactly one frontmatter-free `<slug>.md` per indexed blueprint and kind root, and none for an alias; served locally, a slug returns Markdown and an unknown name returns 404; `apps/*` is a turbo-built workspace; `ARCHITECTURE.md` and `tech-stack.md` describe the site.
   Method: `bun --filter @amond-ai/registry test` plus `bunx wrangler deploy --dry-run` in `apps/registry`
 - [x] T005 Default amond add and update to the registry site (file: packages/cli/src/commands/blueprints.ts) (depends on T003) [FR-4, NFR-2, NFR-3, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009]
@@ -96,6 +96,9 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 - T004: a blueprint with `aliases` is served under its slug only, because the CLI resolves aliases before fetching.
 
 ## Progress
+
+- [x] (2026-10-19 10:20 KST) T004 Build and serve blueprint text from the registry site
+  Evidence: `bun --bun vitest run` in apps/registry → 9 tests passed (exact 16-file set, no alias file, byte-identical frontmatter-free bodies, collision/invalid-frontmatter failures, real `wrangler dev`: daytona.md 200 text/markdown, unknown/alias/bare paths 404); `bunx wrangler deploy --dry-run` in apps/registry → "Read 16 files from the assets directory ... No bindings found. --dry-run: exiting now." exit 0; manual `wrangler dev` + curl → /daytona.md 200 `Content-Type: text/markdown; charset=utf-8`, /slack.md 404 Content-Length 0
 
 - [x] (2026-10-19 12:00 KST) T005 Default amond add and update to the registry site
   Evidence: `CI=true bun --filter amond test` → 4 files, 55 tests passed (22 new in blueprints.test.ts, local node:http registry + unreachable + blackhole + default-URL unit tests); `bunx tsc --noEmit -p packages/cli` clean; `bun run lint` 10/10 tasks successful
@@ -138,4 +141,20 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
   Rationale: the repository has no `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` secret (T006's STOP). The user chose to add both secrets before merge, so the first deploy, and the `amond.ai` zone check with it, runs after that.
   Date/Author: 2026-10-19 / user at implement
 
+- Decision: Extract the generator's filename/kind/collision checks into an exported buildBlueprintIndex (plus stripBlueprintFrontmatter) in packages/cli/src/lib/blueprint-index.ts, imported by apps/registry through a relative path; committed separately as a structural refactor.
+  Rationale: The site's slugs must match the CLI's exactly and fail on the same invalid inputs; one shared function rules out drift. The generated CLI index was diffed byte-identical before/after.
+  Date/Author: 2026-10-19 / implement-executor
+- Decision: The local-serve test spawns the real `wrangler dev` (with --assets pointed at a temp build) instead of a mimic static server.
+  Rationale: Starts in about 1s and proves the 200/404 behaviour of Workers assets with this wrangler.jsonc rather than of a stand-in.
+  Date/Author: 2026-10-19 / implement-executor
+- Decision: Add apps/registry/turbo.json extending root with inputs on $TURBO_ROOT$/blueprints/** and blueprint-index.ts for build and test.
+  Rationale: Turbo's default inputs are package-local, so a blueprint edit would otherwise replay a stale cached dist/.
+  Date/Author: 2026-10-19 / implement-executor
+
 ## Surprises & Discoveries
+
+- Observation: wrangler dev (and unstable_startWorker) starts under Bun but never answers a request; under `bun --bun vitest`, `node` on PATH is a Bun shim, so the test must locate a real Node binary.
+  Evidence: `bun probe.ts` calling unstable_startWorker timed out (exit 124) while the same file under node returned 200 in 267ms; ps showed the test-spawned `node .../wrangler.js` running `bun --no-warnings` as its child
+
+- Observation: Root `CI=true bun run test` fails in amond:test on src/commands/no-content.test.ts (12 tests) because T003 bundled 12 blueprints and those tests still assert "No blueprints are bundled"; T005 replaces them per the plan's Key Files. Not caused by T004: the generated index is byte-identical (resolved: T005 replaced those tests).
+  Evidence: AssertionError: expected 'Blueprint "slack" not found for kind …' to contain 'No blueprints are bundled with this v…'; every other turbo task (21/22) passed

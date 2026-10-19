@@ -1,0 +1,1 @@
+- [wrangler under Bun](wrangler-under-bun.md) — wrangler dev hangs under Bun; `bun --bun vitest` shims `node`; find real Node
