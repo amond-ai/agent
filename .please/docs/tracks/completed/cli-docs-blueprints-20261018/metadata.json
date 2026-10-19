@@ -1,14 +1,14 @@
 {
   "track_id": "cli-docs-blueprints-20261018",
   "type": "feature",
-  "status": "in_progress",
+  "status": "completed",
   "created_at": "2026-10-17T19:35:29Z",
-  "updated_at": "2026-10-19T00:40:08Z",
+  "updated_at": "2026-10-19T06:37:43Z",
   "issue": "#20",
-  "pr": "https://github.com/amond-ai/agent/pull/33",
+  "pr": "#35",
   "project": "",
   "project_item_id": "",
-  "code_pr": "https://github.com/amond-ai/agent/pull/33",
+  "code_pr": "#35",
   "code_branch": "tracks/cli-docs-blueprints-20261018",
   "stack_tool": "gh-stack"
 }

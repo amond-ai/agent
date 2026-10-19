@@ -97,6 +97,8 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 
 ## Progress
 
+- [x] (2026-10-19 15:37 KST) Review-stage commits (SHA: `492d8d29`, `c17aaef8`, `1b2b70e2`, `bbf3ed3a`, `6c443da5`, `e31ac31b`, `eb28c769`, `6b187fe3`, `92027822`, `939fa206`, `d5112b82`, `d0aafc82`, `ccab9d3e`)
+  Note: the phase 2 SHAs are the ones after `gh stack rebase --no-trunk` onto phase 1's `d0aafc82`; they were recorded before the rebase as `647b11e9`, `c279558f`, `6d3afd9e`, `4b7c9b2c`, `6b9ca0d4`, `0555e68f` and `dad85206`
 - [x] (2026-10-19 13:00 KST) T006 Deploy the registry site from main
   Evidence: `uvx zizmor .github/workflows/` (v1.31.1) → "No findings to report"; `node ../../node_modules/wrangler/bin/wrangler.js deploy --dry-run` in apps/registry → read 16 files from dist, "--dry-run: exiting now"; `bunx eslint .github/workflows/deploy-registry.yml` clean
   Deferred: first deploy and `curl -fsS https://blueprints.amond.ai/daytona.md` — waiting on the user adding `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (as `registry` environment secrets) and on the `amond.ai` zone check
@@ -165,3 +167,29 @@ Each task's `(file: ...)` names its primary file. Also touched: `packages/cli/sr
 
 - Observation: Root `CI=true bun run test` fails in amond:test on src/commands/no-content.test.ts (12 tests) because T003 bundled 12 blueprints and those tests still assert "No blueprints are bundled"; T005 replaces them per the plan's Key Files. Not caused by T004: the generated index is byte-identical (resolved: T005 replaced those tests).
   Evidence: AssertionError: expected 'Blueprint "slack" not found for kind …' to contain 'No blueprints are bundled with this v…'; every other turbo task (21/22) passed
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+
+- **Phase 1 (#33).** Flue `deee93b`'s docs pages, renamed to amond and converted to plain Markdown, are committed in `packages/cli/docs` (67 pages). `amond docs` lists, reads and searches them with no network, and every `amond docs read` pointer in `amond init`'s scaffolds resolves. Pages for packages amond does not ship are left out or edited, and `guide/migration.md` was dropped in review.
+- **Phase 2 (#35).** Twelve renamed blueprints and four kind roots are in `blueprints/`. `apps/registry` builds them into an assets-only Cloudflare Worker for `https://blueprints.amond.ai`, the CLI's new default registry, which `AMOND_REGISTRY_URL` still overrides. `.github/workflows/deploy-registry.yml` deploys it from `main`.
+- `docs-content.test.ts` guards both snapshots against the upstream brand, MDX syntax and links that don't resolve. TD-004 and TD-005 are resolved.
+
+### What Went Well
+
+- One shared `buildBlueprintIndex` serves both the CLI index and the registry build, so their slugs cannot drift apart.
+- The registry test runs the real `wrangler dev` rather than a stand-in server, so the 200 and 404 behavior is proven against this `wrangler.jsonc`.
+- The review loop found real rename slips that the brand test cannot see: an `amond<Name>Workflow` name, a lowercase `Amond` type, 17 "a `AmondX`" articles, two broken anchors, the wrong instrumentation contract, and guidance pointing at packages amond doesn't ship.
+
+### What Could Improve
+
+- Both phases ran to `max_iterations` before exiting `needs_human_read`. A pass over the imported pages for references to packages amond doesn't ship, before review, would have caught most of those findings in one place.
+- Both phases append to `.please/docs/review/rejected-findings.jsonl`, so every stack rebase conflicts there. Resolution is mechanical (keep both sides), but it recurs on each rebase.
+- Root `bun run check` exits 0 while each package's `bun check` fails with `E2BIG` (since #31), so the check gate is not verified on this track.
+- The `greptile` engine is enabled but its CLI is not installed, so no review here had it.
+
+### Tech Debt Created
+
+- The open review findings for both phases are in `known-issues.md`. None is a new tracker entry: each is a contained fix or a follow-up issue.
+- FR-10's live check is pending: the first deploy and `curl -fsS https://blueprints.amond.ai/daytona.md` need the Cloudflare secrets in the `registry` environment.
