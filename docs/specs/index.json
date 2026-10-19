@@ -1,0 +1,83 @@
+{
+  "generated_by": "/please:sync-specs",
+  "specs": [
+    {
+      "id": "SPEC-001",
+      "domain": "cli",
+      "feature": "content",
+      "created_at": "2026-10-19T06:38:18.625Z",
+      "updated_at": "2026-10-19T06:38:18.625Z",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ],
+      "traces": [],
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "kind": "functional",
+          "statement": "let users list, read and search the documentation pages through `amond docs`, `amond docs read <page>` and `amond docs search <query>`"
+        },
+        {
+          "id": "REQ-002",
+          "kind": "functional",
+          "statement": "include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages that depend on packages this repository did not import"
+        },
+        {
+          "id": "REQ-003",
+          "kind": "functional",
+          "statement": "include Flue's sandbox and tooling blueprints and the build-from-scratch guides for the sandbox, tooling, channel and database kinds, and list them when `amond add` runs with no arguments"
+        },
+        {
+          "id": "REQ-004",
+          "kind": "functional",
+          "statement": "deliver blueprint text to `amond add` and `amond update` from a hosted registry site on an amond-owned domain, which the CLI uses by default, with `AMOND_REGISTRY_URL` overriding that default"
+        },
+        {
+          "id": "REQ-005",
+          "kind": "functional",
+          "statement": "publish the included blueprints to that registry site, so that every blueprint the CLI lists can be fetched"
+        },
+        {
+          "id": "REQ-006",
+          "kind": "functional",
+          "statement": "leave out the blueprints and pages that depend on packages this repository did not import, and edit the remaining pages that mention those packages so they no longer direct users to them"
+        },
+        {
+          "id": "REQ-007",
+          "kind": "functional",
+          "statement": "present every page and blueprint under amond names: packages, the `amond` command, `amond.config.ts`, `AMOND_*` environment variables and `Amond<Name>Agent` classes"
+        },
+        {
+          "id": "REQ-008",
+          "kind": "functional",
+          "statement": "credit Flue as the source of the content, following the attribution convention set in #27"
+        },
+        {
+          "id": "REQ-009",
+          "kind": "functional",
+          "statement": "record the upstream Flue commit the content was taken from (v2.3.0, `deee93b`)"
+        },
+        {
+          "id": "REQ-010",
+          "kind": "functional",
+          "statement": "make every `amond docs read <page>` pointer in the files `amond init` scaffolds resolve to an included page"
+        },
+        {
+          "id": "REQ-011",
+          "kind": "non-functional",
+          "statement": "serve documentation pages without a network connection"
+        },
+        {
+          "id": "REQ-012",
+          "kind": "non-functional",
+          "statement": "fail a registry request within a bounded time with a message that names the registry, instead of hanging"
+        },
+        {
+          "id": "REQ-013",
+          "kind": "non-functional",
+          "statement": "fetch blueprint text by default only over HTTPS from a location the amond project controls, because coding agents act on that text; an `AMOND_REGISTRY_URL` override is the user's own explicit choice"
+        }
+      ]
+    }
+  ]
+}

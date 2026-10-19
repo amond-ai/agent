@@ -10,7 +10,8 @@
     "url": "git+https://github.com/amond-ai/agent.git"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "build": "turbo run build",
@@ -53,6 +54,7 @@
     "tsdown": "^0.23.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10",
+    "wrangler": "4.147.0",
     "zod": "4.5.2"
   },
   "catalogs": {

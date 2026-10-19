@@ -72,7 +72,7 @@ Start with the imported packages, which are the product:
   `cloudflare-worker-config.ts` holds `amondWorkerConfig()`, and `agent-scan.ts` finds the
   `'use agent'` modules.
 - `packages/cli/src/main.ts` — the `amond` CLI. `commands/` holds `init` and `run`, plus `docs`,
-  `add`, and `update`, which report that no bundled content exists yet.
+  `add`, and `update`, which serve the bundled docs and blueprint index.
 - `packages/agent-sdk/src/index.ts` — the client. `packages/agent-react/src/use-agent.ts` —
   `useAmondAgent`, built on the client.
 
@@ -117,8 +117,11 @@ SDK is a dependency, and `vite` is a peer. The build is `vite build`.
 ### `packages/cli/` — `amond`
 
 The CLI, imported from `@flue/cli`, with the `amond` binary. Its commands are `init`, `run`,
-`docs`, `add`, and `update`. `docs`, `add`, and `update` report that no bundled content exists
-until a later track ships it.
+`docs`, `add`, and `update`. `docs` serves the pages bundled in `packages/cli/docs`
+(`src/lib/docs-pages.ts`). `add` and `update` use the blueprint index that
+`packages/cli/scripts/generate-blueprint-index.ts` builds from repo-root `blueprints/`, and fetch
+blueprint text from `https://blueprints.amond.ai` (`apps/registry/`); `AMOND_REGISTRY_URL`
+overrides the registry.
 
 ### `packages/agent-sdk/` — `@amond-ai/agent-sdk`
 
@@ -179,6 +182,22 @@ A second adapter, kept as a spike to test whether `HarnessAdapter` holds for mor
 harness. It is `private: true` and absent from `release-please-config.json`, so it is never
 published. `codex(options)` throws.
 
+### `apps/registry/` — `@amond-ai/registry`
+
+The blueprint registry site that `amond add` and `amond update` fetch from, served at
+`https://blueprints.amond.ai`. It is an assets-only Cloudflare Worker: `wrangler.jsonc` names
+`./dist` and no Worker script. `bun run build` reads repo-root `blueprints/` and writes one
+`dist/<slug>.md` per blueprint and kind root, with the JSON frontmatter removed and an HTML-comment
+footer added that credits Flue and says amond modified the file. It also writes `LICENSE.txt` (the
+repository `LICENSE`) and `NOTICE.txt` (`apps/registry/NOTICE`) at the site root, which that footer points to. It derives slugs
+with `buildBlueprintIndex` from `packages/cli/src/lib/blueprint-index.ts`, the same function
+that writes the CLI's bundled index, so the CLI and the site cannot disagree on a name. An
+alias gets no file, because the CLI resolves an alias to its slug before it fetches. An unknown
+path returns a plain 404.
+
+The package is `private: true` and absent from `release-please-config.json`, so it is never
+published to npm.
+
 ### `scripts/`
 
 `publish.ts` publishes the workspace packages to npm in dependency order. It is safe to re-run
@@ -224,8 +243,9 @@ never depends on an adapter.
 **Unimplemented means it throws.** `createHandlers`, `createCloudflareRuntime`, `claudeCode`, and
 `codex` throw `not implemented`. None returns a plausible placeholder, because a shaped fake would
 let a build look deployable, or a test pass, while proving nothing. The imported CLI follows the
-same rule: `amond docs`, `add`, and `update` report that no bundled content exists rather than
-print fake pages.
+same rule for a broken install: `amond docs` errors when its docs directory is missing, and
+`amond add` and `update` error when the generated blueprint index is empty, rather than print fake
+pages.
 
 **The user owns the deploy config.** The Vite plugin generates the Worker entry and Durable Object
 classes, but not `wrangler.jsonc`. The README keeps this rule for the Cloudflare Sandbox
@@ -247,8 +267,8 @@ repository through `git subtree` into `packages/`, and upstream changes are port
 Flue. `agent-core`, `agent-durable`, and `agent-durable-cloudflare` are removed in #18.
 
 **Users see amond names only.** The imported packages' brand surfaces are renamed in source: `amond`, `amond.config.ts`, `AMOND_*`, `virtual:amond/*`, `Amond<Name>Agent`. No
-publish-time rewrite exists. Flue's name appears only in `NOTICE` and in each imported package's
-README.
+publish-time rewrite exists. Flue's name appears only in `NOTICE`, in each imported package's
+README, and in the attribution footer the registry build appends to every served blueprint.
 
 ## API boundaries
 

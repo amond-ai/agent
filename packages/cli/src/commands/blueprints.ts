@@ -130,14 +130,16 @@ async function blueprintAction(
 // AMOND_REGISTRY_TIMEOUT_MS is an internal-only override used by tests.
 const REGISTRY_FETCH_TIMEOUT_MS = 30_000
 
-// The registry base comes only from AMOND_REGISTRY_URL (internal-only, used
-// for local development against a locally served registry); there is no
-// default registry.
-function registryUrlFor(slug: string): string {
-  const registry = process.env.AMOND_REGISTRY_URL
-  if (!registry) {
-    throw new Error('No blueprint registry is configured. Set AMOND_REGISTRY_URL.')
-  }
+// Blueprint text comes from this static site by default (served over HTTPS from
+// a host the amond project controls). It lays out one file per slug:
+// `<registry>/<slug>.md`.
+export const DEFAULT_REGISTRY_URL = 'https://blueprints.amond.ai'
+
+// AMOND_REGISTRY_URL is a user-facing override of the default registry. It is the
+// user's own explicit choice, so any URL is accepted (including plain http for a
+// local registry); only the default is held to HTTPS. A blank value counts as unset.
+export function registryUrlFor(slug: string): string {
+  const registry = process.env.AMOND_REGISTRY_URL?.trim() || DEFAULT_REGISTRY_URL
   const base = registry.replace(/\/+$/, '')
   return `${base}/${slug}.md`
 }

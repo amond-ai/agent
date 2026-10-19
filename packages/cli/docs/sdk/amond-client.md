@@ -1,0 +1,553 @@
+---
+title: AmondClient
+description: The amond Agent SDK conversation client — send(), read(), wait(), abort(), history(), historyBefore(), observe(), and attachmentUrl().
+lastReviewedAt: 2026-07-21
+---
+
+## `AmondClient`
+
+```ts
+interface AmondClient {
+  readonly url: string;
+  send(options: AgentPromptOptions): Promise<AgentSendResult>;
+  read(target: AgentSendResult | string, options?: AgentReadOptions): Promise<AgentReadResult>;
+  wait(admission: AgentSendResult, options?: AgentWaitOptions): Promise<void>;
+  abort(options?: { signal?: AbortSignal }): Promise<AgentAbortResult>;
+  history(options?: AmondConversationHistoryOptions): Promise<AmondConversationSnapshot>;
+  historyBefore(
+    cursor: string,
+    options: AmondConversationHistoryBeforeOptions,
+  ): Promise<AmondConversationHistoryPage>;
+  observe(options?: AgentConversationObserveOptions): AgentConversationObservation;
+  attachmentUrl(attachmentId: string): string;
+}
+```
+
+Client for one agent conversation, created by [`createAmondClient(...)`](/docs/sdk/create-amond-client/). Every HTTP method rejects with [`AmondApiError`](/docs/sdk/errors/#amondapierror) on a non-2xx response; the stream-backed methods (`wait()`, `observe()`) additionally surface [stream errors](/docs/sdk/errors/#stream-errors).
+
+| Field | Description                                                                          |
+| ----- | ------------------------------------------------------------------------------------ |
+| `url` | The fully resolved conversation URL this client addresses, without a trailing slash. |
+
+For chat UIs, `useAmondAgent({ url })` from `@amond-ai/agent-react` wraps this client with maintained React state; see [React](/docs/guide/react/).
+
+## `send()`
+
+```ts
+send(options: AgentPromptOptions): Promise<AgentSendResult>;
+```
+
+`POST <conversation url>`. Starts one message delivery and resolves on admission (HTTP 202): the message is durably accepted, not processed. The result does not carry the agent's reply — pass it to [`read()`](#read) for the reply, [`wait()`](#wait) for just the outcome, or render progress with [`observe()`](#observe). The wire body is the `DeliveredMessage` verbatim, with `initialData` and `uid` as reserved top-level siblings.
+
+### `AgentPromptOptions`
+
+```ts
+interface AgentPromptOptions {
+  message: DeliveredMessage;
+  initialData?: unknown;
+  uid?: string | null;
+  signal?: AbortSignal;
+}
+```
+
+| Field         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`     | The message to deliver.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `initialData` | Instance-creation data, consulted only when this send creates the conversation: validated against the agent's `initialData` schema static when the agent declares one, recorded once, and read inside the agent with `useInitialData()` (see [Passing data to the agent](/docs/guide/agent-hooks/#passing-data-to-the-agent)). Ignored when the send continues an existing conversation; pair with `uid: null` to error instead.                                                                                                                    |
+| `uid`         | Send condition. Sends are conditional requests, with the instance uid playing the ETag. Omitted: unconditional — continues the instance or creates it. A string (a previous result's `uid`): continue only that incarnation. A missing instance or mismatched uid rejects with a 404 `AmondApiError` (`agent_instance_not_found`) and nothing is delivered. Cannot be combined with `initialData`. `null`: create only. An existing instance rejects with a 409 `AmondApiError` (`agent_instance_exists`, the existing uid in `body.error.meta.uid`). |
+| `signal`      | Aborts the HTTP request. It does not abort agent work; that is [`abort()`](#abort).                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+### `DeliveredMessage`
+
+```ts
+type DeliveredMessage =
+  | { kind: 'user'; body: string; attachments?: DeliveredAttachment[] }
+  | {
+      kind: 'signal';
+      type: string;
+      body: string;
+      attributes?: Record<string, string>;
+      tagName?: string;
+    };
+```
+
+The message delivered into the agent's session — the same unified shape the server accepts from `dispatch()`. `kind: 'user'` is a direct user chat turn addressing the agent 1:1. `kind: 'signal'` is a structured event — webhooks, schedules, and multi-user surfaces (a Slack thread, a GitHub issue) where the agent participates as one member and a `user` message would conflate other participants with the agent's own user.
+
+Signal fields:
+
+| Field        | Description                                                                                                                |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `type`       | Caller-defined signal type (`'slack.message'`); must be non-empty.                                                         |
+| `body`       | The signal content. A plain string; JSON-stringify structured payloads yourself.                                           |
+| `attributes` | Structured string metadata (sender identity and the like), carried alongside the body into model context.                  |
+| `tagName`    | Overrides the XML tag name the signal renders as in model context; the server rejects values that are not valid XML names. |
+
+### `DeliveredAttachment`
+
+```ts
+type DeliveredAttachment = DeliveredImageAttachment | DeliveredDocumentAttachment;
+
+interface DeliveredImageAttachment {
+  type: 'image';
+  data: string;
+  mimeType: string;
+  filename?: string;
+}
+
+interface DeliveredDocumentAttachment {
+  type: 'document';
+  data: string;
+  mimeType: 'application/pdf';
+  filename?: string;
+}
+```
+
+One attachment on a `kind: 'user'` message: an image, or a document (PDF) forwarded to the model as native document content. Native document input is supported on Anthropic Messages, Google Generative AI / Vertex, and OpenAI (and Azure OpenAI) Responses models; on any other model API the document is replaced in model context with a text placeholder saying it was omitted (and the runtime logs a one-time warning per API).
+
+| Field      | Description                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `type`     | `'image'` or `'document'`.                                                                                    |
+| `data`     | Base64-encoded bytes. The server rejects data longer than 14 MiB of characters.                               |
+| `mimeType` | The image MIME type (`image/png`, `image/jpeg`, …), or `application/pdf` for a document.                      |
+| `filename` | Optional original filename, surfaced on the projected `file` part (and passed to the provider for documents). |
+
+### `AgentSendResult`
+
+```ts
+interface AgentSendResult {
+  streamUrl: string;
+  offset: string;
+  submissionId: string;
+  uid: string;
+}
+```
+
+All fields are server-provided.
+
+| Field          | Description                                                                                                                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `streamUrl`    | Fully resolved Durable Streams URL for observing the conversation's events.                                                                                                                                               |
+| `offset`       | Opaque stream offset captured at admission. Reading `streamUrl` from this offset yields exactly this prompt's events; `wait()` consumes it.                                                                               |
+| `submissionId` | Correlates the admitted prompt with its messages and its settlement (the `submissionId` fields on [`AmondConversationMessage`](#amondconversationmessage) and [`AmondConversationSettlement`](#amondconversationsettlement)). |
+| `uid`          | The contacted instance's uid: minted when this send created the conversation, echoed when it continued one. Pass it back as the `uid` option to guarantee later sends reach this same incarnation.                        |
+
+## `read()`
+
+```ts
+read(target: AgentSendResult | string, options?: AgentReadOptions): Promise<AgentReadResult>;
+
+type AgentReadOptions = AgentWaitOptions;
+
+interface AgentReadResult {
+  text: string;
+  data: Record<string, unknown[]>;
+  metadata?: Record<string, unknown>;
+  submissionId: string;
+  uid?: string;
+}
+```
+
+Awaits one submission's settlement and resolves with its reply — the composed one-shot round trip:
+
+```ts
+const admission = await conversation.send({ message });
+const reply = await conversation.read(admission);
+```
+
+The target is the admission `send()` resolved with, or a bare submission id. The bare form is the **re-attach** path: it follows the conversation from the stream origin, so any process holding just the id can read the reply at any later time, and a submission that already settled resolves immediately — persist the small admission object (or just its `submissionId`) and a crashed script's replacement picks up where the lost await stopped.
+
+- Rejects with [`AmondExecutionError`](/docs/sdk/errors/#amondexecutionerror) when the submission settles failed or aborted, exactly as `wait()` does; the reply is fetched only after a completed settlement.
+- The reply fields are [`readSubmissionReply()`](#readsubmissionreply)'s projection (text, named data parts, metadata) plus the settled `submissionId`; `uid` carries over when the target admission had one.
+- `options` are [`AgentWaitOptions`](#agentwaitoptions) — `signal` stops the read locally (the submission keeps running; a durable stop is `abort()`), and `onEvent` streams chunks while waiting.
+- Internally this is `wait()` plus one `history()` read. Use those primitives directly when you only need the outcome, or when you already hold the materialized conversation via `observe()` — `readSubmissionReply()` applies to its state with no extra fetch.
+
+## `wait()`
+
+```ts
+wait(admission: AgentSendResult, options?: AgentWaitOptions): Promise<void>;
+```
+
+Awaits the admitted submission's completion by following the conversation's updates stream at `admission.streamUrl` from `admission.offset` (through the client's `fetch` and headers, so custom transports and auth apply). Settlement chunks for other submissions on the same conversation are ignored.
+
+The wait is an observer, not a driver: if the waiting process disappears, the submission still settles server-side, and the settlement is durably recorded on the conversation. Recover the outcome by calling `wait()` again with the same admission, or by reading it from `history()`/`observe()`.
+
+- Resolves `void` when the submission settles `completed`.
+- Rejects with [`AmondExecutionError`](/docs/sdk/errors/#amondexecutionerror) (`failure: 'failed'` or `'aborted'`) when it settles failed or aborted; the error's `error` property carries the serialized failure detail when the server recorded one.
+- Rejects with `AmondExecutionError` (`failure: 'terminal_event_missing'`) when the stream ends without this submission's settlement.
+- Rejects with the signal's reason when `options.signal` aborts (a `DOMException` named `AbortError` when the abort carried no reason).
+
+The agent's reply is not returned — settlement chunks carry only the outcome, which makes `wait()` the cheaper call when the outcome is all you need. For the reply, use [`read()`](#read), or extract it from a snapshot yourself with [`readSubmissionReply()`](#readsubmissionreply).
+
+### `AgentWaitOptions`
+
+```ts
+interface AgentWaitOptions {
+  signal?: AbortSignal;
+  backoffOptions?: BackoffOptions;
+  onEvent?: (event: ConversationStreamChunk) => void | Promise<void>;
+}
+```
+
+| Field            | Description                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `signal`         | Cancels the wait and its stream connection. The submission itself keeps running; stopping the work is [`abort()`](#abort).                                                                                                                                                                                                                   |
+| `backoffOptions` | Retry behavior for stream connection attempts (`BackoffOptions` from `@durable-streams/client`, re-exported by the SDK).                                                                                                                                                                                                                     |
+| `onEvent`        | Invoked for each conversation stream chunk while waiting and awaited before the next chunk is processed. Suited to progress output in scripts; prefer `observe()` for maintained UI state. `ConversationStreamChunk` is exported for first-party presenters but is not stable application API — see [Events and records](/docs/sdk/events/). |
+
+## `abort()`
+
+```ts
+abort(options?: { signal?: AbortSignal }): Promise<AgentAbortResult>;
+```
+
+`POST <conversation url>/abort`. Aborts all in-flight and queued durable work for the conversation — the currently running submission and any queued behind it. Resolves once the abort intent is recorded; the work settles to the distinct `aborted` outcome asynchronously. Observe that settlement via `wait()` (which rejects with `failure: 'aborted'`), `observe()`, or `history()`. Work that has already settled is not affected — an abort that loses the race to a finished response leaves it settled `completed`.
+
+| Field    | Description              |
+| -------- | ------------------------ |
+| `signal` | Aborts the HTTP request. |
+
+### `AgentAbortResult`
+
+```ts
+interface AgentAbortResult {
+  aborted: boolean;
+}
+```
+
+| Field     | Description                                                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `aborted` | `true` when there was in-flight or queued work that is now being aborted; `false` when the conversation was idle (nothing to abort). |
+
+## `history()`
+
+```ts
+history(options?: AmondConversationHistoryOptions): Promise<AmondConversationSnapshot>;
+```
+
+`GET <conversation url>?view=history`. Reads one materialized conversation snapshot — a point-in-time read with no live updates (for those, use [`observe()`](#observe)). A missing conversation rejects with a 404 `AmondApiError`. Before returning, the SDK resolves a ready-to-use `url` onto every durably recorded `file` part (see [`attachmentUrl()`](#attachmenturl)).
+
+```ts
+interface AmondConversationHistoryOptions {
+  limit?: number;
+  signal?: AbortSignal;
+}
+```
+
+| Field    | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `limit`  | Read only the newest `limit` messages (a positive integer). The snapshot keeps the head `offset` and every settlement, and adds a [`before`](#amondconversationsnapshot) cursor for [`historyBefore()`](#historybefore). `limit` counts every message, hidden and diagnostic ones included, so it is not a count of rendered rows. The window can hold more than `limit` messages: it always reaches back to include a response that is still streaming above messages delivered after it. Omit to read the whole conversation. |
+| `signal` | Aborts the request.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+A bounded read bounds the message (transcript) portion of the response, which dominates its size in long-running conversations. It is not a fixed size bound: settlements always ship whole, since clients derive whether a submission is still active from them, and they grow with the conversation. Nor does it reduce the runtime's own work, which materializes the conversation either way. A runtime that predates bounded history ignores `limit` and returns the whole conversation without a `before` field.
+
+### `AmondConversationSnapshot`
+
+```ts
+interface AmondConversationSnapshot {
+  v: 1;
+  conversationId: string;
+  offset: string;
+  messages: AmondConversationMessage[];
+  settlements: AmondConversationSettlement[];
+  before?: string | null;
+}
+```
+
+A materialized conversation read at a durable-stream offset — the whole transcript, or its newest messages on a bounded read.
+
+| Field         | Description                                                                                                                                                                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `v`           | Snapshot format version.                                                                                                                                                                                                                           |
+| `offset`      | Opaque durable-stream checkpoint at which the snapshot was materialized. Pass it back only through amond's own observation machinery; `observe()` manages it internally.                                                                            |
+| `messages`    | The conversation transcript, in order.                                                                                                                                                                                                             |
+| `settlements` | Terminal outcomes of the conversation's tracked submissions. Always the whole conversation's settlements, even on a bounded read.                                                                                                                  |
+| `before`      | Present only on bounded reads: an opaque cursor for [`historyBefore()`](#historybefore), or `null` when `messages` starts at the beginning of the conversation. Do not construct or parse it: a cursor names one message in one stream generation. |
+
+### `AmondConversationMessage`
+
+```ts
+interface AmondConversationMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  purpose: 'user' | 'assistant' | 'dispatch' | 'advisory';
+  display: 'visible' | 'hidden' | 'diagnostic';
+  submissionId?: string;
+  turnId?: string;
+  signal?: { tagName?: string; attributes?: Record<string, string> };
+  settlement?: { outcome: 'failed' | 'aborted' };
+  timestamp?: string;
+  parts: AmondConversationPart[];
+  metadata?: Record<string, unknown>;
+}
+```
+
+One message in a materialized conversation. An assistant message is one whole response: every model step of a tracked submission (text, tool calls, tool results, more text) accumulates as parts of a single message, in stream order — the same one-message-per-response shape as the AI SDK's `UIMessage`.
+
+| Field          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | Stable message identity; for an assistant response, the first step's message id.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `role`         | Coarse render lane, following the standard chat convention so a generic renderer can lay out a transcript. `system` covers every non-chat, non-answer message (internal control input and runtime advisories).                                                                                                                                                                                                                                                                                                                                          |
+| `purpose`      | Stable semantic classification, independent of rendered text: `user` is public chat, `assistant` is an answer, `dispatch` is internal dispatch/control input, `advisory` is a runtime advisory. The union may widen as the runtime grows typed agent-activity signals.                                                                                                                                                                                                                                                                                  |
+| `display`      | How a transcript UI should treat the message: `visible` for primary chat, `diagnostic` for an activity/diagnostics panel, `hidden` for runtime plumbing that should not normally be shown.                                                                                                                                                                                                                                                                                                                                                              |
+| `submissionId` | Present on messages produced by a tracked submission.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `turnId`       | Per-turn grouping identity, shared by every message recorded within one model round-trip; absent on messages recorded outside a turn.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `signal`       | Typed detail for a message projected from an internal runtime signal; present only on `system`-role messages.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `settlement`   | Structured settlement marker; present only on the terminal advisory the runtime appends when a submission settles `failed` or `aborted`, with the message's `submissionId` naming the settled submission. Completed submissions get no marker — the assistant reply is the marker — and the snapshot's `settlements` remains the programmatic outcome index.                                                                                                                                                                                            |
+| `timestamp`    | Server-authored capture time (ISO 8601) of the durable record behind the message, present for every role and for existing conversations. For a `user` or `system` message it is when the input or signal was applied to the conversation (not when the submission was accepted); for an assistant response it is when the response's first step started. Absent on the optimistic echo `useAmondAgent` renders before the server confirms a send. Server wall-clock: not guaranteed unique or monotonic, so order by array position, never by timestamp. |
+| `metadata`     | Entirely agent-authored: whatever the agent's `useResponseStart`/`useResponseFinish` hooks return, deep-merged in call order. The runtime stamps nothing into it — keys like `usage` or `model` are app conventions, present only when the agent attaches them. The server's capture time lives on `timestamp`.                                                                                                                                                                                                                                         |
+
+### `AmondConversationPart`
+
+```ts
+type AmondConversationPart =
+  | { type: 'text'; text: string; state: 'streaming' | 'done' }
+  | { type: 'reasoning'; text: string; state: 'streaming' | 'done' }
+  | { type: `data-${string}`; data: unknown }
+  | {
+      type: 'file';
+      mediaType: string;
+      id?: string;
+      size?: number;
+      url?: string;
+      filename?: string;
+    }
+  | ({ type: 'dynamic-tool'; toolName: string; toolCallId: string } & (
+      | { state: 'input-available'; input: unknown }
+      | { state: 'output-available'; input: unknown; output: unknown; durationMs?: number }
+      | { state: 'output-error'; input: unknown; errorText: string; durationMs?: number }
+    ));
+```
+
+One renderable part of a message. A part only ever carries materialized content plus a lifecycle `state`; streaming assembly details (delta sequencing, active blocks) are never exposed.
+
+| Part                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text` / `reasoning` | Streamed model output. `state` is `'streaming'` while deltas are still arriving and `'done'` once the block closes.                                                                                                                                                                                                                                                                                                                       |
+| `data-<name>`        | A named, client-facing data part streamed by the agent's `useDataWriter` writers (AI SDK convention: `data-<name>` type, payload on `data`). The name is the part's identity within the response — a later write updates the part in place, keeping its position. See [Streaming data to the client](/docs/guide/agent-hooks/#streaming-data-to-the-client).                                                                              |
+| `file`               | One attachment. `id` is the stable attachment id, present once the attachment is durably recorded and absent on a local optimistic echo. `url` is ready to use as an `<img>`/`<a>` source: the SDK fills it for recorded attachments, and an optimistic echo carries a `data:` URL preview; it may be absent when the bytes are not yet resolvable. `size` is in bytes, when known. `filename` is present when the uploader provided one. |
+| `dynamic-tool`       | One tool call, keyed by `toolCallId`. `input-available` means the call is recorded and its result pending; `output-available` carries the result on `output`; `output-error` carries the failure text on `errorText`. `durationMs` is the tool-handler execution time, present once the outcome is known (absent on outcomes recorded before the field shipped).                                                                          |
+
+### `AmondConversationSettlement`
+
+```ts
+interface AmondConversationSettlement {
+  submissionId: string;
+  outcome: 'completed' | 'failed' | 'aborted';
+  error?: unknown;
+  answeredBySubmissionId?: string;
+  timestamp?: string;
+}
+```
+
+Terminal outcome of one tracked agent submission within the conversation. `error` carries the serialized failure detail when the server recorded one. `answeredBySubmissionId` names the submission whose response answered this one (for a delivery that joined a live response, the host submission). `timestamp` is the server-authored capture time (ISO 8601) of the settlement.
+
+## `historyBefore()`
+
+```ts
+historyBefore(
+  cursor: string,
+  options: AmondConversationHistoryBeforeOptions,
+): Promise<AmondConversationHistoryPage>;
+
+interface AmondConversationHistoryBeforeOptions {
+  limit: number;
+  signal?: AbortSignal;
+}
+
+interface AmondConversationHistoryPage {
+  v: 1;
+  conversationId: string;
+  messages: AmondConversationMessage[];
+  before: string | null;
+}
+```
+
+`GET <conversation url>?view=history&before=<cursor>`. Reads the messages older than a `before` cursor — from a bounded [`history()`](#history) snapshot, a bounded [`observe()`](#observe) state, or a previous page — oldest first. `limit` (required) is the page size: at most that many messages, the newest of them. The page's own `before` continues backward; `null` means the start of the conversation was reached. Pages carry no offset and no settlements: they are not checkpoints, and the snapshot or observation that produced the cursor already holds every settlement.
+
+```ts
+const page = await client.history({ limit: 50 });
+if (page.before) {
+  const older = await client.historyBefore(page.before, { limit: 50 });
+}
+```
+
+A cursor from an earlier generation of the conversation stream (it was reset and regrown since the cursor was issued), or one whose message is gone, rejects with a 410 `AmondApiError` (`history_cursor_not_found`). This holds even when the new generation reuses the message's id. Discard pages read with it and re-read the newest window. Rejects with an `Error` when the runtime predates bounded history.
+
+## `readSubmissionReply()`
+
+```ts
+import { readSubmissionReply } from '@amond-ai/agent-sdk';
+
+function readSubmissionReply(
+  conversation: {
+    messages: AmondConversationMessage[];
+    settlements: AmondConversationSettlement[];
+    before?: string | null;
+  },
+  submissionId: string,
+): AgentSubmissionReply;
+
+interface AgentSubmissionReply {
+  text: string;
+  data: Record<string, unknown[]>;
+  metadata?: Record<string, unknown>;
+}
+```
+
+A pure function (no I/O, not a client method) that extracts one submission's reply from a materialized conversation — a `history()` snapshot or an `observe()` state. It is the projection behind [`read()`](#read); reach for it directly when you already hold the conversation and want no extra fetch:
+
+```ts
+const state = observation.getSnapshot().conversation;
+const reply = readSubmissionReply(state, admission.submissionId);
+```
+
+The reply is the final assistant message stamped with the given `submissionId`. A submission that joined a busy response settles under the host's response, so when the submission produced no assistant message of its own, the conversation's last assistant message is the coalesced reply that answered it — prefer this helper over hand-picking `messages.at(-1)`, which silently reads the wrong message on a busy conversation.
+
+- `text` — the reply's text parts joined with blank lines; `''` when none.
+- `data` — named client data parts (`useDataWriter`) on the reply message, keyed by part name, each in emit order.
+- `metadata` — agent-authored response metadata, when present.
+
+`settlements` is required, so a [`historyBefore()`](#historybefore) page (which carries none) is not accepted: a page is a slice of older history, not a conversation to read a reply from. The last-assistant-message fallback for legacy settlements applies only to a complete conversation: an unbounded snapshot or state, or a bounded one whose `before` is `null`. On a bounded window with older messages unloaded (`before` is a cursor), only replies inside the window resolve. The fallback is skipped, since that message may belong to another submission, and the reply resolves empty instead. `read()` always reads the whole conversation.
+
+The same projection backs the runtime's `init().read()`, so a reply read over HTTP and one read in-process agree.
+
+## `observe()`
+
+```ts
+observe(options?: AgentConversationObserveOptions): AgentConversationObservation;
+```
+
+Observes the materialized conversation across history catch-up and live updates. Returns synchronously with no network activity; the observation starts on its first `subscribe()` call.
+
+On start, the observation reads one history snapshot, publishes it, then follows the conversation's updates stream from the snapshot's offset, reducing each chunk into the maintained [`AmondConversationState`](#amondconversationstate). Failure handling:
+
+- A stream failure or unexpected end publishes phase `connecting` (with the error) and retries with exponential backoff — 1 s doubling per attempt, capped at 30 s — rehydrating a fresh snapshot rather than resuming incrementally. The attempt counter resets on every applied chunk and successful hydration.
+- HTTP 400, 401, and 403 are fatal: phase `error`, no automatic retry. `refresh()` tries again.
+- A 404 on the history read publishes phase `absent` (the conversation does not exist yet). The observation does not poll for it appearing; call `refresh()` to re-check.
+- Aborting `options.signal` or calling `close()` publishes the terminal phase `closed`.
+
+With `limit`, the observation hydrates only the newest `limit` messages. The observed window then grows forward with live updates and never shrinks: a rehydration after a reconnect reads from the window's oldest message through the head, so no gap opens below it, and `conversation-reset` updates (sent after compaction, for example) are cut to the same window by the runtime, or on the client by runtimes that cannot. The window may hold more than `limit` messages, because it always includes every message that can still receive live updates. The state's [`before`](#amondconversationstate) cursor reads older messages with [`historyBefore()`](#historybefore); keep those pages alongside the observation and render them before its messages. The cursor stays the same for the life of the window. If it changes, the observation has re-based on a fresh newest window, and pages loaded with the previous cursor should be discarded. That happens when the stream was reset and regrown (detected even when the new generation reuses message ids), when a reset no longer contains the window, or when `refresh()` was called. Settlements always cover the whole conversation.
+
+```ts
+const observation = client.observe({ limit: 50, live: 'sse' });
+let older: AmondConversationMessage[] = [];
+let cursor: string | null | undefined;
+
+async function loadOlder() {
+  cursor ??= observation.getSnapshot().conversation?.before;
+  if (!cursor) return;
+  const page = await client.historyBefore(cursor, { limit: 50 });
+  older = [...page.messages, ...older];
+  cursor = page.before;
+}
+```
+
+Chunk application is safe under at-least-once redelivery: every chunk carries a monotonic position, and chunks at or below the last applied position are dropped, so a replayed batch (an SSE reconnect) never double-applies.
+
+`getSnapshot`/`subscribe` match React's `useSyncExternalStore` contract, and each published update is a new snapshot object identity. `useAmondAgent` from `@amond-ai/agent-react` builds on this method; see [React](/docs/guide/react/).
+
+### `AgentConversationObserveOptions`
+
+```ts
+interface AgentConversationObserveOptions {
+  live?: ConversationLiveMode;
+  signal?: AbortSignal;
+  backoffOptions?: BackoffOptions;
+  limit?: number;
+}
+```
+
+| Field            | Description                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `live`           | Live update mode; defaults to `'long-poll'`.                                                                                                              |
+| `signal`         | Closes the observation when aborted.                                                                                                                      |
+| `backoffOptions` | Retry behavior for individual stream connection attempts (`BackoffOptions` from `@durable-streams/client`), beneath the observation's own rehydrate loop. |
+| `limit`          | Hydrate only the newest `limit` messages (a positive integer); see [`observe()`](#observe). Omit to observe the whole conversation.                       |
+
+### `ConversationLiveMode`
+
+```ts
+type ConversationLiveMode = 'long-poll' | 'sse';
+```
+
+| Mode        | Description                                                    |
+| ----------- | -------------------------------------------------------------- |
+| `long-poll` | Offset-resumed polling.                                        |
+| `sse`       | A long-lived stream, for lower-latency token-by-token updates. |
+
+Both modes are safe under redelivery. For a single point-in-time read with no live updates, use [`history()`](#history).
+
+### `AgentConversationObservation`
+
+```ts
+interface AgentConversationObservation {
+  getSnapshot(): AgentConversationObservationSnapshot;
+  subscribe(listener: () => void): () => void;
+  refresh(): void;
+  close(reason?: unknown): void;
+}
+```
+
+| Method                | Description                                                                                                                                                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getSnapshot()`       | The current snapshot; a new object per published update.                                                                                                                                                               |
+| `subscribe(listener)` | Registers a change listener; the first call starts the observation. Returns an unsubscribe function. Unsubscribing removes the listener but does not stop the underlying stream — only `close()` or the `signal` does. |
+| `refresh()`           | Drops the current connection and rehydrates from a fresh history snapshot. Use it to re-check an `absent` conversation or retry after a fatal `error`. No-op once closed.                                              |
+| `close(reason)`       | Terminally stops the observation and publishes phase `closed`; a provided reason is normalized to an `Error` and published on the snapshot's `error`.                                                                  |
+
+### `AgentConversationObservationSnapshot`
+
+```ts
+interface AgentConversationObservationSnapshot {
+  conversation: AmondConversationState | undefined;
+  offset: string | undefined;
+  phase: AgentConversationObservationPhase;
+  error: Error | undefined;
+}
+```
+
+| Field          | Description                                                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `conversation` | The materialized state; `undefined` before the first hydration completes and when the conversation is `absent`.                                  |
+| `offset`       | Opaque durable-stream checkpoint the state corresponds to.                                                                                       |
+| `phase`        | Connection lifecycle; see below.                                                                                                                 |
+| `error`        | The most recent connection failure while `connecting`, the fatal failure when `error`, or the normalized `close(reason)`; `undefined` otherwise. |
+
+### `AgentConversationObservationPhase`
+
+```ts
+type AgentConversationObservationPhase =
+  'loading' | 'connecting' | 'live' | 'absent' | 'error' | 'closed';
+```
+
+| Phase        | Description                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| `loading`    | The first hydration is in flight; no state yet.                                                   |
+| `connecting` | State may be present; the live connection is being established or re-established after a failure. |
+| `live`       | Following live updates.                                                                           |
+| `absent`     | The history read returned 404: the conversation does not exist.                                   |
+| `error`      | Fatal HTTP status (400, 401, 403); no automatic retry.                                            |
+| `closed`     | Terminal: the `signal` aborted or `close()` was called.                                           |
+
+### `AmondConversationState`
+
+```ts
+interface AmondConversationState {
+  conversationId: string;
+  messages: AmondConversationMessage[];
+  settlements: AmondConversationSettlement[];
+  before?: string | null;
+}
+```
+
+The live materialized conversation maintained by `observe()` — [`AmondConversationSnapshot`](#amondconversationsnapshot) without the `v`/`offset` envelope (the offset lives on the observation snapshot). `before` is present only on a bounded `observe({ limit })`: the cursor for the messages older than the observed window, or `null` when the window reaches the start of the conversation.
+
+## `attachmentUrl()`
+
+```ts
+attachmentUrl(attachmentId: string): string;
+```
+
+Returns the absolute URL for one `file` part's attachment bytes — `<conversation url>/attachments/<attachmentId>`, with the id URL-encoded — suitable as an `<img>`/`<a>` source. The route is part of every mounted agent router, accepts `GET` only, and returns 404 for an unknown attachment id.
+
+No request is made and no auth is attached: the returned string is only a URL, so the request made with it must itself satisfy whatever middleware guards the mount. You rarely need this method directly — `history()` and `observe()` resolve `url` onto every durably recorded `file` part already. Over a Cloudflare service binding the URL's host is the placeholder origin; forward it through the same fetcher (see [the service-binding guide](/docs/guide/cloudflare-target/#calling-a-private-agent-over-a-service-binding)).

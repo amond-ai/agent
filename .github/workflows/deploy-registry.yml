@@ -1,0 +1,56 @@
+name: Deploy registry
+
+on:
+  push:
+    branches:
+      - main
+    # blueprint-index.ts and LICENSE feed the registry build, so a change to either changes the output.
+    paths:
+      - blueprints/**
+      - apps/registry/**
+      - packages/cli/src/lib/blueprint-index.ts
+      - LICENSE
+  workflow_dispatch:
+
+permissions: {}
+
+# Never cancel: a deploy killed mid-upload could leave the site half-updated. The ref keeps a
+# skipped non-main dispatch out of main's group, where it would replace a pending main deploy.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # workflow_dispatch can run on any branch; only main may publish to the production domain.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # The concurrency group never cancels, so a stalled deploy must not hold it for 6 hours.
+    timeout-minutes: 15
+    # Lets the Cloudflare secrets be scoped to this environment instead of the whole repository.
+    environment: registry
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installs the bun and node versions pinned in .mise.toml.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          HUSKY: 0 # git hooks are for developer machines, not CI
+
+      - name: Build registry
+        run: bun run --filter @amond-ai/registry build
+
+      # Run wrangler's bin with node: under bun's runtime it can hang.
+      - name: Deploy to Cloudflare
+        working-directory: apps/registry
+        run: node ../../node_modules/wrangler/bin/wrangler.js deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

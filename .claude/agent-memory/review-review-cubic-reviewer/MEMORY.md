@@ -1,0 +1,1 @@
+- [cubic exit code semantics](cubic_exit_code.md) — cubic review exits 1 when issues are found (valid JSON on stdout); not a crash

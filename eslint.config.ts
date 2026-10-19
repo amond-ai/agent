@@ -12,6 +12,11 @@ export default pleaseai({
     'vendor/**',
     // Written by the CLI's prebuild from blueprints/ and gitignored.
     'packages/cli/src/generated/**',
+    // Code samples in the bundled docs pages are fragments (elided bodies, mixed languages) in
+    // Flue's own style; the pages teach, they do not compile. Prose is still linted.
+    'packages/cli/docs/**/*.md/**',
+    // Same for the blueprints: instructions to a coding agent, with code samples as templates.
+    'blueprints/**/*.md/**',
   ],
 }, {
   rules: sharedRules,

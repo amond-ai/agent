@@ -1,0 +1,21 @@
+{
+  "name": "@amond-ai/registry",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The blueprint registry site served at blueprints.amond.ai",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "check": "bun check",
+    "dev": "bun run build && wrangler dev",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "bun --bun vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
+  }
+}

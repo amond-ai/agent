@@ -1,0 +1,230 @@
+{
+  "id": "SPEC-001",
+  "level": "V_M",
+  "domain": "cli",
+  "feature": "content",
+  "depends": [],
+  "conflicts": [],
+  "traces": [],
+  "created_at": "2026-10-19T06:38:18.625Z",
+  "updated_at": "2026-10-19T06:38:18.625Z",
+  "source_tracks": [
+    "cli-docs-blueprints-20261018"
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "kind": "functional",
+      "statement": "let users list, read and search the documentation pages through `amond docs`, `amond docs read <page>` and `amond docs search <query>`",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ],
+      "scenarios": [
+        {
+          "name": "When a user runs `amond docs read guide/tools`, the system shall print that page's content and exit successfully.",
+          "given": [],
+          "when": [
+            "a user runs `amond docs read guide/tools`"
+          ],
+          "then": [
+            "print that page's content and exit successfully"
+          ]
+        },
+        {
+          "name": "When a user runs `amond docs search sandbox`, the system shall list the pages that match.",
+          "given": [],
+          "when": [
+            "a user runs `amond docs search sandbox`"
+          ],
+          "then": [
+            "list the pages that match"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "kind": "functional",
+      "statement": "include Flue's guide, reference, CLI and SDK pages, and its sandbox, deploy and tooling ecosystem pages, except the pages that depend on packages this repository did not import",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "kind": "functional",
+      "statement": "include Flue's sandbox and tooling blueprints and the build-from-scratch guides for the sandbox, tooling, channel and database kinds, and list them when `amond add` runs with no arguments",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ],
+      "scenarios": [
+        {
+          "name": "When a user runs `amond add` with no arguments, the system shall list the sandbox and tooling blueprints and the build-from-scratch kinds (sandbox, tooling, channel and database).",
+          "given": [],
+          "when": [
+            "a user runs `amond add` with no arguments"
+          ],
+          "then": [
+            "list the sandbox and tooling blueprints and the build-from-scratch kinds (sandbox, tooling, channel and database)"
+          ]
+        },
+        {
+          "name": "When a user runs `amond add channel <url>`, the system shall return the channel build-from-scratch guide with that URL filled in.",
+          "given": [],
+          "when": [
+            "a user runs `amond add channel <url>`"
+          ],
+          "then": [
+            "return the channel build-from-scratch guide with that URL filled in"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "kind": "functional",
+      "statement": "deliver blueprint text to `amond add` and `amond update` from a hosted registry site on an amond-owned domain, which the CLI uses by default, with `AMOND_REGISTRY_URL` overriding that default",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ],
+      "scenarios": [
+        {
+          "name": "When a coding agent runs `amond add sandbox daytona` and the registry is reachable, the system shall write that blueprint's Markdown to standard output.",
+          "given": [],
+          "when": [
+            "a coding agent runs `amond add sandbox daytona` and the registry is reachable"
+          ],
+          "then": [
+            "write that blueprint's Markdown to standard output"
+          ]
+        },
+        {
+          "name": "When a user runs `amond add channel <url>`, the system shall return the channel build-from-scratch guide with that URL filled in.",
+          "given": [],
+          "when": [
+            "a user runs `amond add channel <url>`"
+          ],
+          "then": [
+            "return the channel build-from-scratch guide with that URL filled in"
+          ]
+        },
+        {
+          "name": "Where `AMOND_REGISTRY_URL` is set, the system shall fetch blueprint text from that location instead of the default.",
+          "given": [
+            "`AMOND_REGISTRY_URL` is set"
+          ],
+          "when": [],
+          "then": [
+            "fetch blueprint text from that location instead of the default"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "kind": "functional",
+      "statement": "publish the included blueprints to that registry site, so that every blueprint the CLI lists can be fetched",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "kind": "functional",
+      "statement": "leave out the blueprints and pages that depend on packages this repository did not import, and edit the remaining pages that mention those packages so they no longer direct users to them",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ],
+      "scenarios": [
+        {
+          "name": "If a user asks for a left-out blueprint such as `amond add channel slack`, then the system shall report that it is unknown and list the available blueprints of that kind.",
+          "given": [],
+          "when": [
+            "a user asks for a left-out blueprint such as `amond add channel slack`"
+          ],
+          "then": [
+            "report that it is unknown and list the available blueprints of that kind"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-007",
+      "kind": "functional",
+      "statement": "present every page and blueprint under amond names: packages, the `amond` command, `amond.config.ts`, `AMOND_*` environment variables and `Amond<Name>Agent` classes",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ],
+      "scenarios": [
+        {
+          "name": "The system shall not show a page or blueprint that names a `@flue/` package, the `flue` command, `flue.config.ts` or a `FLUE_` variable, except in attribution lines.",
+          "given": [],
+          "when": [],
+          "then": [
+            "the system shall not show a page or blueprint that names a `@flue/` package, the `flue` command, `flue.config.ts` or a `FLUE_` variable, except in attribution lines"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-008",
+      "kind": "functional",
+      "statement": "credit Flue as the source of the content, following the attribution convention set in #27",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ]
+    },
+    {
+      "id": "REQ-009",
+      "kind": "functional",
+      "statement": "record the upstream Flue commit the content was taken from (v2.3.0, `deee93b`)",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ]
+    },
+    {
+      "id": "REQ-010",
+      "kind": "functional",
+      "statement": "make every `amond docs read <page>` pointer in the files `amond init` scaffolds resolve to an included page",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ],
+      "scenarios": [
+        {
+          "name": "When a user runs `amond docs read` with each page that `amond init`'s scaffolded files point to, the system shall print that page.",
+          "given": [],
+          "when": [
+            "a user runs `amond docs read` with each page that `amond init`'s scaffolded files point to"
+          ],
+          "then": [
+            "print that page"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-011",
+      "kind": "non-functional",
+      "statement": "serve documentation pages without a network connection",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ]
+    },
+    {
+      "id": "REQ-012",
+      "kind": "non-functional",
+      "statement": "fail a registry request within a bounded time with a message that names the registry, instead of hanging",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ]
+    },
+    {
+      "id": "REQ-013",
+      "kind": "non-functional",
+      "statement": "fetch blueprint text by default only over HTTPS from a location the amond project controls, because coding agents act on that text; an `AMOND_REGISTRY_URL` override is the user's own explicit choice",
+      "source_tracks": [
+        "cli-docs-blueprints-20261018"
+      ]
+    }
+  ]
+}
