@@ -1,8 +1,10 @@
+import { existsSync, readFileSync } from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineSandboxContract } from '../__contract__/define-sandbox-contract.ts'
+import type { Sandbox } from '../types.ts'
 import { local } from './local.ts'
 
 defineSandboxContract({
@@ -23,4 +25,102 @@ defineSandboxContract({
       },
     }
   },
+})
+
+describe('local() live spawn and run', () => {
+  let cwd: string
+  let sandbox: Sandbox
+
+  beforeEach(async () => {
+    cwd = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'amond-local-live-')))
+    sandbox = await local({ cwd }).createSandbox({ id: 'live' })
+  })
+
+  afterEach(async () => {
+    await fs.rm(cwd, { recursive: true, force: true })
+  })
+
+  const decoder = new TextDecoder()
+  const pidAlive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0)
+      return true
+    }
+    catch {
+      return false
+    }
+  }
+  const waitUntil = async (condition: () => boolean, ms: number): Promise<boolean> => {
+    const deadline = Date.now() + ms
+    while (Date.now() < deadline) {
+      if (condition()) { return true }
+      await new Promise(resolve => setTimeout(resolve, 25))
+    }
+    return condition()
+  }
+
+  it('delivers the first chunk before the command exits (AC-010)', async () => {
+    const proc = await sandbox.spawn({ command: 'echo first; sleep 1; echo second' })
+    let exited = false
+    void proc.wait().then(() => { exited = true }, () => { exited = true })
+
+    const reader = proc.stdout.getReader()
+    const first = await reader.read()
+
+    expect(decoder.decode(first.value)).toBe('first\n')
+    // Still running: a buffered spawn could only have produced this chunk after exit.
+    expect(exited).toBe(false)
+
+    let rest = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) { break }
+      rest += decoder.decode(value)
+    }
+    expect(rest).toBe('second\n')
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
+  })
+
+  it('kill() ends the whole process group', async () => {
+    const pidFile = path.join(cwd, 'bg.pid')
+    const proc = await sandbox.spawn({ command: 'sleep 30 & echo $! > bg.pid; sleep 30; wait' })
+    const written = (): boolean => existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim() !== ''
+    expect(await waitUntil(written, 2000)).toBe(true)
+    const bgPid = Number(readFileSync(pidFile, 'utf8').trim())
+    expect(pidAlive(bgPid)).toBe(true)
+
+    await proc.kill()
+    const settled = await Promise.race([
+      proc.wait().then(() => 'settled', () => 'settled'),
+      new Promise<string>(resolve => setTimeout(() => resolve('pending'), 1500)),
+    ])
+
+    expect(settled).toBe('settled')
+    expect(await waitUntil(() => !pidAlive(bgPid), 1500)).toBe(true)
+  })
+
+  it('resolves wait() with 124 on a timeout alone and rejects on a caller abort', async () => {
+    const timedOut = await sandbox.spawn({ command: 'sleep 5', timeoutMs: 100 })
+    await expect(timedOut.wait()).resolves.toEqual({ exitCode: 124 })
+
+    const controller = new AbortController()
+    const aborted = await sandbox.spawn({ command: 'sleep 5', abortSignal: controller.signal })
+    setTimeout(() => controller.abort(), 50)
+    await expect(aborted.wait()).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('run() keeps its output and exit codes, with 124 on timeout', async () => {
+    await expect(sandbox.run({ command: 'printf "é"; echo err >&2; exit 3' })).resolves.toEqual({
+      stdout: 'é',
+      stderr: 'err\n',
+      exitCode: 3,
+    })
+    await expect(sandbox.run({ command: 'sleep 5', timeoutMs: 100 })).resolves.toMatchObject({ exitCode: 124 })
+  })
+
+  it('run() decodes a multibyte character split across chunks', async () => {
+    const result = await sandbox.run({ command: 'printf "\\xe2\\x82"; sleep 0.2; printf "\\xac"' })
+
+    expect(result.stdout).toBe('€')
+  })
 })
