@@ -3,7 +3,7 @@
  *
  * Internal implementation behind the `local()` sandbox factory (see
  * `./local.ts`). Not exported from `@amond-ai/agent/node` — user code reaches
- * this through `local(...)`. `exec` shells out via `child_process.spawn`;
+ * this through `local(...)`. `run` and `spawn` shell out via `child_process.spawn`;
  * file methods call `node:fs/promises` directly.
  */
 import * as fs from 'node:fs/promises'
@@ -93,7 +93,7 @@ export interface LocalSandboxOptions {
   cwd?: string
   /**
    * Env vars layered on top of `DEFAULT_LOCAL_ENV_ALLOWLIST`. Set a key
-   * to `undefined` to drop a default. Per-call `opts.env` on `exec()`
+   * to `undefined` to drop a default. Per-call `env` on `run()`/`spawn()`
    * layers on top of this.
    *
    * Pass-through is intentionally explicit:
@@ -112,7 +112,7 @@ export interface LocalSandboxOptions {
 /**
  * Snapshot `process.env` through the allowlist, then layer user overrides.
  * Called once per sandbox; the result is captured in a closure and reused
- * across every `exec()` so per-call cost stays minimal and the env shape
+ * across every command so per-call cost stays minimal and the env shape
  * is stable for the sandbox's lifetime (host mutations to `process.env`
  * after construction are NOT picked up).
  */
@@ -156,37 +156,26 @@ export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
 
   const resolvePath = (p: string): string => (path.isAbsolute(p) ? p : path.resolve(cwd, p))
 
-  const execCommand = async (
-    command: string,
-    opts: { cwd?: string, env?: Record<string, string>, timeoutMs?: number, signal?: AbortSignal } | undefined,
-  ): Promise<ShellResult> => {
-    const signal = opts?.signal
+  const run = async (options: SandboxRunOptions): Promise<ShellResult> => {
+    const signal = options.abortSignal
     if (signal?.aborted) { throw abortErrorFor(signal) }
 
     // Compose timeoutMs with the caller's signal so signal-blind
     // callers still observe deadlines and signal-aware ones can abort
     // mid-flight. Mirrors the bashFactory adapter's behavior.
-    const { mergedSignal } = composeTimeoutSignal(opts?.timeoutMs, signal)
+    const { mergedSignal } = composeTimeoutSignal(options.timeoutMs, signal)
 
-    const result = await execShell(command, {
-      cwd: opts?.cwd ? resolvePath(opts.cwd) : cwd,
+    const result = await execShell(options.command, {
+      cwd: options.workingDirectory ? resolvePath(options.workingDirectory) : cwd,
       // Per-call env layers on top of `baseEnv` (allowlist +
       // sandbox `env` option). `process.env` is intentionally
       // never read here.
-      env: opts?.env ? { ...baseEnv, ...opts.env } : baseEnv,
+      env: options.env ? { ...baseEnv, ...options.env } : baseEnv,
       signal: mergedSignal,
     })
     if (signal?.aborted) { throw abortErrorFor(signal) }
     return result
   }
-
-  const run = (options: SandboxRunOptions): Promise<ShellResult> =>
-    execCommand(options.command, {
-      cwd: options.workingDirectory,
-      env: options.env,
-      timeoutMs: options.timeoutMs,
-      signal: options.abortSignal,
-    })
 
   /**
    * Live `spawn`: chunks reach the streams as the shell writes them.
@@ -246,7 +235,7 @@ export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
       () => fs.mkdir(path.dirname(resolved), { recursive: true }),
     )
 
-  const { readBinaryFile, readTextFile, writeBinaryFile, writeTextFile } = createSandboxFileMethods({
+  const fileMethods = createSandboxFileMethods({
     resolvePath,
     readText: resolved => fs.readFile(resolved, 'utf8'),
     readBytes,
@@ -264,24 +253,7 @@ export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
 
     spawn: spawnLive,
 
-    readBinaryFile,
-    readTextFile,
-    writeBinaryFile,
-    writeTextFile,
-
-    exec: execCommand,
-
-    async readFile(p) {
-      return fs.readFile(resolvePath(p), 'utf8')
-    },
-
-    async readFileBuffer(p) {
-      return readBytes(resolvePath(p))
-    },
-
-    async writeFile(p, content) {
-      await write(resolvePath(p), content)
-    },
+    ...fileMethods,
 
     async stat(p): Promise<FileStat> {
       const resolved = resolvePath(p)

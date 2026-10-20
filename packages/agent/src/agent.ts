@@ -4,7 +4,7 @@ import type { Static } from '@earendil-works/pi-ai'
 import { composeTimeoutSignal } from './abort.ts'
 import { decodeBase64 } from './base64.ts'
 import { FileNotFoundError } from './errors.ts'
-import { sliceLines } from './sandbox-streams.ts'
+import { bytesToStream, sliceLines } from './sandbox-streams.ts'
 import type { PackagedSkillDirectory, Sandbox } from './types.ts'
 
 const MAX_READ_LINES = 2000
@@ -71,15 +71,10 @@ export function overlayPackagedSkills(
       if (!options.path.startsWith(PACKAGED_SKILLS_ROOT)) { return env.readBinaryFile(options) }
       return readPackagedSkillBytes(packagedSkills, options.path) ?? null
     },
-    // The legacy path form, kept routed for adapter tool factories that
-    // still read through it until the legacy members are removed.
-    async readFile(path: string): Promise<string> {
-      const packagedFile = readPackagedSkillFile(packagedSkills, path)
-      if (packagedFile !== undefined) { return packagedFile }
-      if (path.startsWith(PACKAGED_SKILLS_ROOT)) {
-        throw new Error(`[amond] Packaged skill file not found: ${path}`)
-      }
-      return env.readFile(path)
+    async readFile(options) {
+      if (!options.path.startsWith(PACKAGED_SKILLS_ROOT)) { return env.readFile(options) }
+      const bytes = readPackagedSkillBytes(packagedSkills, options.path)
+      return bytes === undefined ? null : bytesToStream(bytes)
     },
   }
 }
