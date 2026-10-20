@@ -8,7 +8,7 @@ This is not one bug with competing causes. It is 25 independent claims about the
 
 Confirmed: 22 of the 23 findings, plus 2 defects cubic did not flag (N1, and N2, found during T005). One finding is declined, because its suggested fix contradicts the sandbox contract. Most were reproduced by running a check; #6, #10 and #21 were confirmed statically, against the text, the sandbox contract or the code, and #20 only in part. The **Verdict** column says which.
 
-Every check runs from a scratch directory under `/tmp/bp-verify/<group>/`. It extracts the blueprint's code verbatim, or rebuilds the exact string the code composes. Depending on the finding it then type-checks it against the SDK types the blueprint installs, runs it against the real SDK (Mirage), drives it with a simulated handle (boxd, Cloudflare) or a local CLI stand-in (islo), runs the shell string, or compares the text. No live provider account was used. Each runnable check fails on the original text and passes with the fix. The repository was not modified.
+Every check runs from a scratch directory under `/tmp/bp-verify/<group>/`. It extracts the blueprint's code verbatim, or rebuilds the exact string the code composes. Depending on the finding it then type-checks it against the SDK types the blueprint installs, runs it against the real SDK (Mirage), drives it with a simulated handle (boxd, Cloudflare) or a local CLI stand-in (islo), runs the shell string, or compares the text. No live provider account was used. Each runnable check for a confirmed finding fails on the original text and passes with the fix. The check for declined #15 instead shows the existing behavior is what the contract requires, so it has no fix. The repository was not modified.
 
 ### Feedback Loop
 
@@ -23,7 +23,7 @@ The scratch directories live in `/tmp` and do not survive a reboot. Each fix tas
 
 ### Hypothesis Ranking
 
-- **Ranked list:** one hypothesis per finding, in the form "if the flagged text causes the described defect, then the extracted code or composed command shows it, and the corrected text does not". The checks decided all 24, so ranking them against each other adds nothing. The shared root cause in Section 2 was the only cross-finding hypothesis.
+- **Ranked list:** one hypothesis per finding, in the form "if the flagged text causes the described defect, then the extracted code or composed command shows it, and the corrected text does not". The checks decided all 25 claims (24 confirmed, #15 declined), so ranking them against each other adds nothing. The shared root cause in Section 2 was the only cross-finding hypothesis.
 - **Per-hypothesis verdict:** Section 3, the **Verdict** column. Each verdict comes from a check that was run, except where the column says static.
 - **Confirmed hypothesis:** 22 findings plus N1 and N2 (N2 found during T005). The declined finding is Daytona `exists()` (`sandbox--daytona.md:226`).
 - **User intervention:** yes. Before the analysis the user chose "fix here, draft upstream reports" and "all 23 findings in one track".
