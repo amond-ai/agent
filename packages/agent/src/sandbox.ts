@@ -52,7 +52,7 @@ export interface OrphanedExecSettlement {
  * rejection time, and the message reaches the model verbatim through the
  * error tool result.
  */
-const ORPHANED_EXEC_SUFFIX =
+export const ORPHANED_EXEC_SUFFIX =
   ' The sandbox command could not be confirmed cancelled and may still be running.'
 
 /**
@@ -489,7 +489,8 @@ export type SandboxApi = SandboxDriver
  * abort. Adapter-facing only — the runtime never records orphan settlements.
  *
  * `spawn` is buffered: a driver has no streaming method, so the output
- * arrives when the command finishes. A missing file is detected by calling
+ * arrives when the command finishes. An adapter with its own streaming exec
+ * (as `cloudflareSandbox` has) replaces `spawn` on the returned object. A missing file is detected by calling
  * `exists` after a read fails.
  */
 export function sandboxFromDriver(

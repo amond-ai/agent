@@ -5,6 +5,8 @@ import { SandboxDiedError } from '../errors.ts'
 import type { SandboxDriver } from '../sandbox.ts'
 import { sandboxFromDriver } from '../sandbox.ts'
 import type { Sandbox, SandboxFactory } from '../types.ts'
+import type { StreamingCloudflareSandboxStub } from './cf-spawn.ts'
+import { spawnLive } from './cf-spawn.ts'
 
 /**
  * Minimal structural surface of a `@cloudflare/sandbox` Durable Object stub
@@ -34,6 +36,23 @@ export interface CloudflareSandboxStub {
    * container exits.
    */
   getState(): Promise<{ status: string }>
+  /**
+   * The Cloudflare Sandbox SDK's streaming exec: runs `command` and resolves
+   * to a server-sent-events byte stream (`data: {json}` frames, each ended by
+   * a blank line). Each JSON event has a `type` of `start`, `stdout`,
+   * `stderr`, `complete`, or `error`: `stdout`/`stderr` carry the output in
+   * `data`, `complete` carries `exitCode`, and `error` carries an `error`
+   * message. Optional: when present, `spawn` delivers output live; without
+   * it, `spawn` delivers the output when the command finishes.
+   */
+  execStream?(
+    command: string,
+    options?: {
+      cwd?: string
+      env?: Record<string, string>
+      timeout?: number
+    },
+  ): Promise<ReadableStream<Uint8Array>>
 }
 
 export interface CloudflareSandboxOptions {
@@ -301,9 +320,18 @@ function cfSandboxToSandbox(sandbox: CloudflareSandboxStub, cwd: string = '/work
     },
   }
 
-  return sandboxFromDriver(api, cwd, {
+  const base = sandboxFromDriver(api, cwd, {
     description:
       `A Cloudflare Sandbox Linux container. The working directory is ${cwd}; relative paths and ` +
       'commands resolve against it.',
   })
+  if (!hasExecStream(sandbox)) { return base }
+  const live = { stub: sandbox, cwd, resolvePath: base.resolvePath, guard: guarded }
+  return { ...base, spawn: options => spawnLive(live, options) }
+}
+
+function hasExecStream(
+  sandbox: CloudflareSandboxStub,
+): sandbox is StreamingCloudflareSandboxStub {
+  return typeof sandbox.execStream === 'function'
 }
