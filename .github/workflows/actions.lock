@@ -11,7 +11,7 @@ workflows:
         - 'jdx/jactionlint@v2.2.0'
     '.github/workflows/release-please.yml':
         - 'actions/checkout@v7.0.1'
-        - 'actions/create-github-app-token@v3.2.0'
+        - 'actions/create-github-app-token@v3.3.0'
         - 'googleapis/release-please-action@v5.0.0'
         - 'jdx/mise-action@v5.1.2'
 dependencies:
@@ -20,9 +20,9 @@ dependencies:
         commit: 'sha1-3d3c42e5aac5ba805825da76410c181273ba90b1'
         owner_id: 44036562
         repo_id: 197814629
-    'actions/create-github-app-token@v3.2.0':
-        ref: 'v3.2.0'
-        commit: 'sha1-bcd2ba49218906704ab6c1aa796996da409d3eb1'
+    'actions/create-github-app-token@v3.3.0':
+        ref: 'v3.3.0'
+        commit: 'sha1-64ab729a6294000f5aa4a4bc0b73d1f32bc45510'
         owner_id: 44036562
         repo_id: 642580244
     'github/codeql-action@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2':
