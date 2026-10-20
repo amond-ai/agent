@@ -320,18 +320,18 @@ you can't tell which target they're on, check `vite.config.ts` for the
 For the Node target:
 
 ```bash
-npm install @struktoai/mirage-node@^0.0.2 @struktoai/mirage-core@0.0.2
+npm install @struktoai/mirage-node@^0.0.6 @struktoai/mirage-core@0.0.6
 ```
 
 For the Cloudflare target:
 
 ```bash
-npm install @struktoai/mirage-browser@^0.0.2 @struktoai/mirage-core@0.0.2
+npm install @struktoai/mirage-browser@^0.0.6 @struktoai/mirage-core@0.0.6
 ```
 
 The adapter imports types from `@struktoai/mirage-core`, so install it as a
 direct dependency. Both runtime packages pin it to their own exact version
-(`^0.0.2` resolves to `0.0.2`, which pins core `0.0.2`); keep the two versions
+(`^0.0.6` resolves to `0.0.6`, which pins core `0.0.6`); keep the two versions
 identical. Without a direct dependency, pnpm's strict layout and Yarn PnP fail
 the typecheck with TS2307.
 
@@ -416,7 +416,7 @@ Fix the install steps, `readdir` and `rm`. The adapter imports types from `@stru
 
 In the generated file, `readdir` strips trailing slashes before taking the basename. `rm` with `recursive` or `force` now runs `rm [-r] [-f] --` through the shell and throws on a non-zero exit. A plain `rm` calls `stat` and dispatches to `rmdir` or `unlink` by type. The `SandboxOperationUnsupportedError` import is gone.
 
-Install `@struktoai/mirage-core` as a direct dependency, at the runtime package's exact version. Change the install command to `npm install @struktoai/mirage-node@^0.0.2 @struktoai/mirage-core@0.0.2`, or `npm install @struktoai/mirage-browser@^0.0.2 @struktoai/mirage-core@0.0.2` for the Cloudflare target. With another package manager, add the same two packages.
+Install `@struktoai/mirage-core` as a direct dependency, at the runtime package's exact version. Move the install to 0.0.6, the version the adapter type-checks against (`^0.0.2` resolved to exactly 0.0.2, whose types fail the `stat` comparison), and add core at the same exact version: change the install command to `npm install @struktoai/mirage-node@^0.0.6 @struktoai/mirage-core@0.0.6`, or `npm install @struktoai/mirage-browser@^0.0.6 @struktoai/mirage-core@0.0.6` for the Cloudflare target. With another package manager, add the same two packages.
 
 ```diff
 --- a/src/sandboxes/mirage.ts
