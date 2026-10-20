@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 1,
+  "version": 2,
   "website": "https://boxd.sh",
   "aliases": ["@boxd-sh/sdk"]
 }
@@ -45,7 +45,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxDriver` contract.
 
 ```ts
-// amond-blueprint: sandbox/boxd@1
+// amond-blueprint: sandbox/boxd@2
 /**
  * boxd adapter for amond.
  *
@@ -123,7 +123,9 @@ async function waitForReady(box: BoxdBox, timeoutMs: number): Promise<void> {
 	let lastErr: unknown;
 	while (Date.now() < deadline) {
 		try {
-			const probe = await box.exec(['true']);
+			const probe = await box.exec(['true'], {
+				timeoutMs: Math.max(1, deadline - Date.now()),
+			});
 			if (probe.exitCode === 0) return;
 		} catch (err) {
 			lastErr = err;
@@ -409,7 +411,13 @@ export function boxd(box: BoxdBox, options?: BoxdAdapterOptions): SandboxFactory
 			const sandboxCwd = options?.cwd ?? '/home/boxd';
 			// Probe once per box, not once per session.
 			readyPromise ??= waitForReady(box, options?.readyTimeoutMs ?? 30_000);
-			await readyPromise;
+			try {
+				await readyPromise;
+			} catch (err) {
+				// Do not cache a failed probe: the next call probes again.
+				readyPromise = undefined;
+				throw err;
+			}
 			const driver = new BoxdSandboxDriver(box, options?.client);
 			return sandboxFromDriver(driver, sandboxCwd);
 		},
@@ -511,3 +519,29 @@ When updating an existing integration, inspect and compare it against this compl
 ### Version 1 — 2026-06-14
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Bound the readiness probe and retry it after a failure. A probe that never answered blocked `createSandbox()` forever because `box.exec()` has no default timeout, and a rejected probe was cached, so every later call failed without probing again.
+
+```diff
+--- a/src/sandboxes/boxd.ts
++++ b/src/sandboxes/boxd.ts
+-// amond-blueprint: sandbox/boxd@1
++// amond-blueprint: sandbox/boxd@2
+@@
+-			const probe = await box.exec(['true']);
++			const probe = await box.exec(['true'], {
++				timeoutMs: Math.max(1, deadline - Date.now()),
++			});
+@@
+ 			readyPromise ??= waitForReady(box, options?.readyTimeoutMs ?? 30_000);
+-			await readyPromise;
++			try {
++				await readyPromise;
++			} catch (err) {
++				// Do not cache a failed probe: the next call probes again.
++				readyPromise = undefined;
++				throw err;
++			}
+```
