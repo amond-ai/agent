@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 1,
+  "version": 2,
   "website": "https://modal.com"
 }
 ---
@@ -31,8 +31,8 @@ A few things worth knowing about Modal that shape this adapter:
   amond's `FileStat` semantics exact.
   This means the user's image needs `bash` and basic GNU coreutils
   available — Modal's default `python:3.13-slim` and `alpine:3.21` images
-  both work fine. (Alpine ships BusyBox `stat`, which the adapter handles
-  in the implementation below.)
+  both work fine. (Alpine ships BusyBox `stat`; the adapter runs the same
+  `stat -c` format on both.)
 - Modal's transports don't reliably settle a call that is in flight when
   the sandbox dies — the exec wait path retries transient errors
   indefinitely when the caller sets no deadline — which would leave an
@@ -58,7 +58,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxDriver` contract.
 
 ```ts
-// amond-blueprint: sandbox/modal@1
+// amond-blueprint: sandbox/modal@2
 /**
  * Modal adapter for amond.
  *
@@ -234,14 +234,10 @@ class ModalSandboxDriver implements SandboxDriver {
 	}
 
 	async stat(path: string): Promise<FileStat> {
-		// Try GNU stat first (works on Debian/Ubuntu/python:3.13-slim).
-		// Fall back to BusyBox stat (Alpine). The format string differs:
-		//   GNU:     %F gives "regular file" / "directory" / "symbolic link"
-		//   BusyBox: %F gives the same words but is positional only with `-c`.
-		// Both implementations accept `stat -c '%F|%s|%Y' <path>`.
+		// A single `stat -c '%F|%s|%Y'` call works on both GNU coreutils and BusyBox.
 		const result = await this.runShell(
 			'stat',
-			`stat -c '%F|%s|%Y' ${shellQuote(path)} 2>/dev/null`,
+			`stat -c '%F|%s|%Y' ${shellQuote(path)}`,
 		);
 		if (result.exitCode !== 0 || !result.stdout.trim()) {
 			throw new Error(
@@ -487,3 +483,26 @@ When updating an existing integration, inspect and compare it against this compl
 ### Version 1 — 2026-06-14
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Surface `stat`'s own error. The command ended in `2>/dev/null`, so a failed `stat` always threw `exit 1` instead of its message (for example `No such file or directory`). The comment also promised a GNU-then-BusyBox fallback that the code never implemented; it now says a single `stat -c` call is used.
+
+```diff
+--- a/src/sandboxes/modal.ts
++++ b/src/sandboxes/modal.ts
+-// amond-blueprint: sandbox/modal@1
++// amond-blueprint: sandbox/modal@2
+@@
+-		// Try GNU stat first (works on Debian/Ubuntu/python:3.13-slim).
+-		// Fall back to BusyBox stat (Alpine). The format string differs:
+-		//   GNU:     %F gives "regular file" / "directory" / "symbolic link"
+-		//   BusyBox: %F gives the same words but is positional only with `-c`.
+-		// Both implementations accept `stat -c '%F|%s|%Y' <path>`.
++		// A single `stat -c '%F|%s|%Y'` call works on both GNU coreutils and BusyBox.
+ 		const result = await this.runShell(
+ 			'stat',
+-			`stat -c '%F|%s|%Y' ${shellQuote(path)} 2>/dev/null`,
++			`stat -c '%F|%s|%Y' ${shellQuote(path)}`,
+ 		);
+```
