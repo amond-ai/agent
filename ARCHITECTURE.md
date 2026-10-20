@@ -189,7 +189,7 @@ The blueprint registry site that `amond add` and `amond update` fetch from, serv
 `./dist` and no Worker script. `bun run build` reads repo-root `blueprints/` and writes one
 `dist/<slug>.md` per blueprint and kind root, with the JSON frontmatter removed and an HTML-comment
 footer added that credits Flue, says amond modified the file, and points to the change record
-in `blueprints/README.md` → Changes from Flue. It also writes `LICENSE.txt` (the
+in `apps/registry/CHANGES.md`. It also writes `LICENSE.txt` (the
 repository `LICENSE`) and `NOTICE.txt` (`apps/registry/NOTICE`) at the site root, which that footer points to. It derives slugs
 with `buildBlueprintIndex` from `packages/cli/src/lib/blueprint-index.ts`, the same function
 that writes the CLI's bundled index, so the CLI and the site cannot disagree on a name. An
