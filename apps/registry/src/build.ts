@@ -28,8 +28,10 @@ export function attributionFooter(file: string): string {
   return [
     '<!--',
     `Derived from Flue's blueprint \`${file}\` (https://github.com/withastro/flue, commit deee93b),`,
-    'licensed under the Apache License, Version 2.0, and modified by amond: renamed to amond and',
-    'edited to remove references to packages amond does not ship.',
+    'licensed under the Apache License, Version 2.0, and modified by amond: renamed to amond,',
+    'edited to remove references to packages amond does not ship, and in some files corrected.',
+    'Every change is listed under "Changes from Flue" in blueprints/README.md at',
+    'https://github.com/amond-ai/agent.',
     `The license and notice are ${LICENSE_FILE} and ${NOTICE_FILE} at the root of the registry`,
     'this file was fetched from.',
     '-->',

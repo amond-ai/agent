@@ -83,6 +83,15 @@ describe('buildRegistry over the repository blueprints', () => {
     }
   })
 
+  it('ends each file with a footer that credits Flue and points to the change record', () => {
+    const footer = attributionFooter('sandbox--e2b.md')
+    expect(footer).toContain('`sandbox--e2b.md`')
+    expect(footer).toContain('https://github.com/withastro/flue, commit deee93b')
+    expect(footer).toContain(LICENSE_FILE)
+    expect(footer).toContain(NOTICE_FILE)
+    expect(footer).toContain('"Changes from Flue" in blueprints/README.md')
+  })
+
   it('serves the repository license and a notice that credits Flue', async () => {
     const license = fileURLToPath(new URL('../../../LICENSE', import.meta.url))
     expect(await readFile(join(outDir, LICENSE_FILE), 'utf-8')).toBe(await readFile(license, 'utf-8'))
@@ -90,6 +99,7 @@ describe('buildRegistry over the repository blueprints', () => {
     expect(notice).toContain('Apache License, Version 2.0')
     expect(notice).toContain('https://github.com/withastro/flue')
     expect(notice).toContain('deee93b')
+    expect(notice).toContain('"Changes from Flue" in blueprints/README.md')
   })
 
   it('removes a file left from an earlier build', async () => {
