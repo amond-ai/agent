@@ -54,8 +54,9 @@ has a new version with upgrade instructions, so an existing setup can apply the 
 was declined because its suggested change would break the documented rule that sandbox adapters
 follow. We have also prepared a report for the upstream project for each problem.
 
-**How to check it**: after the fix ships, `amond add <name>` returns the corrected guides, and
-`amond update` returns them with upgrade instructions for an existing integration. Code an agent writes from a corrected
+**How to check it**: after the fix ships, `amond add <kind> <name> --print` (for example
+`amond add sandbox exedev --print`) prints the corrected guide, and `amond update <kind> <name>`
+returns it with upgrade instructions for an existing integration. Code an agent writes from a corrected
 guide compiles and reports failures with their real cause.
 
 **Release status**: the fix is ready for review (pull requests #39, #40 and #42) and is not merged

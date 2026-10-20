@@ -552,7 +552,7 @@ The comment says the adapter tries GNU `stat` and then falls back to BusyBox. Th
 
 Reproduction: `grep -c "Fall back" blueprints/sandbox--modal.md` prints 1, and `stat` is called once.
 
-Fix: replace the comment with one line, and reword line 34 to match.
+Fix: replace the comment with one line that describes the single call, and reword line 34 to match. The comment cites the documented format only; we did not run it on BusyBox.
 
 ```diff
 -		// Try GNU stat first (works on Debian/Ubuntu/python:3.13-slim).
@@ -560,7 +560,7 @@ Fix: replace the comment with one line, and reword line 34 to match.
 -		//   GNU:     %F gives "regular file" / "directory" / "symbolic link"
 -		//   BusyBox: %F gives the same words but is positional only with `-c`.
 -		// Both implementations accept `stat -c '%F|%s|%Y' <path>`.
-+		// A single `stat -c '%F|%s|%Y'` call works on both GNU coreutils and BusyBox.
++		// One `stat -c '%F|%s|%Y'` call. GNU coreutils and BusyBox both document `-c` with these directives.
 ```
 
 On our side we bumped the blueprint to `version: 2` and added a `### Version 2` Upgrade Guide entry.

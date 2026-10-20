@@ -89,7 +89,7 @@ describe('buildRegistry over the repository blueprints', () => {
     expect(footer).toContain('https://github.com/withastro/flue, commit deee93b')
     expect(footer).toContain(LICENSE_FILE)
     expect(footer).toContain(NOTICE_FILE)
-    expect(footer).toContain('apps/registry/CHANGES.md')
+    expect(footer).toContain('https://github.com/amond-ai/agent/blob/main/apps/registry/CHANGES.md')
   })
 
   it('serves the repository license and a notice that credits Flue', async () => {
@@ -99,7 +99,7 @@ describe('buildRegistry over the repository blueprints', () => {
     expect(notice).toContain('Apache License, Version 2.0')
     expect(notice).toContain('https://github.com/withastro/flue')
     expect(notice).toContain('deee93b')
-    expect(notice).toContain('apps/registry/CHANGES.md')
+    expect(notice).toContain('https://github.com/amond-ai/agent/blob/main/apps/registry/CHANGES.md')
   })
 
   it('removes a file left from an earlier build', async () => {

@@ -84,7 +84,7 @@ Considered and not built:
 
 ### Phase 3: Text fixes, change record, attribution
 
-- [x] T009 Align the Daytona create examples and the sandbox directive wording (file: blueprints/sandbox.md) [FR-9, FR-10]
+- [x] T009 Align the Daytona create examples and the sandbox directive wording (file: blueprints/sandbox--daytona.md, blueprints/sandbox.md) [FR-9, FR-10]
   Validation: both Daytona examples call `client.create()` (#16). `sandbox.md` says the directive prologue must contain `'use agent';` (#23). Neither version changes.
   Method: `grep -n "client.create" blueprints/sandbox--daytona.md`; `bun /tmp/bp-verify/islo-modal/scan-check.ts` from `packages/agent-vite`; `bun --filter amond test`
 - [x] T010 Record every change from Flue deee93b (file: apps/registry/CHANGES.md) (depends on T001, T002, T003, T004, T005, T006, T007, T008, T009) [FR-12, AC-018, AC-019]
@@ -153,7 +153,7 @@ Considered and not built:
 - 2026-10-20: N2 (found during T005): the v1 install `^0.0.2` resolves to exactly 0.0.2, and against 0.0.2's types the adapter's `stat` comparison fails with TS2367. The install moves to `^0.0.6` with core pinned at `0.0.6`, the version the investigation verified behavior against.
 - 2026-10-20: The islo chunked `writeFile` stages its payload in the sandbox's `/tmp`, not next to the target, so a failed write never leaves a stray file in the user's directory. This assumes a writable `/tmp`.
 - 2026-10-20: The boxd `readyPromise` reset sits in the `createSandbox()` catch. Every concurrent awaiter's catch runs in the same microtask burst, so the next request after a failure probes again.
-- 2026-10-20: The change record moved from `blueprints/README.md` to `apps/registry/CHANGES.md` (user's choice). `docs-content.test.ts` bans the upstream name in `blueprints/` outside one attribution line, and the record needs Flue's exact names. The README's Attribution section links to it.
+- 2026-10-20: The change record moved from `blueprints/README.md` to `apps/registry/CHANGES.md` (user's choice). `docs-content.test.ts` bans the upstream name in `blueprints/` outside one attribution line, and the record needs Flue's exact names. The README's Attribution section names it.
 
 ## Surprises & Discoveries
 
@@ -172,7 +172,7 @@ Considered and not built:
 
 ### What Went Well
 
-- Checking each finding with a scratch harness against the real SDK gave every verdict and fix a concrete before/after, and caught N1 and N2.
+- Every finding got its own check, with a before and after for each fix: `tsc` against the installed SDK types, a run against a real Mirage `Workspace`, simulations of the boxd and Cloudflare handles, a local stand-in for the islo CLI, the exact shell string, or a text check. That caught N1 and N2. No live provider account was used.
 - Grouping phases by whole blueprint gave each file exactly one version bump.
 - Parallel worktree executors for the five independent Phase 2 blueprints finished in one round.
 

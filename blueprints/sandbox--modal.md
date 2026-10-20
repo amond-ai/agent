@@ -234,7 +234,7 @@ class ModalSandboxDriver implements SandboxDriver {
 	}
 
 	async stat(path: string): Promise<FileStat> {
-		// A single `stat -c '%F|%s|%Y'` call works on both GNU coreutils and BusyBox.
+		// One `stat -c '%F|%s|%Y'` call. GNU coreutils and BusyBox both document `-c` with these directives.
 		const result = await this.runShell(
 			'stat',
 			`stat -c '%F|%s|%Y' ${shellQuote(path)}`,
@@ -499,7 +499,7 @@ Surface `stat`'s own error. The command ended in `2>/dev/null`, so a failed `sta
 -		//   GNU:     %F gives "regular file" / "directory" / "symbolic link"
 -		//   BusyBox: %F gives the same words but is positional only with `-c`.
 -		// Both implementations accept `stat -c '%F|%s|%Y' <path>`.
-+		// A single `stat -c '%F|%s|%Y'` call works on both GNU coreutils and BusyBox.
++		// One `stat -c '%F|%s|%Y'` call. GNU coreutils and BusyBox both document `-c` with these directives.
  		const result = await this.runShell(
  			'stat',
 -			`stat -c '%F|%s|%Y' ${shellQuote(path)} 2>/dev/null`,
