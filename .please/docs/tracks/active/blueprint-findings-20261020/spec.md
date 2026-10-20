@@ -15,6 +15,8 @@ against the SDK it targets:
 - 1 is declined because its suggested fix breaks the sandbox contract.
 - A 24th defect turned up along the way: the vitest-evals install step pulls a library version
   the blueprint's code no longer compiles against.
+- A 25th turned up during the fix: the Mirage install step pins an older library version than
+  the one the adapter was checked against, and the adapter does not compile against it.
 
 Every defect came from Flue's own text, which has not changed upstream since the import. Without
 a fix, an agent following these blueprints writes code that does one of these:

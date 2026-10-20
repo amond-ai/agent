@@ -65,20 +65,20 @@ Considered and not built:
 
 ### Phase 2: Other blueprints whose generated code changes
 
-- [ ] T004 Cancel a Cloudflare Computer exec aborted while starting, and bump it to version 2 (file: blueprints/sandbox--cloudflare-computer.md) [FR-3, FR-11, AC-006, AC-021]
+- [x] T004 Cancel a Cloudflare Computer exec aborted while starting, and bump it to version 2 (file: blueprints/sandbox--cloudflare-computer.md) [FR-3, FR-11, AC-006, AC-021]
   Validation: when the signal is already aborted as `settleExec` runs, the exec rejects with `AbortError` and the run is killed once and disposed (#7).
   Method: `bun sim.ts` in `/tmp/bp-verify/cloudflare` after re-extracting; case B prints `rejected:AbortError killed= true`; `bun --filter amond test`
-- [ ] T005 Fix the Mirage install steps, `readdir` and `rm`, and bump it to version 2 (file: blueprints/sandbox--mirage.md) [FR-4, FR-11, AC-007, AC-008, AC-009, AC-010, AC-020, AC-021]
+- [x] T005 Fix the Mirage install steps, `readdir` and `rm`, and bump it to version 2 (file: blueprints/sandbox--mirage.md) [FR-4, FR-11, AC-007, AC-008, AC-009, AC-010, AC-020, AC-021]
   Validation: the install steps make the blueprint's own `tsc --noEmit` pass under pnpm (#8). `/data/sub/` lists as `sub` (#9). `rm` with `force` on a missing path resolves, and with `recursive` alone it rejects (#10). A failed file removal reports the `unlink` reason (#11).
   Method: the pnpm `tsc` check, the `readdir` one-liner and `bun stub.ts` in `/tmp/bp-verify/mirage`; `bun --filter amond test`
   STOP: with `mirage-node` installed, Mirage's shell `rm` rejects `-r`, `-f` or `--`, or its missing-path exit codes differ from coreutils.
-- [ ] T006 Bound the boxd readiness probe and retry it after a failure, and bump it to version 2 (file: blueprints/sandbox--boxd.md) [FR-6, FR-11, AC-013, AC-014, AC-021]
+- [x] T006 Bound the boxd readiness probe and retry it after a failure, and bump it to version 2 (file: blueprints/sandbox--boxd.md) [FR-6, FR-11, AC-013, AC-014, AC-021]
   Validation: a probe that never answers fails the check within the budget plus one poll interval (#17). A later `createSandbox()` probes again after a failed check (#18).
   Method: `bun extract.ts <fixed blueprint> && bun test boxd.test.ts` in `/tmp/bp-verify/daytona-boxd/sim`; `bun --filter amond test`
-- [ ] T007 Validate islo env names and chunk large writes, and bump it to version 2 (file: blueprints/sandbox--islo.md) [FR-7, FR-11, AC-015, AC-016, AC-021]
+- [x] T007 Validate islo env names and chunk large writes, and bump it to version 2 (file: blueprints/sandbox--islo.md) [FR-7, FR-11, AC-015, AC-016, AC-021]
   Validation: the key `X=1; echo hi; Y` rejects before spawning, and `FOO` still passes (#19). A 200 KB write passes no argument over the per-argument limit and decodes byte-identical (#20).
   Method: `bash inj.sh` and the `e2big` harness in `/tmp/bp-verify/islo-modal`, with `/bin/echo` standing in for the islo CLI; `bun --filter amond test`
-- [ ] T008 Surface Modal's `stat` error and correct its comment, and bump it to version 2 (file: blueprints/sandbox--modal.md) [FR-8, FR-11, AC-017, AC-021]
+- [x] T008 Surface Modal's `stat` error and correct its comment, and bump it to version 2 (file: blueprints/sandbox--modal.md) [FR-8, FR-11, AC-017, AC-021]
   Validation: `stat` on a missing path throws with "No such file or directory" (#22). The comments say one `stat -c` call serves GNU and BusyBox (#21).
   Method: run the fixed command on a missing path; `grep -c "Fall back"` prints 0; `bun --filter amond test`
 
@@ -94,7 +94,7 @@ Considered and not built:
   Validation: the footer still names the license, the notice and `deee93b`, and adds that amond corrected the file and lists its changes in the source repository's `blueprints/README.md`. `apps/registry/NOTICE`, the README's Attribution section and `ARCHITECTURE.md` agree.
   Method: `bun --filter @amond-ai/registry test`; `bun run lint`
 - [ ] T012 Draft the upstream reports and the #37 outcomes (file: .please/docs/tracks/active/blueprint-findings-20261020/upstream-reports.md) (depends on T010) [FR-14, FR-15]
-  Validation: one report per changed blueprint, with the defect, a reproduction and the fix. An outcome table covers all 24 findings: fixed, with file and version; or declined, with the reason (#15 cites `sandbox-api.md:116,219`). Nothing is posted.
+  Validation: one report per changed blueprint, with the defect, a reproduction and the fix. An outcome table covers all 25 findings (#1–#23, N1, N2): fixed, with file and version; or declined, with the reason (#15 cites `sandbox-api.md:116,219`). Nothing is posted.
   Method: the table rows match investigation.md Section 3's numbering one to one
 
 ## Key Files
@@ -125,13 +125,28 @@ Considered and not built:
   Evidence: `bash /tmp/bp-verify/cloudflare/check1.sh` → install=0.11.0 tag=0.11.0, PASS; body-scoped `grep -c "cloudflare-sandbox'"` → 0; `grep -c cloudflare:workers` → 3; `bun --filter amond test` → 61 passed.
 - [x] (2026-10-20 04:12 KST) T003 Fix the vitest-evals harness, port and starter eval, and bump it to version 2 (SHA: `53b0e289`)
   Evidence: `bunx tsc -p .` against vitest-evals 0.13.1 → exit 0 (was 6× TS2339); `bunx vitest run` → probe2 (no usage, v2 guard) and nocost (usage without cost) pass, the v1 probe still fails as the before-case; body-scoped `grep -c 3583` → 0; `bun --filter amond test` → 61 passed.
+- [x] (2026-10-20 09:30 KST) T004 Cancel a Cloudflare Computer exec aborted while starting, and bump it to version 2 (SHA: `64efcc2e`)
+  Evidence: `bun sim-fixed.ts` in `/tmp/bp-verify/cloudflare`, with `settleExec` re-extracted from the v2 text → case A `rejected:AbortError killed= true`; case B (signal already aborted) `rejected:AbortError killed= true` (v1: HUNG). `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 11 passed.
+- [x] (2026-10-20 09:30 KST) T005 Fix the Mirage install steps, `readdir` and `rm`, and bump it to version 2 (SHA: `902c17e4`, `36d10883`)
+  Evidence: the whole extracted v2 adapter under pnpm with `@struktoai/mirage-node@^0.0.6 @struktoai/mirage-core@0.0.6` (`@amond-ai/agent` types stubbed) → `tsc --noEmit --strict` exit 0; with the v1 install (`^0.0.2`, core 0.0.2) → TS2367 at the `stat` comparison. `bun check.ts` against a real Mirage 0.0.6 `Workspace` → `/data/sub/` lists as `sub`; `force` on a missing path resolves; `recursive` alone on a missing path rejects; `force` on a directory without `recursive` rejects ("Is a directory"); a `-dash` path is removed as a path; a failed `unlink` reports `EACCES`. STOP check `bun stop.ts` → Mirage's shell `rm` accepts `-r`, `-f`, `--` with coreutils exit codes, so the STOP condition did not fire. `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 11 passed.
+- [x] (2026-10-20 09:30 KST) T006 Bound the boxd readiness probe and retry it after a failure, and bump it to version 2 (SHA: `af6ee078`)
+  Evidence: `bun extract.ts <v2 blueprint> && bun test boxd.test.ts` in `/tmp/bp-verify/daytona-boxd/sim` → 2 pass (v1: 0/2): a never-answering probe rejects within the budget plus one interval, and a later `createSandbox()` probes again after a failure. `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 11 passed.
+- [x] (2026-10-20 09:30 KST) T007 Validate islo env names and chunk large writes, and bump it to version 2 (SHA: `b5ec3c82`)
+  Evidence: `bun /tmp/bp-verify/islo-modal/t007/run.ts` (adapter re-extracted from v2, a local stand-in for the islo CLI) → a 200 KB write is `cmp` identical over 8 execs, the largest argv entry is 65633 < 131072, no temp file is left; the keys `X=1; echo hi; Y`, `''`, `1BAD` and `a-b` reject with nothing spawned; `FOO` and `_ok9` pass. `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 11 passed.
+  Deferred: the v1 before-state was not re-run here (`inj.sh` and the `e2big` harness timed out under `bash -lc`); it rests on investigation.md #19 and #20.
+- [x] (2026-10-20 09:30 KST) T008 Surface Modal's `stat` error and correct its comment, and bump it to version 2 (SHA: `a78e85b7`)
+  Evidence: `bash /tmp/bp-verify/islo-modal/t008/check.sh` → the error changes from `exit 1` to `stat: cannot statx '…/missing': No such file or directory`; body-scoped `grep -c "Fall back"` → 0. `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 11 passed.
 
 ## Decision Log
 
 - 2026-10-20: #15 (Daytona `exists()`) declined. The contract says `exists` never throws (`sandbox-api.md:116,219`).
 - 2026-10-20: vitest-evals pinned to the 0.13 line, not ported to 0.17 (spec Out of Scope).
 - 2026-10-20: The T002 and T003 `grep` checks cover only the body above `## Upgrade Guide`. The Version 2 diff must keep each removed line, the `../cloudflare-sandbox` import and the `3583` default, so it applies mechanically (upstream `blueprints/README.md` → Versions).
+- 2026-10-20: N2 (found during T005): the v1 install `^0.0.2` resolves to exactly 0.0.2, and against 0.0.2's types the adapter's `stat` comparison fails with TS2367. The install moves to `^0.0.6` with core pinned at `0.0.6`, the version the investigation verified behavior against.
+- 2026-10-20: The islo chunked `writeFile` stages its payload in the sandbox's `/tmp`, not next to the target, so a failed write never leaves a stray file in the user's directory. This assumes a writable `/tmp`.
+- 2026-10-20: The boxd `readyPromise` reset sits in the `createSandbox()` catch. Every concurrent awaiter's catch runs in the same microtask burst, so the next request after a failure probes again.
 
 ## Surprises & Discoveries
 
 - Worktree executors are cut from `main`, not the track branch, and can't write the main-tree progress sink. Their commits are cherry-picked and their Progress entries written by the lead. A fresh worktree also needs `bun install` and `bunx turbo run build --filter=amond` before `bun --filter amond test`.
+- On a `0.0.x` version a caret is an exact pin. The Mirage blueprint's `^0.0.2` got 0.0.2, not the 0.0.6 the investigation tested (N2). A type-check of only the import line missed it; the whole adapter has to be compiled.
