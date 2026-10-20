@@ -58,9 +58,9 @@ export const reviewDocument = defineTool({
   harness: true,
 
   async run({ harness, data }) {
-    await harness.sandbox.writeFile('document.md', data.document);
+    await harness.sandbox.writeTextFile({ path: 'document.md', content: data.document });
     await harness.prompt('Review document.md and write your findings to review.md.');
-    return { output: { review: await harness.sandbox.readFile('review.md') } };
+    return { output: { review: await harness.sandbox.readTextFile({ path: 'review.md' }) } };
   },
 });
 ```

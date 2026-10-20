@@ -57,7 +57,7 @@ export function getComputerSandbox(options: GetComputerWorkspaceOptions): Sandbo
       await workspace.fs.mkdir('/workspace', { recursive: true });
       return { ...createWorkspaceSandbox(workspace, '/workspace'), workspace };
     },
-    // No `tools` override: exec() works here, so the framework's standard
+    // No `tools` override: run() works here, so the framework's standard
     // set (bash/grep/glob/read/write/edit) applies as-is.
   };
 }

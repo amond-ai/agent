@@ -53,26 +53,30 @@ What the contract deliberately does not include:
 When the agent passes `useSandbox(factory, { cwd })`, the runtime wraps the adapter's sandbox in a scoping layer after `createSandbox()` resolves. The adapter is not involved and must not apply an agent's `cwd` itself:
 
 - The `cwd` value is resolved through the adapter env's own `resolvePath` (so a relative value resolves against the adapter's base directory), then POSIX-normalized.
-- The wrapper resolves all relative file paths against the scoped `cwd`, defaults `exec`'s working directory to it, and resolves a relative per-call `exec` `cwd` against it.
+- The wrapper resolves all relative file paths against the scoped `cwd`, defaults the `workingDirectory` of `run` and `spawn` to it, and resolves a relative per-call `workingDirectory` against it.
 - The wrapper exposes only the standard `Sandbox` members. Extra properties an adapter attached to its sandbox (a [native surface](#extending-sandbox)) are not forwarded — agents that need the native surface must not set a `cwd` override on `useSandbox`.
 
 ## `Sandbox`
 
 ```ts
-interface Sandbox {
-  exec(
-    command: string,
-    options?: {
-      cwd?: string;
-      env?: Record<string, string>;
-      timeoutMs?: number;
-      signal?: AbortSignal;
-    },
-  ): Promise<ShellResult>;
+interface Sandbox extends Experimental_SandboxSession {
+  readonly description: string;
 
-  readFile(path: string): Promise<string>;
-  readFileBuffer(path: string): Promise<Uint8Array>;
-  writeFile(path: string, content: string | Uint8Array): Promise<void>;
+  run(options: SandboxRunOptions): Promise<ShellResult>;
+  spawn(options: SandboxRunOptions): Promise<SandboxProcess>;
+
+  readFile(options: { path: string }): Promise<ReadableStream<Uint8Array> | null>;
+  readBinaryFile(options: { path: string }): Promise<Uint8Array | null>;
+  readTextFile(options: {
+    path: string;
+    encoding?: string;
+    startLine?: number;
+    endLine?: number;
+  }): Promise<string | null>;
+  writeFile(options: { path: string; content: ReadableStream<Uint8Array> }): Promise<void>;
+  writeBinaryFile(options: { path: string; content: Uint8Array }): Promise<void>;
+  writeTextFile(options: { path: string; content: string }): Promise<void>;
+
   stat(path: string): Promise<FileStat>;
   readdir(path: string): Promise<string[]>;
   exists(path: string): Promise<boolean>;
@@ -82,9 +86,25 @@ interface Sandbox {
   cwd: string;
   resolvePath(p: string): string;
 }
+
+type SandboxRunOptions = {
+  command: string;
+  workingDirectory?: string;
+  env?: Record<string, string>;
+  abortSignal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+interface SandboxProcess {
+  pid?: number;
+  stdout: ReadableStream<Uint8Array>;
+  stderr: ReadableStream<Uint8Array>;
+  wait(): Promise<{ exitCode: number }>;
+  kill(): Promise<void>;
+}
 ```
 
-The agent's live sandbox: the universal environment interface. Every sandbox mode — virtual, local, remote — implements it, so core logic never branches on mode. The same object is exposed to application code as [`harness.sandbox`](/docs/reference/agent-api/#harnesssandbox), and the standard model-facing tools operate through it. Operations on it are never recorded in the conversation.
+The agent's live sandbox: the universal environment interface. `Sandbox` extends the AI SDK's `Experimental_SandboxSession` (from `@ai-sdk/provider-utils`) as is, so any sandbox amond builds can be handed to the AI SDK harness with no adapter. `SandboxProcess` stands for the AI SDK's `Experimental_SandboxProcess`, and `SandboxRunOptions` is the session's command options plus amond's `timeoutMs`. `description` is the environment in prose, for the agent's instructions: what kind of sandbox it is and its working directory. Every sandbox mode — virtual, local, remote — implements it, so core logic never branches on mode. The same object is exposed to application code as [`harness.sandbox`](/docs/reference/agent-api/#harnesssandbox), and the standard model-facing tools operate through it. Operations on it are never recorded in the conversation.
 
 Most adapters should not implement this interface by hand: [`sandboxFromDriver`](#sandboxfromdriverdriver-cwd-options) (over a provider SDK) and [`bash()`](#bashfactory) (over a just-bash instance) produce conforming sandboxes from smaller surfaces. The contract below is what those wrappers guarantee, and what a hand-written implementation must reproduce.
 
@@ -95,29 +115,46 @@ Most adapters should not implement this interface by hand: [`sandboxFromDriver`]
 - `cwd` — the environment's working directory, as an absolute path. Workspace discovery (the directory listing, `AGENTS.md`, `.agents/skills/`) and default command execution happen here.
 - `resolvePath(p)` — resolves a relative path against `cwd` without touching the filesystem; absolute paths pass through. File methods resolve internally — callers need `resolvePath` only when their own logic wants the absolute path. The standard `write`/`edit` tools also use it to key per-file mutation locks, so two spellings of the same path must resolve to the same string.
 
-### `exec`
+### `run` and `spawn`
 
-Runs a shell command and resolves with its output.
+`run(options)` runs a shell command to completion and resolves with its output. `spawn(options)` starts a command and resolves with a process handle. Both take the same options.
 
-- Resolves with a `ShellResult` for any completed command, non-zero exit codes included. Rejections are reserved for transport failures and aborts.
-- `options.cwd` — working directory for this command. A relative value resolves against `env.cwd`; when omitted, the command runs in `env.cwd`.
+- `options.command` — the shell command line.
+- `options.workingDirectory` — working directory for this command. A relative value resolves against `cwd`; when omitted, the command runs in `cwd`.
 - `options.env` — environment variables supplied to the command, layered on top of whatever base environment the adapter defines.
-- `options.timeoutMs` — wall-clock deadline hint in milliseconds, and the primary cancellation contract. Forward it to the provider's native timeout option (E2B `timeoutMs`, Daytona `timeout`, Modal `timeout`, and so on) so signal-blind providers still observe the deadline. Providers with coarser granularity may round the value up, never down.
-- `options.signal` — cancellation. Aborting rejects the returned promise promptly with an `AbortError` (`DOMException`) carrying the signal's reason as `cause` — never gated on the remote command's settlement. An adapter whose provider can cancel mid-flight does so, so the rejection is exact; one that can't leaves the command running as an **orphan** that keeps executing (and mutating the workspace) after the rejection, its eventual result discarded rather than surfacing later. The `AbortError` message says so. See [`sandboxFromDriver`](#sandboxfromdriverdriver-cwd-options) for how the wrapper implements this and how to observe an orphan's settlement.
-- `timeoutMs` and `signal` are independent. Callers with a deadline that also want ad-hoc cancellation pass both; adapters that support both should observe whichever fires first. The standard `bash` tool passes both whenever the model requests a timeout.
+- `options.timeoutMs` — amond's extension to the AI SDK options: a wall-clock deadline in milliseconds, and the primary cancellation contract. Forward it to the provider's native timeout option (E2B `timeoutMs`, Daytona `timeout`, Modal `timeout`, and so on) so signal-blind providers still observe the deadline. A fractional value is rounded up, never down.
+- `options.abortSignal` — cancellation. Aborting rejects the returned promise promptly with an `AbortError` (`DOMException`) carrying the signal's reason as `cause` — never gated on the remote command's settlement. A signal that is already aborted rejects before the command runs. An adapter whose provider can cancel mid-flight does so, so the rejection is exact; one that can't leaves the command running as an **orphan** that keeps executing (and mutating the workspace) after the rejection, its eventual result discarded rather than surfacing later. The `AbortError` message says so. See [`sandboxFromDriver`](#sandboxfromdriverdriver-cwd-options) for how the wrapper implements this and how to observe an orphan's settlement.
+- `timeoutMs` and `abortSignal` are independent. Callers with a deadline that also want ad-hoc cancellation pass both; adapters that support both should observe whichever fires first. The standard `bash` tool passes both whenever the model requests a timeout.
 
-### File verbs
+`run` resolves with a `ShellResult` for any completed command, non-zero exit codes included. Rejections are reserved for transport failures and aborts. A container that dies mid-command rejects with `SandboxDiedError`.
 
-- `readFile(path)` — reads a UTF-8 file. Throws if the path does not exist or is not a file.
-- `readFileBuffer(path)` — reads raw bytes.
-- `writeFile(path, content)` — creates or replaces a file. Must create missing parent directories — this is a cross-mode guarantee (`fs.writeFile('out/nested/report.md', …)` never requires a prior `mkdir`). `sandboxFromDriver`, `bash()`, and `local()` all implement it by retrying a failed write once after `mkdir -p` on the parent; a hand-written sandbox must provide the same guarantee.
+`spawn` resolves with a handle: `pid` (when the provider reports one), `stdout` and `stderr` as `ReadableStream<Uint8Array>`, `wait()` for the exit code, and `kill()`. Whether the streams deliver output as the command writes it depends on the provider:
+
+| Sandbox | `spawn` output |
+| --- | --- |
+| `local()` | Streams live. |
+| `cloudflareSandbox` | Streams live when the stub has `execStream`; buffered otherwise. |
+| `bash()` | Buffered: the whole output arrives when the command exits. |
+| `sandboxFromDriver` and driver-backed sandboxes | Buffered: the whole output arrives when the command exits. |
+
+A buffered `spawn` runs the command through `run`, so abort, `timeoutMs`, and orphan reporting behave as they do there. `kill()` aborts the command the same way.
+
+### File methods
+
+Each of the first six methods takes a single options object with `path`.
+
+- `readFile({ path })` — reads a file as a `ReadableStream<Uint8Array>`.
+- `readBinaryFile({ path })` — reads raw bytes as a `Uint8Array`.
+- `readTextFile({ path, encoding?, startLine?, endLine? })` — reads a file as text. `startLine` and `endLine` select a 1-based, inclusive line range.
+- A read of a path that does not exist resolves with `null` rather than throwing.
+- `writeFile({ path, content })` writes a `ReadableStream<Uint8Array>`, `writeBinaryFile` writes a `Uint8Array`, and `writeTextFile` writes a string. All three create or replace the file and must create missing parent directories — a cross-mode guarantee (`writeTextFile({ path: 'out/nested/report.md', … })` never requires a prior `mkdir`). `sandboxFromDriver`, `bash()`, and `local()` all implement it by retrying a failed write once after `mkdir -p` on the parent; a hand-written sandbox must provide the same guarantee.
 - `stat(path)` — file metadata. Throws if the path does not exist.
 - `readdir(path)` — directory entry names (names only, no paths). Throws if the path is not a directory.
 - `exists(path)` — `true` if a file or directory exists. Never throws.
 - `mkdir(path, options)` — creates a directory; `recursive` creates missing parents and tolerates an existing directory.
 - `rm(path, options)` — removes a file or directory; `recursive` removes directory contents, `force` suppresses the missing-path error. An adapter whose provider cannot honor a requested option must throw [`SandboxOperationUnsupportedError`](#sandboxoperationunsupportederror) before modifying anything — never silently ignore an option or leave its behavior provider-defined.
 
-Errors thrown by file verbs surface to the model as tool errors, so messages should be factual and self-contained (the standard tools pass them through).
+Errors thrown by these methods surface to the model as tool errors, so messages should be factual and self-contained (the standard tools pass them through). The standard `read` and `edit` tools report a missing file as `File not found: {path}` on every provider. Application code that reads through `session.fs` instead gets a `FileNotFoundError` with the same message.
 
 ### `ShellResult`
 
@@ -149,7 +186,7 @@ interface FileStat {
 An adapter may return a sandbox with additional properties — a native surface beyond the generic verbs. `harness.sandbox` exposes the object exactly as returned, so an adapter package can ship a runtime-checked accessor that narrows to it (the Cloudflare Computer adapter's `computerWorkspace(harness.sandbox)` returns its `Workspace` this way). Two constraints:
 
 - A `cwd` override on `useSandbox` wraps the sandbox and drops extra properties ([above](#usesandbox-cwd-scoping)).
-- A sandbox that cannot execute commands should still ship all file verbs and throw from `exec` — and pair the sandbox with a [`tools`](#sandboxtoolfactory) list that omits the exec-backed standard tools.
+- A sandbox that cannot execute commands should still ship all file methods and throw from `run` and `spawn` — and pair the sandbox with a [`tools`](#sandboxtoolfactory) list that omits the exec-backed standard tools.
 
 ## `sandboxFromDriver(driver, cwd, options?)`
 
@@ -157,15 +194,18 @@ An adapter may return a sandbox with additional properties — a native surface 
 function sandboxFromDriver(
   driver: SandboxDriver,
   cwd: string,
-  options?: { onOrphanSettled?: (settlement: OrphanedExecSettlement) => void },
+  options?: {
+    onOrphanSettled?: (settlement: OrphanedExecSettlement) => void;
+    description?: string;
+  },
 ): Sandbox;
 ```
 
-Wraps a `SandboxDriver` — the minimal interface a remote provider adapter implements — into a conforming `Sandbox`. The wrapper supplies:
+Wraps a `SandboxDriver` — the minimal interface a remote provider adapter implements — into a conforming `Sandbox`. `options.description` sets `Sandbox.description`; it defaults to a generic remote-sandbox description that names `cwd`. The wrapper's `run` calls `driver.exec`, and its `spawn` is buffered: a driver has no streaming method, so the output arrives when the command exits. The wrapper supplies:
 
-- Path resolution: relative file paths and relative/absent `exec` working directories resolve against `cwd`, POSIX-normalized. The `driver` methods always receive absolute paths.
-- The `writeFile` parent-creation guarantee: a failed write is retried once after `driver.mkdir(parent, { recursive: true })`; when the retry still fails, the retried write's error propagates.
-- The `exec` abort race: an already-aborted signal rejects with `AbortError` before `driver.exec` is called. An abort that fires mid-flight rejects promptly too — the wrapper never waits on `driver.exec`'s own settlement to decide the caller's outcome, whether or not the adapter wired `signal` into its SDK. The adapter only needs to forward `signal` when its SDK has a real cancellation primitive; the abort race and the promise-consumption below apply either way.
+- Path resolution: relative file paths and relative/absent `workingDirectory` values resolve against `cwd`, POSIX-normalized. The `driver` methods always receive absolute paths.
+- The parent-creation guarantee of the write methods: a failed write is retried once after `driver.mkdir(parent, { recursive: true })`; when the retry still fails, the retried write's error propagates.
+- The `run` abort race: an already-aborted signal rejects with `AbortError` before `driver.exec` is called. An abort that fires mid-flight rejects promptly too — the wrapper never waits on `driver.exec`'s own settlement to decide the caller's outcome, whether or not the adapter wired `signal` into its SDK. The adapter only needs to forward `signal` when its SDK has a real cancellation primitive; the abort race and the promise-consumption below apply either way.
 
 ### Orphaned commands
 
@@ -248,8 +288,9 @@ Wraps a [just-bash](https://github.com/vercel-labs/just-bash) `Bash` instance in
 - The factory function is called once, when the runtime initializes the agent.
 - The returned value is duck-type checked (`exec`, `getCwd`, and an `fs` object). A wrong value throws `Error('[amond] BashFactory must return a Bash-like object.')`.
 - The sandbox's `cwd` is the instance's `getCwd()` (just-bash defaults to `/home/user` when constructed without `cwd` or `files`).
-- just-bash has no native timeout option, so the wrapper translates `exec`'s `timeoutMs` into an `AbortSignal` and merges it with the caller's signal. Pre- and post-call abort checks apply as in `sandboxFromDriver`.
-- The `writeFile` parent-creation guarantee is applied over the instance's `fs`.
+- just-bash has no native timeout option, so the wrapper translates `run`'s `timeoutMs` into an `AbortSignal` and merges it with the caller's signal. Pre- and post-call abort checks apply as in `sandboxFromDriver`.
+- The parent-creation guarantee of the write methods is applied over the instance's `fs`.
+- `spawn` is buffered: the whole output arrives when the command exits.
 
 `BashLike` is a structural type (no just-bash import in `@amond-ai/agent`), exported for adapter authors who construct compatible runtimes:
 
@@ -332,8 +373,8 @@ function createGlobTool(sandbox: Sandbox): AgentTool;
 
 One factory per standard model-facing tool, each closing over a `Sandbox`. These are exactly the tools the framework installs when a sandbox has no `tools` function; exporting them per-tool lets an adapter's `SandboxToolFactory` add, drop, or swap members without rebuilding the set. The tools' model-facing behavior — parameters, truncation limits, error shapes, continuation markers — is documented in [Agent Behavior](/docs/reference/agent-behavior/#built-in-tools). What matters when composing them:
 
-- `createReadTool`, `createWriteTool`, and `createEditTool` need only the file verbs; `createBashTool`, `createGrepTool`, and `createGlobTool` require a working `exec` — leave them out for exec-less sandboxes.
-- `read` fetches through `readFile` and slices in the runtime; `edit` is a whole read → replace → write transaction. Same-file mutations from `write`/`edit` within one parallel tool batch are serialized through a per-path lock keyed on `resolvePath`, so two spellings of the same path must resolve to the same string. A `bash` command mutating the same file concurrently is not synchronized.
+- `createReadTool`, `createWriteTool`, and `createEditTool` need only the file methods; `createBashTool`, `createGrepTool`, and `createGlobTool` require a working `run` — leave them out for exec-less sandboxes.
+- `read` fetches through `readTextFile` and slices in the runtime; `edit` is a whole read → replace → write transaction. Same-file mutations from `write`/`edit` within one parallel tool batch are serialized through a per-path lock keyed on `resolvePath`, so two spellings of the same path must resolve to the same string. A `bash` command mutating the same file concurrently is not synchronized.
 - `createBashTool` converts the model's `timeout` (seconds) to `timeoutMs` for the sandbox and additionally composes it into the abort signal as a backstop for sandboxes that ignore both cancellation fields; a pure timeout surfaces as a recoverable `exitCode: 124` result while a host abort rethrows.
 - `createGrepTool` probes for `rg` once per environment (`rg --version`, 10-second deadline, cached) and falls back to `grep -rnH`; `createGlobTool` shells out to `find -name`.
 
@@ -341,11 +382,11 @@ One factory per standard model-facing tool, each closing over a `Sandbox`. These
 
 Supporting files of a [packaged skill](/docs/guide/skills/#supporting-files-at-runtime) live in the application bundle, not the sandbox. The runtime serves them at virtual paths under `/.amond/packaged-skills/<skill-id>/…`, and it does so by layering an overlay onto the env it hands to tool factories — never by writing into the adapter's filesystem.
 
-- The env passed to every tool factory (standard and adapter alike) has `readFile` wrapped: paths under `/.amond/packaged-skills/` resolve from the in-memory skill catalog, everything else delegates to the adapter. Adapters need no special-casing; any tool that reads through its env resolves skill paths transparently.
-- An unknown path under that root throws `Error('[amond] Packaged skill file not found: <path>')` instead of reaching the adapter.
+- The env passed to every tool factory (standard and adapter alike) has the three read methods (`readFile`, `readBinaryFile`, `readTextFile`) wrapped: paths under `/.amond/packaged-skills/` resolve from the in-memory skill catalog, everything else delegates to the adapter. Adapters need no special-casing; any tool that reads through its env resolves skill paths transparently.
+- An unknown path under that root resolves with `null`, like any missing file, instead of reaching the adapter.
 - Binary skill files are served as base64 text, wrapped to 76-character lines.
 - The overlay is session-internal. `harness.sandbox` and `useTool` handlers see the adapter's real env; the virtual root is not visible there.
-- Only `readFile` is overlaid. `exec`, `exists`, `stat`, and the other verbs pass straight through, so shell commands cannot see the virtual root — the standard `read` tool (or the framework's `read_skill_resource` tool) is the access path.
+- Only the read methods are overlaid. `run`, `spawn`, `exists`, `stat`, and the other verbs pass straight through, so shell commands cannot see the virtual root — the standard `read` tool (or the framework's `read_skill_resource` tool) is the access path.
 
 ## Built-in factories
 
@@ -362,20 +403,20 @@ interface LocalSandboxOptions {
 }
 ```
 
-Node target only. Binds the agent directly to the host: file verbs call `node:fs/promises`, and `exec` spawns real processes. There is no isolation — see the [Node target guide](/docs/guide/node-target/#local-sandbox) for when that is appropriate.
+Node target only. Binds the agent directly to the host: file methods call `node:fs/promises`, and `run` and `spawn` start real processes. `spawn` streams output live. There is no isolation — see the [Node target guide](/docs/guide/node-target/#local-sandbox) for when that is appropriate.
 
 - `cwd` — working directory. Defaults to `process.cwd()`; resolved to an absolute host path.
-- `env` — variables layered on top of the default allowlist. Set a key to `undefined` to drop a default. A non-record value (an array, `true`) throws a `TypeError` at construction. Per-call `exec` `env` layers on top of the result.
+- `env` — variables layered on top of the default allowlist. Set a key to `undefined` to drop a default. A non-record value (an array, `true`) throws a `TypeError` at construction. Per-call `env` on `run` and `spawn` layers on top of the result.
 
 Environment allowlist: the model's shell does not inherit `process.env`. Only `PATH`, `HOME`, `USER`, `LOGNAME`, `HOSTNAME`, `SHELL`, `LANG`, `LC_ALL`, `LC_CTYPE`, `TZ`, `TERM`, `TMPDIR`, `TMP`, and `TEMP` pass through by default; everything else is a per-variable opt-in via `options.env`. The snapshot is taken once at construction — later mutations of `process.env` are not picked up. `env: { ...process.env }` inherits everything, host secrets included.
 
-`exec` behavior:
+`run` behavior (`spawn` uses the same shell and kill path):
 
 - Commands run through real `bash` when present (probed once per process, resolved to an absolute path), falling back to the platform default shell (`/bin/sh` or, on Windows, the system shell) when it is not.
 - On POSIX the child leads its own process group; abort and timeout signal the whole group — `SIGTERM`, escalating to `SIGKILL` after a 2-second grace — so compound commands cannot orphan grandchildren. The kill is real, so `local()` has no orphaned-command window beyond that grace period.
-- Non-zero exits and spawn failures resolve as `ShellResult` (spawn failures as `exitCode: 1` with the error message on stderr). A `timeoutMs` expiry also resolves as a `ShellResult`, with `exitCode: 124` — the `timeout(1)` convention. A caller-initiated `signal` abort instead rejects with `AbortError`, even though the kill takes the same process-group path and produces that same 124 exit internally — the rejection wins and the caller never observes the `ShellResult`. A signal death `local()` did not itself initiate keeps the generic `exitCode: 1`.
+- Non-zero exits and spawn failures resolve as `ShellResult` (spawn failures as `exitCode: 1` with the error message on stderr). A `timeoutMs` expiry also resolves as a `ShellResult`, with `exitCode: 124` — the `timeout(1)` convention. A caller-initiated `abortSignal` abort instead rejects with `AbortError`, even though the kill takes the same process-group path and produces that same 124 exit internally — the rejection wins and the caller never observes the `ShellResult`. A signal death `local()` did not itself initiate keeps the generic `exitCode: 1`.
 - Captured output is capped at 64 MiB; exceeding it kills the process tree and resolves with `exitCode: 1` and a truncation note on stderr.
-- `timeoutMs` is composed into the caller's `signal` (there is no separate native timeout), so a pure deadline expiry and a caller abort are both delivered through the same kill path and only diverge at the point above.
+- `timeoutMs` is composed into the caller's `abortSignal` (there is no separate native timeout), so a pure deadline expiry and a caller abort are both delivered through the same kill path and only diverge at the point above.
 
 `stat` reports `isFile`/`isDirectory`/`size`/`mtime` for the symlink target and `isSymbolicLink` for the path itself. All `FileStat` fields are populated.
 

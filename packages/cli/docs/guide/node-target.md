@@ -114,7 +114,7 @@ Creates a sandbox factory that binds directly to the host filesystem and shell. 
 **`LocalSandboxOptions`:**
 
 - `cwd` — working directory. Defaults to `process.cwd()`.
-- `env` — additional environment variables layered on top of the default shell-essential allowlist. Set a key to `undefined` to remove a default. Per-exec `env` in shell calls layers on top of this.
+- `env` — additional environment variables layered on top of the default shell-essential allowlist. Set a key to `undefined` to remove a default. Per-call `env` on `run`, `spawn`, and shell calls layers on top of this.
 
 The environment snapshot is taken once at sandbox construction. Later mutations to `process.env` are not reflected.
 
