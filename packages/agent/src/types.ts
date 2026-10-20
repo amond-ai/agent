@@ -1030,7 +1030,7 @@ export interface ShellOptions {
   cwd?: string
   /**
    * Wall-clock deadline in milliseconds, forwarded to the sandbox
-   * sandbox adapter. See `Sandbox.exec`.
+   * sandbox adapter. See `Sandbox.run`.
    */
   timeoutMs?: number
   /** Cancel this call. See `CallHandle`. */

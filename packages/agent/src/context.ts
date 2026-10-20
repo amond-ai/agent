@@ -2,6 +2,7 @@
  * Context discovery: reads AGENTS.md and .agents/skills/ from a session's
  * working directory. Used at runtime by the session initialisation path.
  */
+import { FileNotFoundError } from './errors.ts'
 import { parseSkillMarkdown } from './skill-frontmatter.ts'
 import type { RegisteredSkill, Sandbox, Skill, WorkspaceSkill } from './types.ts'
 
@@ -23,8 +24,9 @@ async function readAgentsMd(env: Sandbox, basePath: string): Promise<string> {
   for (const filename of ['AGENTS.md', 'CLAUDE.md']) {
     const filePath = basePath.endsWith('/') ? basePath + filename : `${basePath}/${filename}`
     if (await env.exists(filePath)) {
-      const content = await env.readFile(filePath)
-      parts.push(content.trim())
+      // `null`: removed between the `exists` check and the read.
+      const content = await env.readTextFile({ path: filePath })
+      if (content !== null) { parts.push(content.trim()) }
     }
   }
 
@@ -78,7 +80,8 @@ async function discoverLocalSkills(
 
     let parsed: ReturnType<typeof parseSkillMarkdown>
     try {
-      const content = await env.readFile(skillMdPath)
+      const content = await env.readTextFile({ path: skillMdPath })
+      if (content === null) { throw new FileNotFoundError({ path: skillMdPath }) }
       parsed = parseSkillMarkdown(content, { directoryName: entry, path: skillMdPath })
     }
     catch (error) {

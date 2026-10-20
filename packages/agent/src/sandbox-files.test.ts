@@ -1,6 +1,10 @@
+import { Bash } from 'just-bash'
 import { describe, expect, it, vi } from 'vitest'
-import { createSandboxFileMethods } from './sandbox-files.ts'
+import { FileNotFoundError } from './errors.ts'
+import { bash } from './sandbox.ts'
+import { createAmondFs, createSandboxFileMethods } from './sandbox-files.ts'
 import { streamToBytes, stringToStream } from './sandbox-streams.ts'
+import type { Sandbox } from './types.ts'
 
 const enc = new TextEncoder()
 const dec = new TextDecoder()
@@ -145,5 +149,57 @@ describe('createSandboxFileMethods writes', () => {
       .rejects
       .toThrow(/not-a-codec/)
     expect(primitives.write).not.toHaveBeenCalled()
+  })
+})
+
+describe('createAmondFs', () => {
+  async function bashSandbox(): Promise<Sandbox> {
+    return bash(() => new Bash({ cwd: '/work' })).createSandbox({ id: 'fs' })
+  }
+
+  it('rejects readFile and readFileBuffer of a missing file with FileNotFoundError (AC-016)', async () => {
+    const sandbox = await bashSandbox()
+    const amondFs = createAmondFs(() => sandbox)
+
+    await expect(amondFs.readFile('missing.txt')).rejects.toBeInstanceOf(FileNotFoundError)
+    await expect(amondFs.readFile('missing.txt')).rejects.toThrow('File not found: missing.txt')
+    await expect(amondFs.readFileBuffer('missing.bin')).rejects.toBeInstanceOf(FileNotFoundError)
+  })
+
+  it('writes strings as text and bytes as binary, creating parents, and reads them back', async () => {
+    const sandbox = await bashSandbox()
+    const writeTextFile = vi.spyOn(sandbox, 'writeTextFile')
+    const writeBinaryFile = vi.spyOn(sandbox, 'writeBinaryFile')
+    const amondFs = createAmondFs(() => sandbox)
+
+    await amondFs.writeFile('a/b/t.txt', 'text')
+    await amondFs.writeFile('a/b/b.bin', new Uint8Array([1, 2, 3]))
+
+    expect(writeTextFile).toHaveBeenCalledWith({ path: 'a/b/t.txt', content: 'text' })
+    expect(writeBinaryFile).toHaveBeenCalledWith({ path: 'a/b/b.bin', content: new Uint8Array([1, 2, 3]) })
+    expect(await amondFs.readFile('a/b/t.txt')).toBe('text')
+    expect(await amondFs.readFileBuffer('/work/a/b/b.bin')).toEqual(new Uint8Array([1, 2, 3]))
+    expect(await amondFs.exists('a/b')).toBe(true)
+    expect(await amondFs.readdir('a/b')).toEqual(['b.bin', 't.txt'])
+  })
+
+  it('reads an existing empty file as an empty string', async () => {
+    const sandbox = await bashSandbox()
+    const amondFs = createAmondFs(() => sandbox)
+    await amondFs.writeFile('empty.txt', '')
+
+    expect(await amondFs.readFile('empty.txt')).toBe('')
+  })
+
+  it('operates on the sandbox current at each call', async () => {
+    const first = await bashSandbox()
+    const second = await bashSandbox()
+    await second.writeTextFile({ path: 'only-in-second.txt', content: 'second' })
+    let current = first
+    const amondFs = createAmondFs(() => current)
+
+    expect(await amondFs.exists('only-in-second.txt')).toBe(false)
+    current = second
+    expect(await amondFs.readFile('only-in-second.txt')).toBe('second')
   })
 })

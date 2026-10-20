@@ -611,6 +611,28 @@ export class SandboxDiedError extends AmondError {
   }
 }
 
+/**
+ * A sandbox file read named a path with no file. Raised by the built-in
+ * `read` and `edit` tools and by `fs.readFile` / `fs.readFileBuffer` when the
+ * sandbox's read resolves `null`, so the message is the same on every
+ * provider rather than each provider's own "not found" wording. `code` is
+ * `'ENOENT'`, matching the Node.js error code for the same condition.
+ */
+export class FileNotFoundError extends AmondError {
+  readonly code = 'ENOENT'
+
+  constructor({ path }: { path: string }) {
+    super({
+      type: 'file_not_found',
+      message: `File not found: ${path}`,
+      details: 'The file does not exist in the sandbox.',
+      dev: 'Relative paths resolve against the sandbox working directory.',
+      meta: { path },
+    })
+    this.name = 'FileNotFoundError'
+  }
+}
+
 export class SandboxOperationUnsupportedError extends AmondError {
   constructor({
     operation,

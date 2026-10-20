@@ -20,7 +20,7 @@ import type {
 } from './types.ts'
 
 /**
- * Run `command` through `env.exec` wrapped in the bash tool-event envelope:
+ * Run `command` through `env.run` wrapped in the bash tool-event envelope:
  * a `tool_start` emit up front, then a terminal `tool` emit carrying either
  * the formatted bash result or the `details: { command, exitCode: -1 }`
  * error-result shape. The optional `record` hook runs before each terminal
@@ -47,7 +47,7 @@ export async function execShellWithEvents(
   // Per-call cwd/env names, when set, are part of the call's identity and
   // need to be visible in the transcript. Env values often contain
   // credentials, so transcript/tool events record only the keys while
-  // env.exec receives the real values. The bash tool's own schema
+  // env.run receives the real values. The bash tool's own schema
   // (BashParams) doesn't formally declare these, but pi-ai's
   // ToolCall.arguments is `Record<string, any>` and providers forward
   // arguments opaquely, so extending the shape here is safe.
@@ -62,11 +62,12 @@ export async function execShellWithEvents(
       { type: 'tool', toolCallId, toolName: 'bash' },
       executionContext,
       () =>
-        env.exec(command, {
+        env.run({
+          command,
           env: options?.env,
-          cwd: options?.cwd,
+          workingDirectory: options?.cwd,
           timeoutMs: options?.timeoutMs,
-          signal,
+          abortSignal: signal,
         }),
     )
     const shellResult: ShellResult = {
@@ -93,7 +94,7 @@ export async function execShellWithEvents(
     // Aligns with formatBashResult's `details: { command, exitCode }`
     // shape so consumers reading event.result.details.exitCode see a
     // number on both branches. -1 is the conventional sentinel for
-    // "no exit recorded" (the same one env.exec uses internally for
+    // "no exit recorded" (the same one env.run uses internally for
     // sandbox-level failures — see sandbox.ts).
     const errResult: AgentToolResult<any> = {
       content: [{ type: 'text', text: getErrorMessage(error) }],

@@ -3,6 +3,8 @@ import { Type } from '@earendil-works/pi-ai'
 import type { Static } from '@earendil-works/pi-ai'
 import { composeTimeoutSignal } from './abort.ts'
 import { decodeBase64 } from './base64.ts'
+import { FileNotFoundError } from './errors.ts'
+import { sliceLines } from './sandbox-streams.ts'
 import type { PackagedSkillDirectory, Sandbox } from './types.ts'
 
 const MAX_READ_LINES = 2000
@@ -47,10 +49,11 @@ export interface TaskToolUndeclaredAgentDetails {
 
 /**
  * Layer packaged-skill routing onto an env before handing it to model-facing
- * tool factories: `readFile` serves `/.amond/packaged-skills/` paths from the
- * in-memory catalog (and reports unknown paths under that root as missing)
- * and delegates everything else. Session-internal — `harness.sandbox` and
- * `useTool` handlers see the real env, never this overlay.
+ * tool factories: the read methods serve `/.amond/packaged-skills/` paths
+ * from the in-memory catalog (and report unknown paths under that root as
+ * missing) and delegate everything else. Session-internal —
+ * `harness.sandbox` and `useTool` handlers see the real env, never this
+ * overlay.
  */
 export function overlayPackagedSkills(
   env: Sandbox,
@@ -58,6 +61,18 @@ export function overlayPackagedSkills(
 ): Sandbox {
   return {
     ...env,
+    async readTextFile(options) {
+      if (!options.path.startsWith(PACKAGED_SKILLS_ROOT)) { return env.readTextFile(options) }
+      const packagedFile = readPackagedSkillFile(packagedSkills, options.path)
+      if (packagedFile === undefined) { return null }
+      return sliceLines(packagedFile, options.startLine, options.endLine)
+    },
+    async readBinaryFile(options) {
+      if (!options.path.startsWith(PACKAGED_SKILLS_ROOT)) { return env.readBinaryFile(options) }
+      return readPackagedSkillBytes(packagedSkills, options.path) ?? null
+    },
+    // The legacy path form, kept routed for adapter tool factories that
+    // still read through it until the legacy members are removed.
     async readFile(path: string): Promise<string> {
       const packagedFile = readPackagedSkillFile(packagedSkills, path)
       if (packagedFile !== undefined) { return packagedFile }
@@ -110,7 +125,8 @@ export function createReadTool(env: Sandbox): AgentTool<typeof ReadParams> {
     parameters: ReadParams,
     async execute(_toolCallId: string, params: Static<typeof ReadParams>, signal?: AbortSignal) {
       throwIfAborted(signal)
-      const content = await env.readFile(params.path)
+      const content = await env.readTextFile({ path: params.path })
+      if (content === null) { throw new FileNotFoundError({ path: params.path }) }
       return formatReadContent(params.path, content, params.offset, params.limit)
     },
   }
@@ -190,9 +206,10 @@ export function createWriteTool(env: Sandbox): AgentTool<typeof WriteParams> {
       return withFileMutationLock(env, params.path, async () => {
         // Re-check after the lock wait; never between write start and end.
         throwIfAborted(signal)
-        // Sandbox.writeFile creates missing parent directories itself
-        // (the AmondFs.writeFile guarantee), so no eager mkdir here.
-        await env.writeFile(params.path, params.content)
+        // Sandbox.writeTextFile creates missing parent directories itself
+        // (the AmondFs.writeFile guarantee), so no eager mkdir here. No
+        // abortSignal: an abort must never land between write start and end.
+        await env.writeTextFile({ path: params.path, content: params.content })
         return {
           content: [
             {
@@ -234,7 +251,8 @@ export function createEditTool(env: Sandbox): AgentTool<typeof EditParams> {
       // same-file edit in the same parallel batch sees this one's result.
       return withFileMutationLock(env, params.path, async () => {
         throwIfAborted(signal)
-        const content = await env.readFile(params.path)
+        const content = await env.readTextFile({ path: params.path })
+        if (content === null) { throw new FileNotFoundError({ path: params.path }) }
         throwIfAborted(signal)
 
         // Function replacer: a plain-string second argument would interpret
@@ -244,7 +262,7 @@ export function createEditTool(env: Sandbox): AgentTool<typeof EditParams> {
           if (newContent === content) {
             throw new Error(`Could not find the text in ${params.path}. No changes made.`)
           }
-          await env.writeFile(params.path, newContent)
+          await env.writeTextFile({ path: params.path, content: newContent })
           const count = content.split(params.oldText).length - 1
           return {
             content: [{ type: 'text', text: `Replaced ${count} occurrences in ${params.path}` }],
@@ -265,7 +283,7 @@ export function createEditTool(env: Sandbox): AgentTool<typeof EditParams> {
         }
 
         const newContent = content.replace(params.oldText, () => params.newText)
-        await env.writeFile(params.path, newContent)
+        await env.writeTextFile({ path: params.path, content: newContent })
         return {
           content: [{ type: 'text', text: `Successfully edited ${params.path}` }],
           details: { path: params.path },
@@ -282,7 +300,7 @@ const BashParams = Type.Object({
 
 /**
  * The framework's standard `bash` tool over a {@link Sandbox}. Requires a
- * working `env.exec` — leave it out of a `tools` list for sandboxes that
+ * working `env.run` — leave it out of a `tools` list for sandboxes that
  * don't execute shell commands.
  */
 export function createBashTool(env: Sandbox): AgentTool<typeof BashParams> {
@@ -299,7 +317,7 @@ export function createBashTool(env: Sandbox): AgentTool<typeof BashParams> {
       // model-facing parameter stays in seconds, matching bash-tool
       // convention; it is converted to milliseconds here):
       //
-      //   1. Pass `timeoutMs` to env.exec as a hint. Sandbox adapters
+      //   1. Pass `timeoutMs` to env.run as a hint. Sandbox adapters
       //      forward it to their provider's native timeout option
       //      (E2B `timeoutMs`, Daytona `timeout`, etc.) so signal-
       //      blind providers still observe the deadline with full
@@ -329,9 +347,10 @@ export function createBashTool(env: Sandbox): AgentTool<typeof BashParams> {
           params.command,
         )
       try {
-        const result = await env.exec(params.command, {
+        const result = await env.run({
+          command: params.command,
           timeoutMs,
-          signal: execSignal,
+          abortSignal: execSignal,
         })
         // Some sandbox adapters don't observe the signal mid-flight and
         // just return whatever the remote produced. If the timeout
@@ -487,24 +506,24 @@ const GrepParams = Type.Object({
   literal: Type.Optional(Type.Boolean({ description: 'Match the pattern as literal text' })),
 })
 
-// Keyed on env.exec rather than the env object: the session hands tool
+// Keyed on env.run rather than the env object: the session hands tool
 // factories a fresh per-call overlay env (packaged-skill routing), but the
-// exec function reference is stable across overlays — so the probe still
+// run function reference is stable across overlays — so the probe still
 // runs once per underlying sandbox.
-const grepBackends = new WeakMap<Sandbox['exec'], Promise<'rg' | 'grep'>>()
+const grepBackends = new WeakMap<Sandbox['run'], Promise<'rg' | 'grep'>>()
 
 function resolveGrepBackend(env: Sandbox): Promise<'rg' | 'grep'> {
-  let backend = grepBackends.get(env.exec)
+  let backend = grepBackends.get(env.run)
   if (!backend) {
     // No caller signal here: the probe result is cached per-env, so an
     // operation abort mid-probe would poison the cache with 'grep'. The
-    // exec timeout is adapter-enforced and can itself hang (a wedged
+    // run timeout is adapter-enforced and can itself hang (a wedged
     // sandbox RPC never observes a container-side deadline), so a
     // host-side race bounds the CACHED promise — a probe that answers
     // nothing memoizes 'grep', not a forever-pending promise every
     // later search in the session would await.
     const probe: Promise<'rg' | 'grep'> = env
-      .exec('rg --version', { timeoutMs: 10_000 })
+      .run({ command: 'rg --version', timeoutMs: 10_000 })
       .then(result => (result.exitCode === 0 ? ('rg' as const) : ('grep' as const)))
       .catch(() => 'grep' as const)
     backend = Promise.race<'rg' | 'grep'>([
@@ -514,14 +533,14 @@ function resolveGrepBackend(env: Sandbox): Promise<'rg' | 'grep'> {
         void probe.finally(() => clearTimeout(timer))
       }),
     ])
-    grepBackends.set(env.exec, backend)
+    grepBackends.set(env.run, backend)
   }
   return backend
 }
 
 /**
  * The framework's standard `grep` tool over a {@link Sandbox}. Requires a
- * working `env.exec` (searches via `rg` or `grep` in the sandbox).
+ * working `env.run` (searches via `rg` or `grep` in the sandbox).
  */
 export function createGrepTool(env: Sandbox): AgentTool<typeof GrepParams> {
   return {
@@ -547,7 +566,7 @@ export function createGrepTool(env: Sandbox): AgentTool<typeof GrepParams> {
         cmd = `grep -rnH ${patternFlag}${includeFlag} -- ${shellQuote(params.pattern)} ${shellQuote(searchPath)}`
       }
 
-      const result = await env.exec(cmd, { signal })
+      const result = await env.run({ command: cmd, abortSignal: signal })
 
       if (result.exitCode === 1 && !result.stdout.trim()) {
         return {
@@ -587,7 +606,7 @@ const GlobParams = Type.Object({
 
 /**
  * The framework's standard `glob` tool over a {@link Sandbox}. Requires a
- * working `env.exec` (finds files via `find` in the sandbox).
+ * working `env.run` (finds files via `find` in the sandbox).
  */
 export function createGlobTool(env: Sandbox): AgentTool<typeof GlobParams> {
   return {
@@ -601,7 +620,7 @@ export function createGlobTool(env: Sandbox): AgentTool<typeof GlobParams> {
 
       const searchPath = params.path || '.'
       const cmd = `find ${shellQuote(searchPath)} -type f -name ${shellQuote(params.pattern)} 2>/dev/null | head -${MAX_GLOB_RESULTS}`
-      const result = await env.exec(cmd, { signal })
+      const result = await env.run({ command: cmd, abortSignal: signal })
 
       if (result.exitCode !== 0 && !result.stdout.trim()) {
         return {
@@ -633,10 +652,31 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) { throw new Error('Operation aborted') }
 }
 
+/** A packaged skill file as model-readable text: binary files as wrapped base64. */
 function readPackagedSkillFile(
   skills: Record<string, PackagedSkillDirectory>,
   path: string,
 ): string | undefined {
+  const file = findPackagedSkillFile(skills, path)
+  if (file === undefined) { return undefined }
+  return file.kind === 'binary'
+    ? wrapBase64ForReading(file.content)
+    : new TextDecoder().decode(decodeBase64(file.content))
+}
+
+/** A packaged skill file's raw bytes. */
+function readPackagedSkillBytes(
+  skills: Record<string, PackagedSkillDirectory>,
+  path: string,
+): Uint8Array | undefined {
+  const file = findPackagedSkillFile(skills, path)
+  return file === undefined ? undefined : decodeBase64(file.content)
+}
+
+function findPackagedSkillFile(
+  skills: Record<string, PackagedSkillDirectory>,
+  path: string,
+): PackagedSkillDirectory['files'][string] | undefined {
   for (const skill of Object.values(skills)) {
     for (const [filePath, file] of Object.entries(skill.files)) {
       // The advertised path percent-encodes the skill id, but models echo
@@ -650,9 +690,7 @@ function readPackagedSkillFile(
       ) {
         continue
       }
-      return file.kind === 'binary'
-        ? wrapBase64ForReading(file.content)
-        : new TextDecoder().decode(decodeBase64(file.content))
+      return file
     }
   }
   return undefined

@@ -31,6 +31,7 @@ export {
   AmondError,
   AttachmentNotAvailableError,
   DelegationDepthExceededError,
+  FileNotFoundError,
   InstrumentationAlreadyInstalledError,
   OperationFailedError,
   SandboxDiedError,

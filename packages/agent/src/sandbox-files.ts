@@ -7,7 +7,9 @@
  */
 
 import { abortErrorFor } from './abort.ts'
+import { FileNotFoundError } from './errors.ts'
 import { bytesToStream, sliceLines, streamToBytes } from './sandbox-streams.ts'
+import type { AmondFs, Sandbox } from './types.ts'
 
 export interface ReadFileArgs {
   path: string
@@ -112,5 +114,35 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
       }
       await write(resolvePath(path), content)
     },
+  }
+}
+
+/**
+ * The path-based `AmondFs` facade (`harness.fs`, `session.fs`) over the
+ * session file methods. `getEnv` is called on every operation, so a swapped
+ * sandbox is immediately what the facade operates on. A read of a missing
+ * file rejects with {@link FileNotFoundError}, as `AmondFs` documents.
+ */
+export function createAmondFs(getEnv: () => Sandbox): AmondFs {
+  return {
+    async readFile(path) {
+      const content = await getEnv().readTextFile({ path })
+      if (content === null) { throw new FileNotFoundError({ path }) }
+      return content
+    },
+    async readFileBuffer(path) {
+      const content = await getEnv().readBinaryFile({ path })
+      if (content === null) { throw new FileNotFoundError({ path }) }
+      return content
+    },
+    writeFile: (path, content) =>
+      typeof content === 'string'
+        ? getEnv().writeTextFile({ path, content })
+        : getEnv().writeBinaryFile({ path, content }),
+    stat: path => getEnv().stat(path),
+    readdir: path => getEnv().readdir(path),
+    exists: path => getEnv().exists(path),
+    mkdir: (path, options) => getEnv().mkdir(path, options),
+    rm: (path, options) => getEnv().rm(path, options),
   }
 }
