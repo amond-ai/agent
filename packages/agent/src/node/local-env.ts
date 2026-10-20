@@ -11,8 +11,9 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 
 import { abortErrorFor, composeTimeoutSignal } from '../abort.ts'
-import { writeFileCreatingParents } from '../sandbox.ts'
-import type { FileStat, Sandbox, ShellResult } from '../types.ts'
+import { spawnFromRun, writeFileCreatingParents } from '../sandbox.ts'
+import { createSandboxFileMethods } from '../sandbox-files.ts'
+import type { FileStat, Sandbox, SandboxRunOptions, ShellResult } from '../types.ts'
 
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 
@@ -239,54 +240,99 @@ function resolveBaseEnv(userEnv: LocalSandboxOptions['env']): NodeJS.ProcessEnv 
   return base
 }
 
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === code
+}
+
 export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const baseEnv = resolveBaseEnv(options.env)
 
   const resolvePath = (p: string): string => (path.isAbsolute(p) ? p : path.resolve(cwd, p))
 
+  const execCommand = async (
+    command: string,
+    opts: { cwd?: string, env?: Record<string, string>, timeoutMs?: number, signal?: AbortSignal } | undefined,
+  ): Promise<ShellResult> => {
+    const signal = opts?.signal
+    if (signal?.aborted) { throw abortErrorFor(signal) }
+
+    // Compose timeoutMs with the caller's signal so signal-blind
+    // callers still observe deadlines and signal-aware ones can abort
+    // mid-flight. Mirrors the bashFactory adapter's behavior.
+    const { mergedSignal } = composeTimeoutSignal(opts?.timeoutMs, signal)
+
+    const result = await execShell(command, {
+      cwd: opts?.cwd ? resolvePath(opts.cwd) : cwd,
+      // Per-call env layers on top of `baseEnv` (allowlist +
+      // sandbox `env` option). `process.env` is intentionally
+      // never read here.
+      env: opts?.env ? { ...baseEnv, ...opts.env } : baseEnv,
+      signal: mergedSignal,
+    })
+    if (signal?.aborted) { throw abortErrorFor(signal) }
+    return result
+  }
+
+  const run = (options: SandboxRunOptions): Promise<ShellResult> =>
+    execCommand(options.command, {
+      cwd: options.workingDirectory,
+      env: options.env,
+      timeoutMs: options.timeoutMs,
+      signal: options.abortSignal,
+    })
+
+  const readBytes = async (resolved: string): Promise<Uint8Array> => {
+    const buf = await fs.readFile(resolved)
+    // Return a fresh Uint8Array view; Node Buffers are subclasses but
+    // downstream code shouldn't rely on Buffer-only methods.
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+  }
+
+  // AmondFs.writeFile guarantees parents are created as needed in every
+  // sandbox mode; the shared lazy implementation keeps the happy path at a
+  // single fs call.
+  const write = (resolved: string, content: string | Uint8Array): Promise<void> =>
+    writeFileCreatingParents(
+      () => fs.writeFile(resolved, content),
+      () => fs.mkdir(path.dirname(resolved), { recursive: true }),
+    )
+
+  const { readBinaryFile, readTextFile, writeBinaryFile, writeTextFile } = createSandboxFileMethods({
+    resolvePath,
+    readText: resolved => fs.readFile(resolved, 'utf8'),
+    readBytes,
+    write,
+    // ENOTDIR: a path component is a file, so the path cannot exist.
+    isMissing: error => isNodeErrorCode(error, 'ENOENT') || isNodeErrorCode(error, 'ENOTDIR'),
+  })
+
   return {
-    async exec(command, opts): Promise<ShellResult> {
-      const signal = opts?.signal
-      if (signal?.aborted) { throw abortErrorFor(signal) }
+    description:
+      'The host machine\'s own shell and filesystem, with no isolation. ' +
+      `The working directory is ${cwd}; relative paths and commands resolve against it.`,
 
-      // Compose timeoutMs with the caller's signal so signal-blind
-      // callers still observe deadlines and signal-aware ones can abort
-      // mid-flight. Mirrors the bashFactory adapter's behavior.
-      const { mergedSignal } = composeTimeoutSignal(opts?.timeoutMs, signal)
+    run,
 
-      const result = await execShell(command, {
-        cwd: opts?.cwd ? resolvePath(opts.cwd) : cwd,
-        // Per-call env layers on top of `baseEnv` (allowlist +
-        // sandbox `env` option). `process.env` is intentionally
-        // never read here.
-        env: opts?.env ? { ...baseEnv, ...opts.env } : baseEnv,
-        signal: mergedSignal,
-      })
-      if (signal?.aborted) { throw abortErrorFor(signal) }
-      return result
-    },
+    spawn: options => spawnFromRun(run, options),
+
+    readBinaryFile,
+    readTextFile,
+    writeBinaryFile,
+    writeTextFile,
+
+    exec: execCommand,
 
     async readFile(p) {
       return fs.readFile(resolvePath(p), 'utf8')
     },
 
     async readFileBuffer(p) {
-      const buf = await fs.readFile(resolvePath(p))
-      // Return a fresh Uint8Array view; Node Buffers are subclasses but
-      // downstream code shouldn't rely on Buffer-only methods.
-      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+      return readBytes(resolvePath(p))
     },
 
     async writeFile(p, content) {
-      const resolved = resolvePath(p)
-      // AmondFs.writeFile guarantees parents are created as needed in
-      // every sandbox mode; the shared lazy implementation keeps the
-      // happy path at a single fs call.
-      await writeFileCreatingParents(
-        () => fs.writeFile(resolved, content),
-        () => fs.mkdir(path.dirname(resolved), { recursive: true }),
-      )
+      await write(resolvePath(p), content)
     },
 
     async stat(p): Promise<FileStat> {

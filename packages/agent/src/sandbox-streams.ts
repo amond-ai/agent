@@ -2,20 +2,13 @@
  * Stream, line-range, and process helpers shared by every `Sandbox` provider.
  *
  * Runs on workerd as well as Node, so it uses only web-platform primitives. The
- * AI SDK's `SandboxProcess` shape is mirrored structurally (`SandboxProcessHandle`)
- * so this module does not depend on `@ai-sdk/provider-utils`.
+ * AI SDK's `SandboxProcess` is imported as a type only, so nothing from
+ * `@ai-sdk/provider-utils` reaches the bundle.
  */
 
-const encoder = new TextEncoder()
+import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 
-/** Structural twin of the AI SDK `SandboxProcess`. */
-export interface SandboxProcessHandle {
-  readonly pid?: number
-  readonly stdout: ReadableStream<Uint8Array>
-  readonly stderr: ReadableStream<Uint8Array>
-  wait: () => PromiseLike<{ exitCode: number }>
-  kill: () => PromiseLike<void>
-}
+const encoder = new TextEncoder()
 
 /** One-chunk byte stream. An empty payload yields an empty, already-closed stream. */
 export function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
@@ -77,7 +70,7 @@ export interface ProcessControllerOptions {
 }
 
 export interface ProcessController {
-  process: SandboxProcessHandle
+  process: Experimental_SandboxProcess
   /** Deliver a stdout chunk, in call order. Ignored after exit or failure. */
   pushStdout: (chunk: Uint8Array | string) => void
   /** Deliver a stderr chunk, in call order. Ignored after exit or failure. */
@@ -136,7 +129,7 @@ export function createProcessController(options: ProcessControllerOptions): Proc
 
   let killPromise: Promise<void> | undefined
 
-  const process: SandboxProcessHandle = {
+  const process: Experimental_SandboxProcess = {
     ...(options.pid !== undefined ? { pid: options.pid } : {}),
     stdout,
     stderr,

@@ -1,4 +1,5 @@
 /** Wraps a @cloudflare/sandbox instance (from getSandbox()) into Sandbox. */
+import { roundUpTimeoutMs } from '../abort.ts'
 import { decodeBase64, encodeBase64 } from '../base64.ts'
 import { SandboxDiedError } from '../errors.ts'
 import type { SandboxDriver } from '../sandbox.ts'
@@ -286,8 +287,9 @@ function cfSandboxToSandbox(sandbox: CloudflareSandboxStub, cwd: string = '/work
         sandbox.exec(command, {
           cwd: execOpts?.cwd,
           env: execOpts?.env,
-          // The Cloudflare sandbox `timeout` option is in milliseconds.
-          timeout: execOpts?.timeoutMs,
+          // The Cloudflare sandbox `timeout` option is in milliseconds;
+          // a fractional deadline is rounded up, never down.
+          timeout: execOpts?.timeoutMs !== undefined ? roundUpTimeoutMs(execOpts.timeoutMs) : undefined,
         }),
       )
 
@@ -299,5 +301,9 @@ function cfSandboxToSandbox(sandbox: CloudflareSandboxStub, cwd: string = '/work
     },
   }
 
-  return sandboxFromDriver(api, cwd)
+  return sandboxFromDriver(api, cwd, {
+    description:
+      `A Cloudflare Sandbox Linux container. The working directory is ${cwd}; relative paths and ` +
+      'commands resolve against it.',
+  })
 }

@@ -164,6 +164,7 @@ export type {
   PromptUsage,
   Sandbox,
   SandboxFactory,
+  SandboxRunOptions,
   SandboxToolFactory,
   SandboxToolFactoryOptions,
   // Deprecated aliases for Sandbox, SandboxToolFactory, and

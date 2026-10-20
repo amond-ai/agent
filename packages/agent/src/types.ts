@@ -1,3 +1,4 @@
+import type { Experimental_SandboxProcess, Experimental_SandboxSession } from '@ai-sdk/provider-utils'
 import type { AgentMessage, AgentTool, ThinkingLevel } from '@earendil-works/pi-agent-core'
 import type { ImageContent, Model } from '@earendil-works/pi-ai'
 
@@ -276,6 +277,18 @@ export interface FileStat {
 // ─── Sandbox ─────────────────────────────────────────────────────────────────
 
 /**
+ * Options for {@link Sandbox.run} and {@link Sandbox.spawn}: the AI SDK
+ * sandbox session's command options plus an optional provider deadline.
+ */
+export type SandboxRunOptions = Parameters<Experimental_SandboxSession['run']>[0] & {
+  /**
+   * Wall-clock deadline in milliseconds, forwarded to the provider's native
+   * timeout option. A fractional value is rounded up, never down.
+   */
+  timeoutMs?: number
+}
+
+/**
  * The agent's live sandbox: the universal environment interface. All sandbox
  * modes (isolate, local, remote) implement this — no mode-specific branching
  * needed in core logic.
@@ -283,6 +296,44 @@ export interface FileStat {
  * File methods accept both absolute and relative paths (resolved against `cwd`).
  */
 export interface Sandbox {
+  /**
+   * The sandbox environment in prose, for the agent's instructions: what
+   * kind of environment it is and its working directory.
+   */
+  readonly description: string
+
+  /**
+   * Run a command to completion. `workingDirectory` resolves against `cwd`.
+   * A pre-aborted `abortSignal` rejects without executing the command; a
+   * mid-flight abort rejects promptly with an `AbortError`, even when the
+   * provider cannot cancel the command.
+   */
+  run(options: SandboxRunOptions): Promise<ShellResult>
+
+  /**
+   * Start a command and return a handle to its output streams, `wait()`, and
+   * `kill()`. Providers that cannot stream deliver the whole output when the
+   * command finishes.
+   */
+  spawn(options: SandboxRunOptions): Promise<Experimental_SandboxProcess>
+
+  /** Read a file as bytes; `null` when it does not exist. */
+  readBinaryFile(
+    options: Parameters<Experimental_SandboxSession['readBinaryFile']>[0],
+  ): Promise<Uint8Array | null>
+  /** Read a file as text, optionally a 1-based inclusive line range; `null` when it does not exist. */
+  readTextFile(
+    options: Parameters<Experimental_SandboxSession['readTextFile']>[0],
+  ): Promise<string | null>
+  /** Write bytes, creating missing parent directories. */
+  writeBinaryFile(
+    options: Parameters<Experimental_SandboxSession['writeBinaryFile']>[0],
+  ): Promise<void>
+  /** Write text, creating missing parent directories. */
+  writeTextFile(
+    options: Parameters<Experimental_SandboxSession['writeTextFile']>[0],
+  ): Promise<void>
+
   exec(
     command: string,
     options?: {
