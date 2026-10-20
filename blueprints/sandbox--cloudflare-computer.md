@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 2,
+  "version": 3,
   "website": "https://github.com/cloudflare/computer",
   "aliases": ["@cloudflare/computer", "@cloudflare/shell", "@cloudflare/workspace"]
 }
@@ -41,16 +41,22 @@ Write this file verbatim. It requires a Cloudflare Worker target with a
 `worker_loaders` binding.
 
 ```ts
-// amond-blueprint: sandbox/cloudflare-computer@2
+// amond-blueprint: sandbox/cloudflare-computer@3
 import {
 	type DurableObjectStorageLike,
 	Workspace,
 	type WorkspaceOptions,
-	type WorkspaceRuntimeExecHandle,
 } from '@cloudflare/computer';
 import { WorkerShellBackend } from '@cloudflare/computer/backends/worker-shell';
 import { createGitClient } from '@cloudflare/computer/git';
-import type { FileStat, Sandbox, SandboxFactory, ShellResult } from '@amond-ai/agent';
+import {
+	type FileStat,
+	type Sandbox,
+	type SandboxDriver,
+	type SandboxFactory,
+	type ShellResult,
+	sandboxFromDriver,
+} from '@amond-ai/agent';
 import { extend, getDurableObjectIdentity } from '@amond-ai/agent/cloudflare';
 
 // One live Durable Object instance exists per id, and the agent renders
@@ -204,108 +210,60 @@ export function getComputerSandbox(options: GetComputerWorkspaceOptions): Sandbo
 		async createSandbox(): Promise<ComputerSandboxEnv> {
 			const workspace = getComputerWorkspace(options);
 			await workspace.fs.mkdir(DEFAULT_CWD, { recursive: true });
-			return { ...createWorkspaceSandbox(workspace, DEFAULT_CWD), workspace };
+			const sandbox = sandboxFromDriver(createWorkspaceDriver(workspace, DEFAULT_CWD), DEFAULT_CWD, {
+				description:
+					`A durable Cloudflare Computer workspace. The working directory is ${DEFAULT_CWD}; ` +
+					'commands run in a just-bash shell, and relative paths resolve against it.',
+			});
+			return { ...sandbox, workspace };
 		},
 		// No `tools` override: exec() works here, so the framework's standard
 		// set (bash/grep/glob/read/write/edit) applies as-is.
 	};
 }
 
-function normalizePath(p: string): string {
-	const parts = p.split('/');
-	const result: string[] = [];
-	for (const part of parts) {
-		if (part === '.' || part === '') continue;
-		if (part === '..') result.pop();
-		else result.push(part);
-	}
-	return `/${result.join('/')}`;
-}
-
-function abortError(): Error {
-	return new DOMException('The operation was aborted.', 'AbortError');
-}
-
-async function settleExec(
-	run: WorkspaceRuntimeExecHandle<'utf8'>,
-	signal?: AbortSignal,
-): Promise<ShellResult> {
-	try {
-		const result = signal
-			? await new Promise<Awaited<ReturnType<typeof run.result>>>((resolve, reject) => {
-					// Reject promptly on abort — never gated on the remote command's
-					// settlement — and kill the run best-effort behind it.
-					const onAbort = () => {
-						void run.kill('SIGKILL').catch(() => {});
-						reject(abortError());
-					};
-					if (signal.aborted) {
-						onAbort();
-						return;
-					}
-					signal.addEventListener('abort', onAbort, { once: true });
-					run.result().then(
-						(value) => {
-							signal.removeEventListener('abort', onAbort);
-							resolve(value);
-						},
-						(error) => {
-							signal.removeEventListener('abort', onAbort);
-							reject(error);
-						},
-					);
-				})
-			: await run.result();
-		return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-	} finally {
-		run[Symbol.dispose]();
-	}
-}
-
-function createWorkspaceSandbox(workspace: Workspace, cwd: string): Sandbox {
-	const normalizedCwd = normalizePath(cwd);
-	const resolvePath = (p: string): string => {
-		if (p.startsWith('/')) return normalizePath(p);
-		if (normalizedCwd === '/') return normalizePath(`/${p}`);
-		return normalizePath(`${normalizedCwd}/${p}`);
-	};
+// The wrapper resolves every path and the working directory against `cwd`
+// before it calls the driver, so the driver passes them straight through.
+function createWorkspaceDriver(workspace: Workspace, cwd: string): SandboxDriver {
 	const fs = workspace.fs;
 	const errorCode = (error: unknown): string | undefined =>
 		(error as { code?: string } | undefined)?.code;
 
 	return {
 		async exec(command, options): Promise<ShellResult> {
-			if (options?.signal?.aborted) throw abortError();
 			const run = await workspace.runtime.exec(command, {
-				cwd: options?.cwd !== undefined ? resolvePath(options.cwd) : normalizedCwd,
+				cwd: options?.cwd ?? cwd,
 				env: options?.env,
 				timeoutMs: options?.timeoutMs,
 				encoding: 'utf8',
 			});
-			return settleExec(run, options?.signal);
+			// `sandboxFromDriver` rejects the caller promptly on abort and treats
+			// this call as an orphan. The driver's part is the remote kill, best
+			// effort, so the command stops instead of running on.
+			const signal = options?.signal;
+			const kill = () => void run.kill('SIGKILL').catch(() => {});
+			if (signal?.aborted) kill();
+			else signal?.addEventListener('abort', kill, { once: true });
+			try {
+				const result = await run.result();
+				return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+			} finally {
+				signal?.removeEventListener('abort', kill);
+				run[Symbol.dispose]();
+			}
 		},
 		async readFile(path: string): Promise<string> {
-			return fs.readFile(resolvePath(path), 'utf8');
+			return fs.readFile(path, 'utf8');
 		},
 		async readFileBuffer(path: string): Promise<Uint8Array> {
-			const stream = await fs.readFile(resolvePath(path));
+			const stream = await fs.readFile(path);
 			return new Uint8Array(await new Response(stream).arrayBuffer());
 		},
 		async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-			const resolved = resolvePath(path);
-			try {
-				await fs.writeFile(resolved, content);
-			} catch (error) {
-				// ENOENT here means a missing parent directory; create it and
-				// retry once.
-				if (errorCode(error) !== 'ENOENT') throw error;
-				const parent = resolved.slice(0, resolved.lastIndexOf('/')) || '/';
-				await fs.mkdir(parent, { recursive: true });
-				await fs.writeFile(resolved, content);
-			}
+			await fs.writeFile(path, content);
 		},
 		async stat(path: string): Promise<FileStat> {
-			const s = await fs.stat(resolvePath(path));
+			const s = await fs.stat(path);
 			// fs.stat follows symlinks and reports no symlink flag; leave
 			// isSymbolicLink unset rather than fabricate one.
 			return {
@@ -316,11 +274,11 @@ function createWorkspaceSandbox(workspace: Workspace, cwd: string): Sandbox {
 			};
 		},
 		async readdir(path: string): Promise<string[]> {
-			return (await fs.readdir(resolvePath(path))).map((entry) => entry.name);
+			return (await fs.readdir(path)).map((entry) => entry.name);
 		},
 		async exists(path: string): Promise<boolean> {
 			try {
-				await fs.stat(resolvePath(path));
+				await fs.stat(path);
 				return true;
 			} catch (error) {
 				const code = errorCode(error);
@@ -329,16 +287,14 @@ function createWorkspaceSandbox(workspace: Workspace, cwd: string): Sandbox {
 			}
 		},
 		async mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
-			await fs.mkdir(resolvePath(path), opts?.recursive ? { recursive: true } : undefined);
+			await fs.mkdir(path, opts?.recursive ? { recursive: true } : undefined);
 		},
 		async rm(path: string, opts?: { recursive?: boolean; force?: boolean }): Promise<void> {
 			const mapped: { recursive?: true; force?: true } = {};
 			if (opts?.recursive) mapped.recursive = true;
 			if (opts?.force) mapped.force = true;
-			await fs.rm(resolvePath(path), mapped);
+			await fs.rm(path, mapped);
 		},
-		cwd: normalizedCwd,
-		resolvePath,
 	};
 }
 ```
@@ -410,6 +366,9 @@ shell implemented in JavaScript inside a Dynamic Worker: coreutils, pipes,
 redirects, `grep`, and `find` work; native binaries, `npm`, and arbitrary
 network access do not. Filesystem state is durable across Durable Object
 restarts and capped around 10 GB (it shares the DO's SQLite storage).
+The adapter implements amond's `SandboxDriver` — `exec`, the file verbs, and
+the abort kill — and `sandboxFromDriver` builds the full `Sandbox` around it,
+so the abort race and the `Sandbox` surface are not hand-written here.
 Application code uses the file verbs on `harness.sandbox`, or narrows to the
 native surface with `computerWorkspace(harness.sandbox)` for workspace
 operations the generic interface doesn't cover (git, mounts, streams).
@@ -514,4 +473,198 @@ Cancel an exec whose signal is already aborted when `settleExec` runs. The abort
 +						return;
 +					}
  					signal.addEventListener('abort', onAbort, { once: true });
+```
+
+### Version 3 — 2026-10-20
+
+Build the sandbox from a `SandboxDriver` with `sandboxFromDriver` instead of hand-implementing `Sandbox`. `Sandbox` now follows the AI SDK sandbox session (`run`, `spawn`, `readTextFile`, `writeTextFile`, and a `description`), so the old `exec`/`readFileBuffer` object no longer type-checks. The driver keeps the best-effort remote kill on abort, and the wrapper owns the prompt rejection. Replace `normalizePath`, `abortError`, `settleExec`, and `createWorkspaceSandbox` with `createWorkspaceDriver`, update the imports, and change the `createSandbox` body to call `sandboxFromDriver(createWorkspaceDriver(workspace, DEFAULT_CWD), DEFAULT_CWD, { description })`. Bump the marker to `@3`.
+
+```diff
+--- a/src/sandboxes/cloudflare-computer.ts
++++ b/src/sandboxes/cloudflare-computer.ts
+@@ -1,12 +1,18 @@
+-// amond-blueprint: sandbox/cloudflare-computer@2
++// amond-blueprint: sandbox/cloudflare-computer@3
+ import {
+ 	type DurableObjectStorageLike,
+ 	Workspace,
+ 	type WorkspaceOptions,
+-	type WorkspaceRuntimeExecHandle,
+ } from '@cloudflare/computer';
+ import { WorkerShellBackend } from '@cloudflare/computer/backends/worker-shell';
+ import { createGitClient } from '@cloudflare/computer/git';
+-import type { FileStat, Sandbox, SandboxFactory, ShellResult } from '@amond-ai/agent';
++import {
++	type FileStat,
++	type Sandbox,
++	type SandboxDriver,
++	type SandboxFactory,
++	type ShellResult,
++	sandboxFromDriver,
++} from '@amond-ai/agent';
+ import { extend, getDurableObjectIdentity } from '@amond-ai/agent/cloudflare';
+ 
+@@ -162,5 +168,10 @@
+ 			const workspace = getComputerWorkspace(options);
+ 			await workspace.fs.mkdir(DEFAULT_CWD, { recursive: true });
+-			return { ...createWorkspaceSandbox(workspace, DEFAULT_CWD), workspace };
++			const sandbox = sandboxFromDriver(createWorkspaceDriver(workspace, DEFAULT_CWD), DEFAULT_CWD, {
++				description:
++					`A durable Cloudflare Computer workspace. The working directory is ${DEFAULT_CWD}; ` +
++					'commands run in a just-bash shell, and relative paths resolve against it.',
++			});
++			return { ...sandbox, workspace };
+ 		},
+ 		// No `tools` override: exec() works here, so the framework's standard
+@@ -169,62 +180,7 @@
+ }
+ 
+-function normalizePath(p: string): string {
+-	const parts = p.split('/');
+-	const result: string[] = [];
+-	for (const part of parts) {
+-		if (part === '.' || part === '') continue;
+-		if (part === '..') result.pop();
+-		else result.push(part);
+-	}
+-	return `/${result.join('/')}`;
+-}
+-
+-function abortError(): Error {
+-	return new DOMException('The operation was aborted.', 'AbortError');
+-}
+-
+-async function settleExec(
+-	run: WorkspaceRuntimeExecHandle<'utf8'>,
+-	signal?: AbortSignal,
+-): Promise<ShellResult> {
+-	try {
+-		const result = signal
+-			? await new Promise<Awaited<ReturnType<typeof run.result>>>((resolve, reject) => {
+-					// Reject promptly on abort — never gated on the remote command's
+-					// settlement — and kill the run best-effort behind it.
+-					const onAbort = () => {
+-						void run.kill('SIGKILL').catch(() => {});
+-						reject(abortError());
+-					};
+-					if (signal.aborted) {
+-						onAbort();
+-						return;
+-					}
+-					signal.addEventListener('abort', onAbort, { once: true });
+-					run.result().then(
+-						(value) => {
+-							signal.removeEventListener('abort', onAbort);
+-							resolve(value);
+-						},
+-						(error) => {
+-							signal.removeEventListener('abort', onAbort);
+-							reject(error);
+-						},
+-					);
+-				})
+-			: await run.result();
+-		return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+-	} finally {
+-		run[Symbol.dispose]();
+-	}
+-}
+-
+-function createWorkspaceSandbox(workspace: Workspace, cwd: string): Sandbox {
+-	const normalizedCwd = normalizePath(cwd);
+-	const resolvePath = (p: string): string => {
+-		if (p.startsWith('/')) return normalizePath(p);
+-		if (normalizedCwd === '/') return normalizePath(`/${p}`);
+-		return normalizePath(`${normalizedCwd}/${p}`);
+-	};
++// The wrapper resolves every path and the working directory against `cwd`
++// before it calls the driver, so the driver passes them straight through.
++function createWorkspaceDriver(workspace: Workspace, cwd: string): SandboxDriver {
+ 	const fs = workspace.fs;
+ 	const errorCode = (error: unknown): string | undefined =>
+@@ -233,35 +189,37 @@
+ 	return {
+ 		async exec(command, options): Promise<ShellResult> {
+-			if (options?.signal?.aborted) throw abortError();
+ 			const run = await workspace.runtime.exec(command, {
+-				cwd: options?.cwd !== undefined ? resolvePath(options.cwd) : normalizedCwd,
++				cwd: options?.cwd ?? cwd,
+ 				env: options?.env,
+ 				timeoutMs: options?.timeoutMs,
+ 				encoding: 'utf8',
+ 			});
+-			return settleExec(run, options?.signal);
++			// `sandboxFromDriver` rejects the caller promptly on abort and treats
++			// this call as an orphan. The driver's part is the remote kill, best
++			// effort, so the command stops instead of running on.
++			const signal = options?.signal;
++			const kill = () => void run.kill('SIGKILL').catch(() => {});
++			if (signal?.aborted) kill();
++			else signal?.addEventListener('abort', kill, { once: true });
++			try {
++				const result = await run.result();
++				return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
++			} finally {
++				signal?.removeEventListener('abort', kill);
++				run[Symbol.dispose]();
++			}
+ 		},
+ 		async readFile(path: string): Promise<string> {
+-			return fs.readFile(resolvePath(path), 'utf8');
++			return fs.readFile(path, 'utf8');
+ 		},
+ 		async readFileBuffer(path: string): Promise<Uint8Array> {
+-			const stream = await fs.readFile(resolvePath(path));
++			const stream = await fs.readFile(path);
+ 			return new Uint8Array(await new Response(stream).arrayBuffer());
+ 		},
+ 		async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+-			const resolved = resolvePath(path);
+-			try {
+-				await fs.writeFile(resolved, content);
+-			} catch (error) {
+-				// ENOENT here means a missing parent directory; create it and
+-				// retry once.
+-				if (errorCode(error) !== 'ENOENT') throw error;
+-				const parent = resolved.slice(0, resolved.lastIndexOf('/')) || '/';
+-				await fs.mkdir(parent, { recursive: true });
+-				await fs.writeFile(resolved, content);
+-			}
++			await fs.writeFile(path, content);
+ 		},
+ 		async stat(path: string): Promise<FileStat> {
+-			const s = await fs.stat(resolvePath(path));
++			const s = await fs.stat(path);
+ 			// fs.stat follows symlinks and reports no symlink flag; leave
+ 			// isSymbolicLink unset rather than fabricate one.
+@@ -274,9 +232,9 @@
+ 		},
+ 		async readdir(path: string): Promise<string[]> {
+-			return (await fs.readdir(resolvePath(path))).map((entry) => entry.name);
++			return (await fs.readdir(path)).map((entry) => entry.name);
+ 		},
+ 		async exists(path: string): Promise<boolean> {
+ 			try {
+-				await fs.stat(resolvePath(path));
++				await fs.stat(path);
+ 				return true;
+ 			} catch (error) {
+@@ -287,5 +245,5 @@
+ 		},
+ 		async mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
+-			await fs.mkdir(resolvePath(path), opts?.recursive ? { recursive: true } : undefined);
++			await fs.mkdir(path, opts?.recursive ? { recursive: true } : undefined);
+ 		},
+ 		async rm(path: string, opts?: { recursive?: boolean; force?: boolean }): Promise<void> {
+@@ -293,8 +251,6 @@
+ 			if (opts?.recursive) mapped.recursive = true;
+ 			if (opts?.force) mapped.force = true;
+-			await fs.rm(resolvePath(path), mapped);
+-		},
+-		cwd: normalizedCwd,
+-		resolvePath,
++			await fs.rm(path, mapped);
++		},
+ 	};
+ }
 ```
