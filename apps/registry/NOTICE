@@ -7,7 +7,9 @@ for the full text.
 The blueprints served here are derived from Flue's blueprints (https://github.com/withastro/flue)
 at commit `deee93b` (v2.3.0), which are licensed under the Apache License, Version 2.0. Blueprints
 for packages amond does not ship were left out. The rest were renamed to amond and edited to
-remove references to packages amond does not ship.
+remove references to packages amond does not ship, and amond corrected defects in some of them.
+Every change other than the rename is listed in apps/registry/CHANGES.md:
+https://github.com/amond-ai/agent/blob/main/apps/registry/CHANGES.md
 
 The Flue repository's LICENSE file is the unfilled Apache template and names no copyright holder,
 so this notice reproduces none.

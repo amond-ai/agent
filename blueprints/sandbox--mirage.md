@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 1,
+  "version": 2,
   "website": "https://docs.mirage.strukto.ai",
   "aliases": ["@struktoai/mirage-node", "@struktoai/mirage-browser"]
 }
@@ -52,7 +52,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxDriver` contract.
 
 ```ts
-// amond-blueprint: sandbox/mirage@1
+// amond-blueprint: sandbox/mirage@2
 /**
  * Mirage adapter for amond.
  *
@@ -76,7 +76,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
  * }
  * ```
  */
-import { sandboxFromDriver, SandboxOperationUnsupportedError } from '@amond-ai/agent';
+import { sandboxFromDriver } from '@amond-ai/agent';
 import type { SandboxDriver, SandboxFactory, Sandbox, FileStat } from '@amond-ai/agent';
 import type { Workspace as MirageWorkspace } from '@struktoai/mirage-core';
 
@@ -110,8 +110,9 @@ function shellQuote(value: string): string {
  * Filesystem operations route through `workspace.fs.*` (Mirage's direct
  * VFS API) for read/write/readdir/stat/exists/single-level mkdir.
  * Recursive `mkdir -p` shells out via `workspace.execute()` because
- * `WorkspaceFS` exposes only single-level `mkdir`. Removal stays on the
- * filesystem API and rejects unsupported recursive/force options.
+ * `WorkspaceFS` exposes only single-level `mkdir`. Removal with `recursive`
+ * or `force` shells out the same way (`rm [-r] [-f] --`); plain removal
+ * stays on the filesystem API.
  *
  * `cwd`, `env`, and `signal` (including `AbortSignal.timeout(...)`) all
  * pass directly through to `ExecuteOptions` — Mirage runs each call in an
@@ -156,9 +157,14 @@ class MirageSandboxDriver implements SandboxDriver {
 	async readdir(path: string): Promise<string[]> {
 		// Mirage returns absolute paths; some implementations include a
 		// trailing `/` for directories, which `lastIndexOf('/') + 1` would
-		// turn into an empty string — strip those.
+		// turn into an empty string — strip those before taking the basename.
 		const entries = await this.workspace.fs.readdir(path);
-		return entries.map((p) => p.slice(p.lastIndexOf('/') + 1)).filter((n) => n.length > 0);
+		return entries
+			.map((p) => {
+				const trimmed = p.replace(/\/+$/, '');
+				return trimmed.slice(trimmed.lastIndexOf('/') + 1);
+			})
+			.filter((n) => n.length > 0);
 	}
 
 	async exists(path: string): Promise<boolean> {
@@ -182,21 +188,41 @@ class MirageSandboxDriver implements SandboxDriver {
 	}
 
 	async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-		const unsupported = [
-			options?.recursive ? 'recursive' : undefined,
-			options?.force ? 'force' : undefined,
-		].filter((option): option is string => option !== undefined);
-		if (unsupported.length > 0) {
-			throw new SandboxOperationUnsupportedError({
-				operation: 'rm',
-				provider: 'Mirage',
-				options: unsupported,
-			});
+		if (options?.recursive || options?.force) {
+			// `WorkspaceFS` has no recursive or forced removal. Mirage's executor
+			// implements `rm -r` and `rm -f`, so shell out, as `mkdir -p` does.
+			const flags = [options.recursive ? '-r' : '', options.force ? '-f' : ''].filter(Boolean);
+			const result = await this.runShell(['rm', ...flags, '--', shellQuote(path)].join(' '));
+			if (result.exitCode !== 0) {
+				throw new Error(
+					`[amond:mirage] rm failed for ${path}: ` +
+						(result.stderr || result.stdout || `exit ${result.exitCode}`),
+				);
+			}
+			return;
 		}
-		try {
+		// `stat` follows symlinks, so check for a link first: removing a link
+		// to a directory unlinks the link and leaves its target alone.
+		// Only EINVAL (not a link) and ENOENT (missing; `stat` reports it) mean
+		// "not a link"; any other `readlink` failure is rethrown.
+		const isLink = await this.workspace.fs.readlink(path).then(
+			() => true,
+			(err: { code?: string }) => {
+				if (err?.code === 'EINVAL' || err?.code === 'ENOENT') return false;
+				throw err;
+			},
+		);
+		if (isLink) {
 			await this.workspace.fs.unlink(path);
-		} catch {
+			return;
+		}
+		// Dispatch by type so a failed file removal reports its own reason
+		// instead of the `rmdir` error. A missing path surfaces the stat error.
+		const s = await this.workspace.fs.stat(path);
+		if (s.type === 'directory') {
 			await this.workspace.fs.rmdir(path);
+		} else {
+			await this.workspace.fs.unlink(path);
 		}
 	}
 
@@ -309,14 +335,20 @@ you can't tell which target they're on, check `vite.config.ts` for the
 For the Node target:
 
 ```bash
-npm install @struktoai/mirage-node@^0.0.2
+npm install @struktoai/mirage-node@^0.0.6 @struktoai/mirage-core@0.0.6
 ```
 
 For the Cloudflare target:
 
 ```bash
-npm install @struktoai/mirage-browser@^0.0.2
+npm install @struktoai/mirage-browser@^0.0.6 @struktoai/mirage-core@0.0.6
 ```
+
+The adapter imports types from `@struktoai/mirage-core`, so install it as a
+direct dependency. Both runtime packages pin it to their own exact version
+(`^0.0.6` resolves to `0.0.6`, which pins core `0.0.6`); keep the two versions
+identical. Without a direct dependency, pnpm's strict layout and Yarn PnP fail
+the typecheck with TS2307.
 
 (Use the user's package manager — `pnpm add`, `yarn add`, etc. if their
 lockfile indicates a different one.)
@@ -392,3 +424,115 @@ When updating an existing integration, inspect and compare it against this compl
 ### Version 1 — 2026-06-14
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Fix the install steps, `readdir` and `rm`. The adapter imports types from `@struktoai/mirage-core`, which arrived only transitively, so a strict layout (pnpm, Yarn PnP) failed the typecheck. `readdir` dropped entries that end in `/`. `rm` ignored the sandbox contract for an adapter that already shells out, and its `unlink`-then-`rmdir` fallback hid the file's own failure.
+
+In the generated file, `readdir` strips trailing slashes before taking the basename. `rm` with `recursive` or `force` now runs `rm [-r] [-f] --` through the shell and throws on a non-zero exit. A plain `rm` unlinks a symlink (`readlink` succeeds; `readlink` errors other than `EINVAL` and `ENOENT` are rethrown), and otherwise calls `stat` and dispatches to `rmdir` or `unlink` by type. The `SandboxOperationUnsupportedError` import is gone.
+
+Install `@struktoai/mirage-core` as a direct dependency, at the runtime package's exact version. Move the install to 0.0.6, the version the adapter type-checks against (`^0.0.2` resolved to exactly 0.0.2, whose types fail the `stat` comparison), and add core at the same exact version: change the install command to `npm install @struktoai/mirage-node@^0.0.6 @struktoai/mirage-core@0.0.6`, or `npm install @struktoai/mirage-browser@^0.0.6 @struktoai/mirage-core@0.0.6` for the Cloudflare target. With another package manager, add the same two packages.
+
+```diff
+--- a/src/sandboxes/mirage.ts
++++ b/src/sandboxes/mirage.ts
+@@ -1,4 +1,4 @@
+-// amond-blueprint: sandbox/mirage@1
++// amond-blueprint: sandbox/mirage@2
+ /**
+  * Mirage adapter for amond.
+  *
+@@ -22,7 +22,7 @@
+  * }
+  * ```
+  */
+-import { sandboxFromDriver, SandboxOperationUnsupportedError } from '@amond-ai/agent';
++import { sandboxFromDriver } from '@amond-ai/agent';
+ import type { SandboxDriver, SandboxFactory, Sandbox, FileStat } from '@amond-ai/agent';
+ import type { Workspace as MirageWorkspace } from '@struktoai/mirage-core';
+ 
+@@ -56,8 +56,9 @@
+  * Filesystem operations route through `workspace.fs.*` (Mirage's direct
+  * VFS API) for read/write/readdir/stat/exists/single-level mkdir.
+  * Recursive `mkdir -p` shells out via `workspace.execute()` because
+- * `WorkspaceFS` exposes only single-level `mkdir`. Removal stays on the
+- * filesystem API and rejects unsupported recursive/force options.
++ * `WorkspaceFS` exposes only single-level `mkdir`. Removal with `recursive`
++ * or `force` shells out the same way (`rm [-r] [-f] --`); plain removal
++ * stays on the filesystem API.
+  *
+  * `cwd`, `env`, and `signal` (including `AbortSignal.timeout(...)`) all
+  * pass directly through to `ExecuteOptions` — Mirage runs each call in an
+@@ -102,9 +103,14 @@
+ 	async readdir(path: string): Promise<string[]> {
+ 		// Mirage returns absolute paths; some implementations include a
+ 		// trailing `/` for directories, which `lastIndexOf('/') + 1` would
+-		// turn into an empty string — strip those.
++		// turn into an empty string — strip those before taking the basename.
+ 		const entries = await this.workspace.fs.readdir(path);
+-		return entries.map((p) => p.slice(p.lastIndexOf('/') + 1)).filter((n) => n.length > 0);
++		return entries
++			.map((p) => {
++				const trimmed = p.replace(/\/+$/, '');
++				return trimmed.slice(trimmed.lastIndexOf('/') + 1);
++			})
++			.filter((n) => n.length > 0);
+ 	}
+ 
+ 	async exists(path: string): Promise<boolean> {
+@@ -128,21 +134,26 @@
+ 	}
+ 
+ 	async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+-		const unsupported = [
+-			options?.recursive ? 'recursive' : undefined,
+-			options?.force ? 'force' : undefined,
+-		].filter((option): option is string => option !== undefined);
+-		if (unsupported.length > 0) {
+-			throw new SandboxOperationUnsupportedError({
+-				operation: 'rm',
+-				provider: 'Mirage',
+-				options: unsupported,
+-			});
++		if (options?.recursive || options?.force) {
++			// `WorkspaceFS` has no recursive or forced removal. Mirage's executor
++			// implements `rm -r` and `rm -f`, so shell out, as `mkdir -p` does.
++			const flags = [options.recursive ? '-r' : '', options.force ? '-f' : ''].filter(Boolean);
++			const result = await this.runShell(['rm', ...flags, '--', shellQuote(path)].join(' '));
++			if (result.exitCode !== 0) {
++				throw new Error(
++					`[amond:mirage] rm failed for ${path}: ` +
++						(result.stderr || result.stdout || `exit ${result.exitCode}`),
++				);
++			}
++			return;
+ 		}
+-		try {
+-			await this.workspace.fs.unlink(path);
+-		} catch {
++		// `stat` follows symlinks, so check for a link first: removing a link
++		// to a directory unlinks the link and leaves its target alone.
++		// Only EINVAL (not a link) and ENOENT (missing; `stat` reports it) mean
++		// "not a link"; any other `readlink` failure is rethrown.
++		const isLink = await this.workspace.fs.readlink(path).then(
++			() => true,
++			(err: { code?: string }) => {
++				if (err?.code === 'EINVAL' || err?.code === 'ENOENT') return false;
++				throw err;
++			},
++		);
++		if (isLink) {
++			await this.workspace.fs.unlink(path);
++			return;
++		}
++		// Dispatch by type so a failed file removal reports its own reason
++		// instead of the `rmdir` error. A missing path surfaces the stat error.
++		const s = await this.workspace.fs.stat(path);
++		if (s.type === 'directory') {
+ 			await this.workspace.fs.rmdir(path);
++		} else {
++			await this.workspace.fs.unlink(path);
+ 		}
+ 	}
+ 
+```

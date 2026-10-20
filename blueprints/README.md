@@ -29,3 +29,5 @@ README.
 
 These blueprints are derived from Flue's blueprints (https://github.com/withastro/flue) at commit
 `deee93b` (v2.3.0), which is licensed under the Apache License, Version 2.0.
+amond also corrected defects in some of the blueprints.
+`apps/registry/CHANGES.md` describes the rename and lists every other change from that commit.

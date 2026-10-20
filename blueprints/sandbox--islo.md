@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 1,
+  "version": 2,
   "website": "https://islo.dev"
 }
 ---
@@ -46,7 +46,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxDriver` contract, and the shell quoting in particular is load-bearing.
 
 ```ts
-// amond-blueprint: sandbox/islo@1
+// amond-blueprint: sandbox/islo@2
 /**
  * islo adapter for amond. Adapts a named islo sandbox to amond's SandboxDriver
  * by shelling out to the islo CLI. The user owns the sandbox lifecycle.
@@ -65,6 +65,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
  * ```
  */
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { sandboxFromDriver } from '@amond-ai/agent';
 import type { SandboxDriver, SandboxFactory, Sandbox, FileStat } from '@amond-ai/agent';
 
@@ -76,6 +77,9 @@ export interface IsloAdapterOptions {
 }
 
 const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/** Base64 characters per `exec`; keeps each argv entry far below Linux's 128 KiB limit. */
+const WRITE_CHUNK_CHARS = 64 * 1024;
 
 /**
  * Implements SandboxDriver via the islo CLI. Every operation runs as
@@ -104,6 +108,11 @@ class IsloSandboxDriver implements SandboxDriver {
 		},
 	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 		const cd = options?.cwd ? `cd ${q(options.cwd)} && ` : '';
+		for (const k of Object.keys(options?.env ?? {})) {
+			if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
+				throw new Error(`[amond:islo] invalid env var name '${k}'`);
+			}
+		}
 		const envPrefix = options?.env
 			? Object.entries(options.env)
 					.map(([k, v]) => `${k}=${q(v)}`)
@@ -172,10 +181,24 @@ class IsloSandboxDriver implements SandboxDriver {
 	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
 		const buf = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
 		const b64 = buf.toString('base64'); // single-quote-safe alphabet
-		const r = await this.exec(
-			`mkdir -p "$(dirname ${q(path)})" && printf %s '${b64}' | base64 -d > ${q(path)}`,
-		);
-		if (r.exitCode !== 0) throw new Error(`[amond:islo] writeFile ${path}: ${r.stderr}`);
+		// A single argv entry is capped at 128 KiB on Linux, so append the payload
+		// to a temporary file in chunks (one exec each), then decode it once.
+		const tmp = `/tmp/amond-islo-${randomUUID()}.b64`;
+		const fail = (r: { stderr: string }) =>
+			new Error(`[amond:islo] writeFile ${path}: ${r.stderr}`);
+		let r = { stdout: '', stderr: '', exitCode: 0 };
+		try {
+			r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
+			for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
+				r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
+			}
+			if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
+		} finally {
+			// Remove the staging file even when an exec rejects; a failed cleanup
+			// must not mask the write's own result.
+			await this.exec(`rm -f ${q(tmp)}`).catch(() => {});
+		}
+		if (r.exitCode !== 0) throw fail(r);
 	}
 
 	async stat(path: string): Promise<FileStat> {
@@ -334,3 +357,54 @@ When updating an existing integration, inspect and compare it against this compl
 ### Version 1 — 2026-06-14
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Reject env var names that are not valid shell identifiers, because `exec()` interpolated them raw into the remote command. Write files in chunks of about 64 KB through a temporary file, removed even when a step fails, because a single argument above 128 KiB made `writeFile()` fail with `spawn E2BIG` for payloads over about 98 KB.
+
+```diff
+--- a/src/sandboxes/islo.ts
++++ b/src/sandboxes/islo.ts
+-// amond-blueprint: sandbox/islo@1
++// amond-blueprint: sandbox/islo@2
+ import { spawn } from 'node:child_process';
++import { randomUUID } from 'node:crypto';
+ import { sandboxFromDriver } from '@amond-ai/agent';
+@@
+ const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
++
++/** Base64 characters per `exec`; keeps each argv entry far below Linux's 128 KiB limit. */
++const WRITE_CHUNK_CHARS = 64 * 1024;
+@@
+ 		const cd = options?.cwd ? `cd ${q(options.cwd)} && ` : '';
++		for (const k of Object.keys(options?.env ?? {})) {
++			if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) {
++				throw new Error(`[amond:islo] invalid env var name '${k}'`);
++			}
++		}
+ 		const envPrefix = options?.env
+@@
+ 		const b64 = buf.toString('base64'); // single-quote-safe alphabet
+-		const r = await this.exec(
+-			`mkdir -p "$(dirname ${q(path)})" && printf %s '${b64}' | base64 -d > ${q(path)}`,
+-		);
+-		if (r.exitCode !== 0) throw new Error(`[amond:islo] writeFile ${path}: ${r.stderr}`);
++		// A single argv entry is capped at 128 KiB on Linux, so append the payload
++		// to a temporary file in chunks (one exec each), then decode it once.
++		const tmp = `/tmp/amond-islo-${randomUUID()}.b64`;
++		const fail = (r: { stderr: string }) =>
++			new Error(`[amond:islo] writeFile ${path}: ${r.stderr}`);
++		let r = { stdout: '', stderr: '', exitCode: 0 };
++		try {
++			r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
++			for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
++				r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
++			}
++			if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
++		} finally {
++			// Remove the staging file even when an exec rejects; a failed cleanup
++			// must not mask the write's own result.
++			await this.exec(`rm -f ${q(tmp)}`).catch(() => {});
++		}
++		if (r.exitCode !== 0) throw fail(r);
+```

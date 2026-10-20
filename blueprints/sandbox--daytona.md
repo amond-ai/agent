@@ -58,7 +58,7 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
  *     // createSandbox(), at initialization — never on a re-render.
  *     async createSandbox(options) {
  *       const client = new Daytona({ apiKey: process.env.DAYTONA_API_KEY });
- *       const sandbox = await client.create({ image: 'ubuntu:latest' });
+ *       const sandbox = await client.create();
  *       return daytona(sandbox).createSandbox(options);
  *     },
  *   });

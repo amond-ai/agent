@@ -1,7 +1,7 @@
 ---
 {
   "kind": "sandbox",
-  "version": 1,
+  "version": 2,
   "website": "https://github.com/cloudflare/computer",
   "aliases": ["@cloudflare/computer", "@cloudflare/shell", "@cloudflare/workspace"]
 }
@@ -41,7 +41,7 @@ Write this file verbatim. It requires a Cloudflare Worker target with a
 `worker_loaders` binding.
 
 ```ts
-// amond-blueprint: sandbox/cloudflare-computer@1
+// amond-blueprint: sandbox/cloudflare-computer@2
 import {
 	type DurableObjectStorageLike,
 	Workspace,
@@ -239,6 +239,10 @@ async function settleExec(
 						void run.kill('SIGKILL').catch(() => {});
 						reject(abortError());
 					};
+					if (signal.aborted) {
+						onAbort();
+						return;
+					}
 					signal.addEventListener('abort', onAbort, { once: true });
 					run.result().then(
 						(value) => {
@@ -491,3 +495,23 @@ This comparison is required when the marker is missing.
 ### Version 1 — 2026-08-04
 
 Initial version.
+
+### Version 2 — 2026-10-20
+
+Cancel an exec whose signal is already aborted when `settleExec` runs. The abort listener never fired for a signal aborted while `exec()` was still starting the run, so the exec waited for the command to finish on its own. `settleExec` now kills the run and rejects with `AbortError` at once, and the existing `finally` disposes the run.
+
+```diff
+--- a/src/sandboxes/cloudflare-computer.ts
++++ b/src/sandboxes/cloudflare-computer.ts
+-// amond-blueprint: sandbox/cloudflare-computer@1
++// amond-blueprint: sandbox/cloudflare-computer@2
+ import {
+@@
+ 						reject(abortError());
+ 					};
++					if (signal.aborted) {
++						onAbort();
++						return;
++					}
+ 					signal.addEventListener('abort', onAbort, { once: true });
+```

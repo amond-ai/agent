@@ -22,3 +22,14 @@ For full file listing with workspace artifacts, use `Skill("please:project-knowl
 ### Decision Records
 - `docs/adr/` — Architecture Decision Records (ADR)
 <!-- /please:knowledge -->
+
+## Gotchas
+
+- `packages/cli/src/lib/docs-content.test.ts` guards every file in `blueprints/`,
+  `README.md` included: no upstream (Flue) name except on the one line that credits Flue and
+  links its repository, no `-blueprint:` marker but `amond-blueprint`, and no relative link
+  that leaves the tree. Content that must name Flue goes under `apps/registry/` (see
+  `CHANGES.md`, `NOTICE`).
+- When you check a blueprint's code sample, compile the whole extracted file against the
+  version its install step resolves, not just its imports. A caret on a `0.0.x` version
+  (`^0.0.2`) is an exact pin.
