@@ -160,3 +160,30 @@ Considered and not built:
 - Worktree executors are cut from `main`, not the track branch, and can't write the main-tree progress sink. Their commits are cherry-picked and their Progress entries written by the lead. A fresh worktree also needs `bun install` and `bunx turbo run build --filter=amond` before `bun --filter amond test`.
 - On a `0.0.x` version a caret is an exact pin. The Mirage blueprint's `^0.0.2` got 0.0.2, not the 0.0.6 the investigation tested (N2). A type-check of only the import line missed it; the whole adapter has to be compiled.
 - `docs-content.test.ts` also guards `blueprints/` against broken relative links, so the README names `apps/registry/CHANGES.md` as a path, not a link.
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+
+- All 22 confirmed findings from #37 fixed, plus N1 (vitest-evals unpinned) and N2 (Mirage `^0.0.2` pinned exactly 0.0.2). #15 declined on the sandbox contract.
+- Eight blueprints at version 2, each with an Upgrade Guide entry and diff: exedev, cloudflare, cloudflare-computer, mirage, vitest-evals, boxd, islo, modal. Daytona and `sandbox.md` got text-only fixes.
+- `apps/registry/CHANGES.md` records every change from Flue `deee93b`. The registry footer and `NOTICE` say amond corrected some blueprints and point to it.
+- Draft upstream reports for Flue and the #37 outcome table in `upstream-reports.md`. The outcomes are posted on #37; the reports are not filed.
+
+### What Went Well
+
+- Checking each finding with a scratch harness against the real SDK gave every verdict and fix a concrete before/after, and caught N1 and N2.
+- Grouping phases by whole blueprint gave each file exactly one version bump.
+- Parallel worktree executors for the five independent Phase 2 blueprints finished in one round.
+
+### What Could Improve
+
+- Two checks were too narrow at first. The T002 `grep` passed by dropping a removed line from the Upgrade Guide diff, and the T005 type-check compiled only the import line, which hid N2. Checks on generated code should compile the whole extracted file.
+- Worktree executors are cut from `main` and can't write the progress sink, so each Phase 2 result needed a lead cherry-pick and a hand-written Progress entry.
+- The plan put the change record in `blueprints/README.md` without checking `docs-content.test.ts`, whose brand and link guards forbid it. A grep for tests covering a target directory belongs in planning.
+
+### Tech Debt Created
+
+- islo `writeFile` leaves its `/tmp` staging file when an `exec` call throws (not on a non-zero exit). Found in review. → TD-007
+- No permanent check compiles or runs blueprint samples against their SDKs; these defects came in because only structure is checked (spec Out of Scope). → TD-008
+- The vitest-evals harness is pinned to the 0.13 line rather than ported to the current 0.17 API (spec Out of Scope). → TD-009
