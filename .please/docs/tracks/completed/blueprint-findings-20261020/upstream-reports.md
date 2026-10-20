@@ -310,6 +310,21 @@ Fix for 4 and 5 together (both rewrite `rm`): shell out when a flag is set and t
 -		try {
 -			await this.workspace.fs.unlink(path);
 -		} catch {
++		// `stat` follows symlinks, so check for a link first: removing a link
++		// to a directory unlinks the link and leaves its target alone.
++		// Only EINVAL (not a link) and ENOENT (missing; `stat` reports it) mean
++		// "not a link"; any other `readlink` failure is rethrown.
++		const isLink = await this.workspace.fs.readlink(path).then(
++			() => true,
++			(err: { code?: string }) => {
++				if (err?.code === 'EINVAL' || err?.code === 'ENOENT') return false;
++				throw err;
++			},
++		);
++		if (isLink) {
++			await this.workspace.fs.unlink(path);
++			return;
++		}
 +		// Dispatch by type so a failed file removal reports its own reason
 +		// instead of the `rmdir` error. A missing path surfaces the stat error.
 +		const s = await this.workspace.fs.stat(path);
@@ -507,13 +522,18 @@ Fix: write the payload in base64 chunks of about 64 KB, appended to a temporary 
 +		const tmp = `/tmp/flue-islo-${randomUUID()}.b64`;
 +		const fail = (r: { stderr: string }) =>
 +			new Error(`[flue:islo] writeFile ${path}: ${r.stderr}`);
-+		let r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
-+		if (r.exitCode !== 0) throw fail(r);
-+		for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
-+			r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
++		let r = { stdout: '', stderr: '', exitCode: 0 };
++		try {
++			r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
++			for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
++				r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
++			}
++			if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
++		} finally {
++			// Remove the staging file even when an exec rejects; a failed cleanup
++			// must not mask the write's own result.
++			await this.exec(`rm -f ${q(tmp)}`).catch(() => {});
 +		}
-+		if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
-+		await this.exec(`rm -f ${q(tmp)}`);
 +		if (r.exitCode !== 0) throw fail(r);
 ```
 

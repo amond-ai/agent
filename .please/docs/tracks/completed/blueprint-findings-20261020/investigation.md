@@ -2,13 +2,13 @@
 
 Issue [#37](https://github.com/amond-ai/agent/issues/37): cubic left 23 findings on the Flue blueprints imported in #35, and Codex rated one of them P1. Each flagged line matches Flue `deee93b` (`vendor/flue/blueprints/`) apart from the rename, and Flue's `blueprints/` has no commits since `deee93b`.
 
-This is not one bug with competing causes. It is 24 independent claims about the text of 10 blueprints. Each claim got its own check, and the check decided its verdict. Sections 1 to 3 below are therefore organized per finding.
+This is not one bug with competing causes. It is 25 independent claims about the text of 10 blueprints: the 23 findings, N1, and N2 (found during the fix). Each claim got its own check, and the check decided its verdict. Sections 1 to 3 below are therefore organized per finding.
 
 ### 1. Reproduction Status
 
-Reproduced: 22 of the 23 findings, plus 1 defect cubic did not flag. One finding is declined, because its suggested fix contradicts the sandbox contract.
+Confirmed: 22 of the 23 findings, plus 2 defects cubic did not flag (N1, and N2, found during T005). One finding is declined, because its suggested fix contradicts the sandbox contract. Most were reproduced by running a check; #6, #10 and #21 were confirmed statically, against the text, the sandbox contract or the code, and #20 only in part. The **Verdict** column says which.
 
-Every check runs from a scratch directory under `/tmp/bp-verify/<group>/`. It extracts the blueprint's code verbatim, or rebuilds the exact string the code composes, and runs it against the real SDK at the version the blueprint installs. Each check fails today and passes with the proposed fix applied in scratch. The repository was not modified.
+Every check runs from a scratch directory under `/tmp/bp-verify/<group>/`. It extracts the blueprint's code verbatim, or rebuilds the exact string the code composes. Depending on the finding it then type-checks it against the SDK types the blueprint installs, runs it against the real SDK (Mirage), drives it with a simulated handle (boxd, Cloudflare) or a local CLI stand-in (islo), runs the shell string, or compares the text. No live provider account was used. Each runnable check fails on the original text and passes with the fix. The repository was not modified.
 
 ### Feedback Loop
 
@@ -19,7 +19,7 @@ Every check runs from a scratch directory under `/tmp/bp-verify/<group>/`. It ex
 - **Debug tag:** `[DEBUG-7c3e]`. It appears only in scratch files under `/tmp`; nothing was added to the repository.
 - **Bypass approved:** no.
 
-The scratch directories live in `/tmp` and do not survive a reboot. Each fix task re-creates its check from the description in Section 3 when the scratch copy is gone.
+The scratch directories live in `/tmp` and do not survive a reboot. Each fix task re-creates its check from the description in Section 3 when the scratch copy is gone. Committing these throwaway harnesses was not done: a permanent sample check is its own design decision (spec Out of Scope; TD-008).
 
 ### Hypothesis Ranking
 
@@ -33,7 +33,7 @@ The scratch directories live in `/tmp` and do not survive a reboot. Each fix tas
 
 **Problem Location:** the code samples and instructions in 10 files under `blueprints/`. These files are served from the registry and handed to a coding agent by `amond add`.
 
-**Root Cause:** the blueprints are prose plus code that nothing compiles or runs. `validateBlueprintBody` (`packages/cli/src/lib/blueprint-index.ts:38`) checks only structure: the frontmatter, the Upgrade Guide, and the version entries. Flue has no sample check either. The defects therefore came in with the import at `deee93b`:
+**Root Cause:** the blueprints are prose plus code that nothing compiles or runs. Two checks run, and both check only structure: `parseBlueprintFrontmatter` (`packages/cli/src/lib/blueprint-index.ts:121`) validates the frontmatter, and `validateBlueprintBody` (`:38`) validates the Upgrade Guide and its version entries. Flue has no sample check either. The defects therefore came in with the import at `deee93b`:
 
 - type errors under `strict`;
 - shell composition bugs;

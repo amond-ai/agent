@@ -186,13 +186,18 @@ class IsloSandboxDriver implements SandboxDriver {
 		const tmp = `/tmp/amond-islo-${randomUUID()}.b64`;
 		const fail = (r: { stderr: string }) =>
 			new Error(`[amond:islo] writeFile ${path}: ${r.stderr}`);
-		let r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
-		if (r.exitCode !== 0) throw fail(r);
-		for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
-			r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
+		let r = { stdout: '', stderr: '', exitCode: 0 };
+		try {
+			r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
+			for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
+				r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
+			}
+			if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
+		} finally {
+			// Remove the staging file even when an exec rejects; a failed cleanup
+			// must not mask the write's own result.
+			await this.exec(`rm -f ${q(tmp)}`).catch(() => {});
 		}
-		if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
-		await this.exec(`rm -f ${q(tmp)}`);
 		if (r.exitCode !== 0) throw fail(r);
 	}
 
@@ -355,7 +360,7 @@ Initial version.
 
 ### Version 2 — 2026-10-20
 
-Reject env var names that are not valid shell identifiers, because `exec()` interpolated them raw into the remote command. Write files in chunks of about 64 KB through a temporary file, because a single argument above 128 KiB made `writeFile()` fail with `spawn E2BIG` for payloads over about 98 KB.
+Reject env var names that are not valid shell identifiers, because `exec()` interpolated them raw into the remote command. Write files in chunks of about 64 KB through a temporary file, removed even when a step fails, because a single argument above 128 KiB made `writeFile()` fail with `spawn E2BIG` for payloads over about 98 KB.
 
 ```diff
 --- a/src/sandboxes/islo.ts
@@ -389,12 +394,17 @@ Reject env var names that are not valid shell identifiers, because `exec()` inte
 +		const tmp = `/tmp/amond-islo-${randomUUID()}.b64`;
 +		const fail = (r: { stderr: string }) =>
 +			new Error(`[amond:islo] writeFile ${path}: ${r.stderr}`);
-+		let r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
-+		if (r.exitCode !== 0) throw fail(r);
-+		for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
-+			r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
++		let r = { stdout: '', stderr: '', exitCode: 0 };
++		try {
++			r = await this.exec(`mkdir -p "$(dirname ${q(path)})" && : > ${q(tmp)}`);
++			for (let i = 0; i < b64.length && r.exitCode === 0; i += WRITE_CHUNK_CHARS) {
++				r = await this.exec(`printf %s '${b64.slice(i, i + WRITE_CHUNK_CHARS)}' >> ${q(tmp)}`);
++			}
++			if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
++		} finally {
++			// Remove the staging file even when an exec rejects; a failed cleanup
++			// must not mask the write's own result.
++			await this.exec(`rm -f ${q(tmp)}`).catch(() => {});
 +		}
-+		if (r.exitCode === 0) r = await this.exec(`base64 -d < ${q(tmp)} > ${q(path)}`);
-+		await this.exec(`rm -f ${q(tmp)}`);
 +		if (r.exitCode !== 0) throw fail(r);
 ```

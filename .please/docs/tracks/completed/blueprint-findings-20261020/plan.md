@@ -58,10 +58,10 @@ Considered and not built:
   Method: `bash cd.sh`, `bun repro.ts`, `bun close.cjs` and `bunx tsc -p .` in `/tmp/bp-verify/exedev` after re-extracting; `bun --filter amond test`
 - [x] T002 Fix the Cloudflare image tag and agent wiring, and bump it to version 2 (file: blueprints/sandbox--cloudflare.md) [FR-2, FR-11, AC-005, AC-021]
   Validation: the Dockerfile tag matches the installed `@cloudflare/sandbox` version (#5). The agent example wires the sandbox as `packages/cli/docs/ecosystem/sandboxes/cloudflare.md:36-52` does, with no `../cloudflare-sandbox` and no claim that platform `env` is unreachable (#6).
-  Method: `bash /tmp/bp-verify/cloudflare/check1.sh` prints PASS; `grep -c "cloudflare-sandbox'"` prints 0 and `grep -c cloudflare:workers` prints at least 1; `bun --filter amond test`
+  Method: `bash /tmp/bp-verify/cloudflare/check1.sh` prints PASS; in the body above `## Upgrade Guide` (`awk '/^## Upgrade Guide/{exit} {print}' blueprints/sandbox--cloudflare.md`), `grep -c "cloudflare-sandbox'"` prints 0 and `grep -c cloudflare:workers` prints at least 1; `bun --filter amond test`
 - [x] T003 Fix the vitest-evals harness, port and starter eval, and bump it to version 2 (file: blueprints/tooling--vitest-evals.md) [FR-5, FR-11, AC-011, AC-012, AC-021]
   Validation: the re-extracted harness and eval type-check under `strict` against the `vitest-evals` version the install step now pins (#12, N1). The default URL uses port 5173 (#13). An eval against an agent without usage metadata passes (#14).
-  Method: `bunx tsc -p .` and `bunx vitest run` in `/tmp/bp-verify/vitest-evals` with the pinned version; `grep -c 3583` prints 0; `bun --filter amond test`
+  Method: `bunx tsc -p .` and `bunx vitest run` in `/tmp/bp-verify/vitest-evals` with the pinned version; `grep -c 3583` on the body above `## Upgrade Guide` of `blueprints/tooling--vitest-evals.md` prints 0; `bun --filter amond test`
 
 ### Phase 2: Other blueprints whose generated code changes
 
@@ -80,7 +80,7 @@ Considered and not built:
   Method: `bash inj.sh` and the `e2big` harness in `/tmp/bp-verify/islo-modal`, with `/bin/echo` standing in for the islo CLI; `bun --filter amond test`
 - [x] T008 Surface Modal's `stat` error and correct its comment, and bump it to version 2 (file: blueprints/sandbox--modal.md) [FR-8, FR-11, AC-017, AC-021]
   Validation: `stat` on a missing path throws with "No such file or directory" (#22). The comments say one `stat -c` call serves GNU and BusyBox (#21).
-  Method: run the fixed command on a missing path; `grep -c "Fall back"` prints 0; `bun --filter amond test`
+  Method: run the fixed command on a missing path; `grep -c "Fall back"` on the body above `## Upgrade Guide` of `blueprints/sandbox--modal.md` prints 0; `bun --filter amond test`
 
 ### Phase 3: Text fixes, change record, attribution
 
@@ -93,13 +93,13 @@ Considered and not built:
 - [x] T011 Say in the registry attribution that amond corrected the blueprints (file: apps/registry/src/build.ts) [FR-13]
   Validation: the footer still names the license, the notice and `deee93b`, and adds that amond corrected the file and lists its changes in the source repository's `apps/registry/CHANGES.md`. `apps/registry/NOTICE`, the README's Attribution section and `ARCHITECTURE.md` agree.
   Method: `bun --filter @amond-ai/registry test`; `bun run lint`
-- [x] T012 Draft the upstream reports and the #37 outcomes (file: .please/docs/tracks/active/blueprint-findings-20261020/upstream-reports.md) (depends on T010) [FR-14, FR-15]
-  Validation: one report per changed blueprint, with the defect, a reproduction and the fix. An outcome table covers all 25 findings (#1–#23, N1, N2): fixed, with file and version; or declined, with the reason (#15 cites `sandbox-api.md:116,219`). Nothing is posted.
+- [x] T012 Draft the upstream reports and the #37 outcomes (file: .please/docs/tracks/completed/blueprint-findings-20261020/upstream-reports.md) (depends on T010) [FR-14, FR-15]
+  Validation: one report per changed blueprint, with the defect, a reproduction and the fix. An outcome table covers all 25 findings (#1–#23, N1, N2): fixed, with file and, where the blueprint was bumped, version; or declined, with the reason (#15 cites `sandbox-api.md:116,219`). Nothing is posted.
   Method: the table rows match investigation.md Section 3's numbering one to one
 
 ## Key Files
 
-- `blueprints/*.md` (the 10 files above): the fixes. `apps/registry/CHANGES.md`: the record (T010).
+- `blueprints/*.md` (the 10 blueprint files the tasks name, `sandbox--daytona.md` included): the fixes. `apps/registry/CHANGES.md`: the record (T010).
 - `apps/registry/src/build.ts`, `apps/registry/src/build.test.ts`, `apps/registry/NOTICE`, `ARCHITECTURE.md`: the attribution (T011).
 - `packages/cli/src/lib/blueprint-index.ts`, `packages/cli/docs/reference/sandbox-api.md`: the version contract and the sandbox contract (read only).
 
@@ -154,6 +154,7 @@ Considered and not built:
 - 2026-10-20: The islo chunked `writeFile` stages its payload in the sandbox's `/tmp`, not next to the target, so a failed write never leaves a stray file in the user's directory. This assumes a writable `/tmp`.
 - 2026-10-20: The boxd `readyPromise` reset sits in the `createSandbox()` catch. Every concurrent awaiter's catch runs in the same microtask burst, so the next request after a failure probes again.
 - 2026-10-20: The change record moved from `blueprints/README.md` to `apps/registry/CHANGES.md` (user's choice). `docs-content.test.ts` bans the upstream name in `blueprints/` outside one attribution line, and the record needs Flue's exact names. The README's Attribution section names it.
+- 2026-10-20: PR review round (cubic on #39, #40, #42). The Mirage plain `rm` now checks `readlink` before `stat`, because Mirage's `stat` follows symlinks and has no no-follow option, so v2 would `rmdir` a link to a directory where Flue's `unlink`-first code removed the link. The islo `writeFile` cleanup moved into a `finally`. Both stay in version 2, which has not shipped.
 
 ## Surprises & Discoveries
 
@@ -184,6 +185,6 @@ Considered and not built:
 
 ### Tech Debt Created
 
-- islo `writeFile` leaves its `/tmp` staging file when an `exec` call throws (not on a non-zero exit). Found in review. → TD-007
+- islo `writeFile` left its `/tmp` staging file when an `exec` call threw. Found in review and fixed in the PR #42 review round (cleanup in a `finally`). → TD-007, resolved
 - No permanent check compiles or runs blueprint samples against their SDKs; these defects came in because only structure is checked (spec Out of Scope). → TD-008
 - The vitest-evals harness is pinned to the 0.13 line rather than ported to the current 0.17 API (spec Out of Scope). → TD-009

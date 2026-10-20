@@ -9,7 +9,8 @@ blueprint would produce code that is wrong in some way.
 
 **Current status**: we checked every finding against the provider library it targets.
 
-- 22 are real and reproduced.
+- 22 are real. Most were reproduced; the rest were confirmed against the code or the
+  documented contract.
 - 1 is declined: its suggested change would break the documented contract that sandbox
   adapters follow.
 - We also found one more problem: the eval blueprint installs a newer library version that its

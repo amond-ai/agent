@@ -262,7 +262,7 @@ Initial version.
 
 ### Version 2 — 2026-10-20
 
-Pin the `Dockerfile` base image to the `@cloudflare/sandbox` version the install step installs (`0.11.0`, not `0.9.2`). Wire the agent from the Worker `env` and the agent id, as the deploy guide does, instead of importing a project-owned `cloudflareSandboxFactory` module that no step creates. Delete that import from the agent file.
+Pin the `Dockerfile` base image to the `@cloudflare/sandbox` version actually installed. The install step's `^0.11.0` resolved to `0.11.0` when this was written, so the tag is `0.11.0`, not `0.9.2`; use a later 0.11.x if that is what was installed. Wire the agent from the Worker `env` and the agent id, as the deploy guide does, instead of importing a project-owned `cloudflareSandboxFactory` module that no step creates. Delete that import from the agent file.
 
 ```diff
 --- a/Dockerfile

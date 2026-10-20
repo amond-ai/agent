@@ -201,6 +201,21 @@ class MirageSandboxDriver implements SandboxDriver {
 			}
 			return;
 		}
+		// `stat` follows symlinks, so check for a link first: removing a link
+		// to a directory unlinks the link and leaves its target alone.
+		// Only EINVAL (not a link) and ENOENT (missing; `stat` reports it) mean
+		// "not a link"; any other `readlink` failure is rethrown.
+		const isLink = await this.workspace.fs.readlink(path).then(
+			() => true,
+			(err: { code?: string }) => {
+				if (err?.code === 'EINVAL' || err?.code === 'ENOENT') return false;
+				throw err;
+			},
+		);
+		if (isLink) {
+			await this.workspace.fs.unlink(path);
+			return;
+		}
 		// Dispatch by type so a failed file removal reports its own reason
 		// instead of the `rmdir` error. A missing path surfaces the stat error.
 		const s = await this.workspace.fs.stat(path);
@@ -414,7 +429,7 @@ Initial version.
 
 Fix the install steps, `readdir` and `rm`. The adapter imports types from `@struktoai/mirage-core`, which arrived only transitively, so a strict layout (pnpm, Yarn PnP) failed the typecheck. `readdir` dropped entries that end in `/`. `rm` ignored the sandbox contract for an adapter that already shells out, and its `unlink`-then-`rmdir` fallback hid the file's own failure.
 
-In the generated file, `readdir` strips trailing slashes before taking the basename. `rm` with `recursive` or `force` now runs `rm [-r] [-f] --` through the shell and throws on a non-zero exit. A plain `rm` calls `stat` and dispatches to `rmdir` or `unlink` by type. The `SandboxOperationUnsupportedError` import is gone.
+In the generated file, `readdir` strips trailing slashes before taking the basename. `rm` with `recursive` or `force` now runs `rm [-r] [-f] --` through the shell and throws on a non-zero exit. A plain `rm` unlinks a symlink (`readlink` succeeds; `readlink` errors other than `EINVAL` and `ENOENT` are rethrown), and otherwise calls `stat` and dispatches to `rmdir` or `unlink` by type. The `SandboxOperationUnsupportedError` import is gone.
 
 Install `@struktoai/mirage-core` as a direct dependency, at the runtime package's exact version. Move the install to 0.0.6, the version the adapter type-checks against (`^0.0.2` resolved to exactly 0.0.2, whose types fail the `stat` comparison), and add core at the same exact version: change the install command to `npm install @struktoai/mirage-node@^0.0.6 @struktoai/mirage-core@0.0.6`, or `npm install @struktoai/mirage-browser@^0.0.6 @struktoai/mirage-core@0.0.6` for the Cloudflare target. With another package manager, add the same two packages.
 
@@ -495,6 +510,21 @@ Install `@struktoai/mirage-core` as a direct dependency, at the runtime package'
 -		try {
 -			await this.workspace.fs.unlink(path);
 -		} catch {
++		// `stat` follows symlinks, so check for a link first: removing a link
++		// to a directory unlinks the link and leaves its target alone.
++		// Only EINVAL (not a link) and ENOENT (missing; `stat` reports it) mean
++		// "not a link"; any other `readlink` failure is rethrown.
++		const isLink = await this.workspace.fs.readlink(path).then(
++			() => true,
++			(err: { code?: string }) => {
++				if (err?.code === 'EINVAL' || err?.code === 'ENOENT') return false;
++				throw err;
++			},
++		);
++		if (isLink) {
++			await this.workspace.fs.unlink(path);
++			return;
++		}
 +		// Dispatch by type so a failed file removal reports its own reason
 +		// instead of the `rmdir` error. A missing path surfaces the stat error.
 +		const s = await this.workspace.fs.stat(path);

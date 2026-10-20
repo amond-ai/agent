@@ -90,7 +90,7 @@ contract says `exists` never throws.
 | Change | Finding | Shipped in |
 | --- | --- | --- |
 | Throws unless each env key matches `^[A-Za-z_][A-Za-z0-9_]*$`. | #19 | v2 |
-| Writes files in base64 chunks of 64 KiB through a temporary file, decoded once. Adds the `randomUUID` import and the `WRITE_CHUNK_CHARS` constant. | #20 | v2 |
+| Writes files in base64 chunks of 64 KiB through a temporary file, decoded once, and removes the temporary file in a `finally`. Adds the `randomUUID` import and the `WRITE_CHUNK_CHARS` constant. | #20 | v2 |
 | Version bump: `version`, markers, Upgrade Guide entry. | #19, #20 | v2 |
 
 ## `sandbox--mirage.md`
@@ -101,7 +101,7 @@ contract says `exists` never throws.
 | Installs `@struktoai/mirage-node@^0.0.6` or `@struktoai/mirage-browser@^0.0.6` instead of `^0.0.2`. | N2 | v2 |
 | Strips trailing slashes in `readdir` before taking the basename. | #9 | v2 |
 | Runs `rm [-r] [-f] --` through the shell when `recursive` or `force` is set, and throws on a non-zero exit. Removes the unused `SandboxOperationUnsupportedError` import and updates the class doc comment. | #10 | v2 |
-| Calls `stat` first in a plain `rm`, then `rmdir` or `unlink` by type. | #11 | v2 |
+| In a plain `rm`, unlinks a symlink (detected with `readlink`; only its `EINVAL` and `ENOENT` mean "not a link", and other `readlink` errors are rethrown), and otherwise calls `stat` and then `rmdir` or `unlink` by type. | #11 | v2 |
 | Version bump: `version`, markers, Upgrade Guide entry. | #8-#11, N2 | v2 |
 
 ## `sandbox--modal.md`
