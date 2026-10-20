@@ -45,7 +45,7 @@ Considered and not built:
 
 **Phases group whole blueprints, ordered by priority.** Each blueprint gets one bump, covering all its fixes. Splitting a blueprint across phases would ship a v2 and then a v3 of code nobody has generated yet. Phase 1 has the P1 blueprints, Phase 2 the other generated-code changes, and Phase 3 the text fixes and the record, which has to see every change.
 
-**One change record in `blueprints/README.md`.** Upgrade Guide entries miss the unbumped Daytona and `sandbox.md` changes. A `PATCHES` file or a frontmatter field would add a format the index generator must ignore.
+**One change record, in `apps/registry/CHANGES.md`** (first planned for `blueprints/README.md`; see Decision Log). Upgrade Guide entries miss the unbumped Daytona and `sandbox.md` changes. A `PATCHES` file or a frontmatter field would add a format the index generator must ignore.
 
 **The footer points to the record.** `attributionFooter` (`apps/registry/src/build.ts`) is the same for every file, and a per-file list would drift from the README.
 
@@ -84,30 +84,30 @@ Considered and not built:
 
 ### Phase 3: Text fixes, change record, attribution
 
-- [ ] T009 Align the Daytona create examples and the sandbox directive wording (file: blueprints/sandbox.md) [FR-9, FR-10]
+- [x] T009 Align the Daytona create examples and the sandbox directive wording (file: blueprints/sandbox.md) [FR-9, FR-10]
   Validation: both Daytona examples call `client.create()` (#16). `sandbox.md` says the directive prologue must contain `'use agent';` (#23). Neither version changes.
   Method: `grep -n "client.create" blueprints/sandbox--daytona.md`; `bun /tmp/bp-verify/islo-modal/scan-check.ts` from `packages/agent-vite`; `bun --filter amond test`
-- [ ] T010 Record every change from Flue deee93b (file: blueprints/README.md) (depends on T001, T002, T003, T004, T005, T006, T007, T008, T009) [FR-12, AC-018, AC-019]
+- [x] T010 Record every change from Flue deee93b (file: apps/registry/CHANGES.md) (depends on T001, T002, T003, T004, T005, T006, T007, T008, T009) [FR-12, AC-018, AC-019]
   Validation: for each blueprint, the record lists every change other than #35's rename and left-out-package edits, with the finding it fixes and the version it shipped in. Every such hunk in a diff against `vendor/flue/blueprints/` has an entry. With every fix in place, the CLI index and the registry build accept all blueprints.
   Method: diff each file against `vendor/flue/blueprints/` with the rename reverted, then check each remaining hunk against the record; `bun run lint`; `bun --filter amond test` and `bun --filter @amond-ai/registry test`
-- [ ] T011 Say in the registry attribution that amond corrected the blueprints (file: apps/registry/src/build.ts) [FR-13]
-  Validation: the footer still names the license, the notice and `deee93b`, and adds that amond corrected the file and lists its changes in the source repository's `blueprints/README.md`. `apps/registry/NOTICE`, the README's Attribution section and `ARCHITECTURE.md` agree.
+- [x] T011 Say in the registry attribution that amond corrected the blueprints (file: apps/registry/src/build.ts) [FR-13]
+  Validation: the footer still names the license, the notice and `deee93b`, and adds that amond corrected the file and lists its changes in the source repository's `apps/registry/CHANGES.md`. `apps/registry/NOTICE`, the README's Attribution section and `ARCHITECTURE.md` agree.
   Method: `bun --filter @amond-ai/registry test`; `bun run lint`
-- [ ] T012 Draft the upstream reports and the #37 outcomes (file: .please/docs/tracks/active/blueprint-findings-20261020/upstream-reports.md) (depends on T010) [FR-14, FR-15]
+- [x] T012 Draft the upstream reports and the #37 outcomes (file: .please/docs/tracks/active/blueprint-findings-20261020/upstream-reports.md) (depends on T010) [FR-14, FR-15]
   Validation: one report per changed blueprint, with the defect, a reproduction and the fix. An outcome table covers all 25 findings (#1–#23, N1, N2): fixed, with file and version; or declined, with the reason (#15 cites `sandbox-api.md:116,219`). Nothing is posted.
   Method: the table rows match investigation.md Section 3's numbering one to one
 
 ## Key Files
 
-- `blueprints/*.md` (the 10 files above): the fixes. `blueprints/README.md`: the record (T010).
+- `blueprints/*.md` (the 10 files above): the fixes. `apps/registry/CHANGES.md`: the record (T010).
 - `apps/registry/src/build.ts`, `apps/registry/src/build.test.ts`, `apps/registry/NOTICE`, `ARCHITECTURE.md`: the attribution (T011).
 - `packages/cli/src/lib/blueprint-index.ts`, `packages/cli/docs/reference/sandbox-api.md`: the version contract and the sandbox contract (read only).
 
 ## Verification
 
-- [ ] Each task's `Method:` passes against the fixed text, with the output recorded in Progress.
-- [ ] `bun run lint`, `bun run build`, `bun run check` and `CI=true bun run test` pass; the CLI index and the registry build parse every blueprint (AC-018).
-- [ ] `bun --filter @amond-ai/registry build`, then `dist/exedev.md` ends with the new footer and its Upgrade Guide shows Version 2.
+- [x] Each task's `Method:` passes against the fixed text, with the output recorded in Progress.
+- [x] `bun run lint`, `bun run build`, `bun run check` and `CI=true bun run test` pass; the CLI index and the registry build parse every blueprint (AC-018).
+- [x] `bun --filter @amond-ai/registry build`, then `dist/exedev.md` ends with the new footer and its Upgrade Guide shows Version 2.
 
 ## Review Focus
 
@@ -136,6 +136,14 @@ Considered and not built:
   Deferred: the v1 before-state was not re-run here (`inj.sh` and the `e2big` harness timed out under `bash -lc`); it rests on investigation.md #19 and #20.
 - [x] (2026-10-20 09:30 KST) T008 Surface Modal's `stat` error and correct its comment, and bump it to version 2 (SHA: `a78e85b7`)
   Evidence: `bash /tmp/bp-verify/islo-modal/t008/check.sh` → the error changes from `exit 1` to `stat: cannot statx '…/missing': No such file or directory`; body-scoped `grep -c "Fall back"` → 0. `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 11 passed.
+- [x] (2026-10-20 09:40 KST) T009 Align the Daytona create examples and the sandbox directive wording (SHA: `01180deb`)
+  Evidence: `grep -n client.create blueprints/sandbox--daytona.md` → `:61` and `:347` both `client.create()`; `bun /tmp/bp-verify/islo-modal/scan-check.ts` from `packages/agent-vite` → the directive is found first, after `'use strict'` and after a comment, and not after an import, which matches the new prologue wording; both files stay at version 1. `bun --filter amond test` → 61 passed.
+- [x] (2026-10-20 09:49 KST) T010 Record every change from Flue deee93b (SHA: `dc4a5429`)
+  Evidence: each of the 16 blueprints diffed against `vendor/flue/blueprints/` after applying the rename → every hunk maps to a finding, an import edit (#35), a version bump or the rename's article change, with 0 unattributed. The record is `apps/registry/CHANGES.md`, and `blueprints/README.md` → Attribution names it. `bun run lint` → 11/11; `bun --filter amond test` → 61 passed; `bun --filter @amond-ai/registry test` → 12 passed.
+- [x] (2026-10-20 09:50 KST) T011 Say in the registry attribution that amond corrected the blueprints (SHA: `77ead0bd`, `21e8a193`)
+  Evidence: `bun --filter @amond-ai/registry build` → `dist/exedev.md` shows `### Version 2 — 2026-10-20` and ends with the footer naming the license, the notice and `deee93b`, saying some files were corrected, and pointing to `apps/registry/CHANGES.md`. `NOTICE` and `ARCHITECTURE.md` agree. A new footer test plus a NOTICE assertion → `bun --filter @amond-ai/registry test` 12 passed; `bun run lint` → 11/11.
+- [x] (2026-10-20 09:50 KST) T012 Draft the upstream reports and the #37 outcomes
+  Evidence: `upstream-reports.md` has 10 per-file reports in Flue's names, with line numbers checked against `vendor/flue/blueprints/`, and a 25-row outcome table. `grep -cE '^\| (#[0-9]+|N[12]) \|'` → 25, and the order diffs clean against investigation.md. `bunx eslint` exits 0. Nothing posted.
 
 ## Decision Log
 
@@ -145,8 +153,10 @@ Considered and not built:
 - 2026-10-20: N2 (found during T005): the v1 install `^0.0.2` resolves to exactly 0.0.2, and against 0.0.2's types the adapter's `stat` comparison fails with TS2367. The install moves to `^0.0.6` with core pinned at `0.0.6`, the version the investigation verified behavior against.
 - 2026-10-20: The islo chunked `writeFile` stages its payload in the sandbox's `/tmp`, not next to the target, so a failed write never leaves a stray file in the user's directory. This assumes a writable `/tmp`.
 - 2026-10-20: The boxd `readyPromise` reset sits in the `createSandbox()` catch. Every concurrent awaiter's catch runs in the same microtask burst, so the next request after a failure probes again.
+- 2026-10-20: The change record moved from `blueprints/README.md` to `apps/registry/CHANGES.md` (user's choice). `docs-content.test.ts` bans the upstream name in `blueprints/` outside one attribution line, and the record needs Flue's exact names. The README's Attribution section links to it.
 
 ## Surprises & Discoveries
 
 - Worktree executors are cut from `main`, not the track branch, and can't write the main-tree progress sink. Their commits are cherry-picked and their Progress entries written by the lead. A fresh worktree also needs `bun install` and `bunx turbo run build --filter=amond` before `bun --filter amond test`.
 - On a `0.0.x` version a caret is an exact pin. The Mirage blueprint's `^0.0.2` got 0.0.2, not the 0.0.6 the investigation tested (N2). A type-check of only the import line missed it; the whole adapter has to be compiled.
+- `docs-content.test.ts` also guards `blueprints/` against broken relative links, so the README names `apps/registry/CHANGES.md` as a path, not a link.
