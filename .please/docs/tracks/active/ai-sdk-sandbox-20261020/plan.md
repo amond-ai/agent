@@ -67,13 +67,13 @@ Rejected:
 - [x] T003 Give every provider the session methods next to the existing ones, with buffered `spawn`, and add the provider contract suite (file: packages/agent/src/sandbox.ts) (depends on T001, T002) [FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, NFR-3, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-011, AC-012, AC-013]
   Validation: the contract suite passes on `local()`, `bash()`, `sandboxFromDriver` over a fake driver, and `cloudflareSandbox` over a fake stub, covering AC-002–AC-009 and AC-011–AC-013; an empty existing file reads as `""`, not `null`; each provider's `description` names its working directory (FR-8); `createCwdSandbox` resolves `workingDirectory` and file paths against its own `cwd`.
   Method: `bunx turbo run test --filter=@amond-ai/agent && bun run check`
-- [ ] T004 Stream `spawn` output live on `local()` (file: packages/agent/src/node/local-env.ts) (depends on T003) [FR-6, AC-010]
+- [x] T004 Stream `spawn` output live on `local()` (file: packages/agent/src/node/local-env.ts) (depends on T003) [FR-6, AC-010]
   Validation: a spawned command's first chunk is readable before the command exits (AC-010); `kill()` ends the whole process group; `run` keeps its current output, its exit code 124 on timeout, and the 64MB cap.
   Method: `bunx turbo run test --filter=@amond-ai/agent`
-- [ ] T005 Stream `spawn` output live on `cloudflareSandbox` through an optional stub `execStream` (file: packages/agent/src/cloudflare/cf-sandbox.ts) (depends on T003) [FR-6]
+- [x] T005 Stream `spawn` output live on `cloudflareSandbox` through an optional stub `execStream` (file: packages/agent/src/cloudflare/cf-sandbox.ts) (depends on T003) [FR-6]
   Validation: with a fake streaming stub, output arrives before completion, including an event split across two chunks; container death rejects `wait()` with `SandboxDiedError`; a stub without `execStream` still passes the contract suite with buffered output.
   Method: `bunx turbo run test --filter=@amond-ai/agent`
-- [ ] T006 Move the tools, shell, context loading, skill loading, and `harness.fs` onto the new methods (file: packages/agent/src/agent.ts) (depends on T003) [FR-9, FR-11, AC-015, AC-016]
+- [x] T006 Move the tools, shell, context loading, skill loading, and `harness.fs` onto the new methods (file: packages/agent/src/agent.ts) (depends on T003) [FR-9, FR-11, AC-015, AC-016]
   Validation: a read or edit of a missing file returns `File not found: {path}` on all three providers (AC-015); `harness.fs.readFile` on a missing file rejects (AC-016); `harness.shell` keeps its signature and result and forwards `timeoutMs`; a packaged-skill path still reads through the overlay; nothing under `packages/agent/src` calls `exec`, `readFileBuffer`, or the path forms of `readFile`/`writeFile` on a `Sandbox`.
   Method: `bunx turbo run test --filter=@amond-ai/agent && bun run check`
 - [ ] T007 Remove `exec` and `readFileBuffer`, switch `readFile`/`writeFile` to the session's stream forms, and prove assignability (file: packages/agent/src/types.ts) (depends on T006) [FR-1, NFR-2, AC-001, AC-014]
@@ -118,6 +118,12 @@ Rejected:
   Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` → 3 files, 34 tests passed (ordered chunks + exit code, kill-after-exit keeps code, 1-based inclusive line ranges incl. past-EOF, `composeTimeoutSignal(1500.4)` → `AbortSignal.timeout(1501)`); `bun check` (1.4.3) → no type errors
 - [x] (2026-10-20 17:13 KST) T003 Give every provider the session methods next to the existing ones, with buffered `spawn`, and add the provider contract suite — a84766f8
   Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` → 6 files, 131 passed / 6 skipped (contract suite on local(), bash(), sandboxFromDriver over a just-bash fake driver, cloudflareSandbox over a fake stub; the skips are capability-gated: AC-008 off for local/bash/cloudflare, AC-009 off for local/bash/driver); `cd packages/agent && mise exec -- bun check` → no type errors in 145 files; mutation runs (no round-up, no exists-after-failure, no stderr push, no spawn pre-abort check, cwd scope ignoring workingDirectory, local ENOTDIR dropped) each failed the suite
+- [x] (2026-10-20 17:21 KST) T004 Stream `spawn` output live on `local()` — fee5153c
+  Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` → 6 files, 136 passed / 6 skipped (AC-010 first chunk read while `wait()` unsettled; process-group kill leaves no backgrounded pid; 124 on timeout); mutation run (spawn swapped back to buffered) failed the AC-010 test; manual `run({command: 'head -c 67108900 /dev/zero'})` → exit 1 with "[amond] local exec output exceeded 67108864 bytes; process tree killed"
+- [x] (2026-10-20 17:25 KST) T005 Stream `spawn` output live on `cloudflareSandbox` through an optional stub `execStream` — e9a3b7b0
+  Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` → 7 files, 176 passed / 7 skipped (contract suite run twice on cloudflareSandbox: buffered stub and streaming execStream fake; cf-spawn.test.ts: first stdout chunk read while wait() pending, split frame delivered once, getState 'stopped' → SandboxDiedError on wait() and both streams); `bun check` → no type errors in 147 files; mutations (spawn forced buffered, parser buffer dropped, death race removed) each failed the suite. After merging with T004: 181 passed / 7 skipped, no type errors in 148 files
+- [x] (2026-10-20 17:23 KST) T006 Move the tools, shell, context loading, skill loading, and `harness.fs` onto the new methods — de9e14cd
+  Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` → 9 files, 155 passed / 6 skipped (AC-015 read+edit on local(), bash(), sandboxFromDriver fake → exact `File not found: {path}`; AC-016 createAmondFs readFile/readFileBuffer reject with FileNotFoundError; shell forwards timeoutMs to run; packaged-skill overlay serves readTextFile/readBinaryFile; grep probe runs once across overlay spreads); `bun check` → no type errors. After merging with T004/T005: 10 files, 205 passed / 7 skipped, no type errors in 151 files; orchestrator grep → only legacy member definitions (createCwdSandbox, overlay `readFile`) remain for T007
 
 ## Decision Log
 
@@ -127,7 +133,31 @@ Rejected:
 - Decision: `sandboxFromDriver`'s legacy `exec` shares `run`'s internals, so it now also rounds `timeoutMs` up before `driver.exec`, and `cloudflareSandbox` rounds before the stub's `timeout` as well.
   Rationale: one implementation of the abort race and deadline forwarding; the `SandboxDriver` contract already allows rounding up, never down.
   Date/Author: 2026-10-20 / implement-executor
+- Decision: `launchShell` counts the 64MB cap in raw bytes, where `execShell` counted UTF-16 units of the decoded string.
+  Rationale: the launcher hands out Buffers and the error message already says "bytes"; output under the cap is unchanged, multibyte output now trips at the true 64MB.
+  Date/Author: 2026-10-20 / implement-executor (T004)
+- Decision: `local()`'s live-spawn tests live in `node/local-env.test.ts`, not behind a contract-suite capability flag.
+  Rationale: T004's scope was `src/node/*`; the shared contract file stayed untouched.
+  Date/Author: 2026-10-20 / implement-executor (T004)
+- Decision: export `ORPHANED_EXEC_SUFFIX` from sandbox.ts (no barrel change) so the live Cloudflare spawn rejects kill()/abort with the same orphan wording as `sandboxFromDriver`.
+  Rationale: the wording must match, and a copy would drift. sandbox.ts is outside T005's `file:` but the outcome requires it.
+  Date/Author: 2026-10-20 / implement-executor (T005)
+- Decision: no live-spawn capability flag in the contract suite; liveness is asserted per provider (`node/local-env.test.ts`, `cloudflare/cf-spawn.test.ts`) with test-driven streams.
+  Rationale: the just-bash fakes run each command to completion, so a contract-level "output before exit" check could not pass on a Cloudflare fake.
+  Date/Author: 2026-10-20 / implement-executor (T005)
+- Decision: `session.fs` readFile/readFileBuffer on a missing file reject with `FileNotFoundError` ("File not found: {path}") instead of the provider's own error; other read failures propagate unchanged.
+  Rationale: the null-returning session reads carry no provider error to rethrow; one wording on every provider matches the tool errors (AC-015) while keeping the reject contract (AC-016, FR-11).
+  Date/Author: 2026-10-20 / implement-executor (T006)
+- Decision: `context.ts` skips an AGENTS.md/CLAUDE.md that disappears between `exists` and the read; a vanished SKILL.md takes the existing warn-and-skip path.
+  Rationale: the null branch makes the race explicit; failing init on it served no contract.
+  Date/Author: 2026-10-20 / implement-executor (T006)
+- Decision: `overlayPackagedSkills` keeps its legacy `readFile` override until T007 converts it to the stream form; its `readBinaryFile` returns raw decoded bytes while `readTextFile` keeps the model-readable form.
+  Rationale: the stream-form `readFile` does not exist on `Sandbox` before T007.
+  Date/Author: 2026-10-20 / implement-executor (T006)
 
 ## Surprises & Discoveries
 
 - The shell's `bun` is 1.4.2 when mise is not activated, and 1.4.2 has no built-in `bun check`, so the package `check` script (`bun check`) recurses and fails with E2BIG. Run quality gates through `mise exec --` (Bun 1.4.3).
+- Executor worktrees start from the base commit the session began on (a27e633), not the track branch head; executors must fast-forward to `tracks/ai-sdk-sandbox-20261020` before working.
+- T010 must check the real `execStream` against the fake's assumptions: `exitCode` on the `complete` event, `error` as a string field, and whether cancelling the stream stops the remote command.
+- `AmondHarness` has no `fs` member; `AmondFs` is exposed as `AmondSession.fs`, although the `AmondFs` JSDoc and the spec say `harness.fs`.
