@@ -58,10 +58,10 @@ Rejected:
 
 ## Tasks
 
-- [ ] T001 Add `@ai-sdk/provider-utils` 5.0.64 to `@amond-ai/agent` and record it in the tech stack (file: packages/agent/package.json) [NFR-1]
+- [x] T001 Add `@ai-sdk/provider-utils` 5.0.64 to `@amond-ai/agent` and record it in the tech stack (file: packages/agent/package.json) [NFR-1]
   Validation: `docs/knowledge/tech-stack.md` lists the package with its purpose before the dependency appears; `bun install` resolves 5.0.64 for `@amond-ai/agent`, and `bun run build` still passes for the package.
   Method: `bun install && bunx turbo run build --filter=@amond-ai/agent`
-- [ ] T002 Add the shared stream, process, and file-method helpers, and round `timeoutMs` up (file: packages/agent/src/sandbox-streams.ts) [FR-4, FR-6, AC-005]
+- [x] T002 Add the shared stream, process, and file-method helpers, and round `timeoutMs` up (file: packages/agent/src/sandbox-streams.ts) [FR-4, FR-6, AC-005]
   Validation: a controlled process delivers pushed chunks in order and resolves `wait()` with its exit code; `kill()` after exit is a no-op that keeps the code; `readTextFile` line ranges are 1-based and inclusive, and a range past the end of the file returns through the end; a fractional `timeoutMs` (1500.4) becomes 1501.
   Method: `bunx turbo run test --filter=@amond-ai/agent`
 - [ ] T003 Give every provider the session methods next to the existing ones, with buffered `spawn`, and add the provider contract suite (file: packages/agent/src/sandbox.ts) (depends on T001, T002) [FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, NFR-3, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-011, AC-012, AC-013]
@@ -112,6 +112,13 @@ Rejected:
 
 ## Progress
 
+- [x] (2026-10-20 17:05 KST) T001 Add `@ai-sdk/provider-utils` 5.0.64 to `@amond-ai/agent` and record it in the tech stack — 2c490919
+  Evidence: `bun install` → `@ai-sdk/provider-utils` 5.0.64 hoisted for `@amond-ai/agent` (other consumers keep 5.0.30); `bunx turbo run build --filter=@amond-ai/agent` → 1 successful; tech-stack.md row added in the same commit before the dependency is used
+- [x] (2026-10-20 17:20 KST) T002 Add the shared stream, process, and file-method helpers, and round `timeoutMs` up — faa8e5fb
+  Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` → 3 files, 34 tests passed (ordered chunks + exit code, kill-after-exit keeps code, 1-based inclusive line ranges incl. past-EOF, `composeTimeoutSignal(1500.4)` → `AbortSignal.timeout(1501)`); `bun check` (1.4.3) → no type errors
+
 ## Decision Log
 
 ## Surprises & Discoveries
+
+- The shell's `bun` is 1.4.2 when mise is not activated, and 1.4.2 has no built-in `bun check`, so the package `check` script (`bun check`) recurses and fails with E2BIG. Run quality gates through `mise exec --` (Bun 1.4.3).
