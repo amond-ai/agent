@@ -79,6 +79,17 @@ describe('sliceLines', () => {
   })
 })
 
+describe('sliceLines parity with the AI SDK extractLines', () => {
+  it('keeps the final line ending only when the range covers the empty element after it', () => {
+    expect(sliceLines('a\nb\n', 2, 2)).toBe('b')
+    expect(sliceLines('a\nb\n', 1, 2)).toBe('a\nb')
+    expect(sliceLines('a\nb\n', 2)).toBe('b\n')
+    expect(sliceLines('a\r\nb\r\n', 2, 2)).toBe('b')
+    expect(sliceLines('a\r\nb\r\n', 2, 99)).toBe('b\r\n')
+    expect(sliceLines('l1\nl2\nl3\n', 3, 3)).toBe('l3')
+  })
+})
+
 describe('createProcessController', () => {
   it('delivers pushed chunks in order and resolves wait() with the exit code', async () => {
     const c = createProcessController({ kill: () => {} })
