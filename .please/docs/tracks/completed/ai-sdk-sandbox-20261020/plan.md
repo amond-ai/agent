@@ -132,6 +132,7 @@ Rejected:
   Evidence: extracted blueprint compiled with `node_modules/.bin/tsc -p /tmp/bp8/tsconfig.json` against the freshly built `@amond-ai/agent` → exit 0 (re-run by orchestrator on the merged tree); `mise exec -- bunx turbo run test --filter=amond` → 61 passed (docs-content.test.ts included); blueprint index regenerated twice with no diff
 - [x] (2026-10-21 11:44 KST) T010 Smoke-test live `spawn` against a real Cloudflare Sandbox container
   Evidence: temporary Worker `amond-t010-smoke-6139bccd` (account 밸런스프렌즈, `@cloudflare/sandbox` 0.11.0, image `docker.io/cloudflare/sandbox:0.11.0`, `cloudflareSandbox(getSandbox(...))` from the built `@amond-ai/agent`) → stub has `execStream`; `run({command: 'echo warm && pwd'})` → `warm\n/workspace`, exit 0; `spawn('for i in 1 2 3; do echo $i; sleep 1; done')` → stdout chunks at 122 ms / 1128 ms / 2132 ms, `wait()` → `{ exitCode: 0 }` at 3138 ms (live, not buffered); `kill()` at 2500 ms on an 8-line loop → `wait()` rejected at once with the orphan AbortError ("could not be confirmed cancelled and may still be running"), both streams errored with it; the remote loop kept running (7 lines in its log file by ~6.5 s). Worker and container application `a034647f-…` deleted afterwards (`wrangler delete`, `wrangler containers delete`; Worker URL → 404)
+- [x] (2026-10-21 22:36 KST) Review-stage commits (SHA: `64ff1703`, `f25d233e`, `5c1259d7`, `18e2ba0d`, `15aea830`, `8ab79650`, `e9ff40ea`, `a99e147d`, `99e4032f`, `0bf5e16c`, `f0a459fe`, `3a397a4d`, `1f0b9350`, `a074882a`)
 
 ## Decision Log
 
@@ -181,3 +182,28 @@ Rejected:
 - T010 on a real container confirmed the `execStream` event shape the fake assumed (live chunks, `complete` with `exitCode`). Cancelling the stream does **not** stop the remote command: after `kill()` the loop kept writing. `wait()` still settles at once with the orphan AbortError, as designed. A real remote kill needs the SDK's process API (`startProcess` + `killProcess` in 0.11); follow-up, not in this track.
 - `@cloudflare/sandbox` 1.0.2 (published 2026-10-20) removes the 0.x `getSandbox()` stub (`exec`, `readFile`, `execStream`) that `cloudflareSandbox` wraps; in 1.0 the user's Durable Object starts the container and calls `ctx.container.exec`. The repo's blueprint pins `^0.11.0`, so nothing breaks today; supporting 1.0 is a separate issue.
 - Cloudflare's env `CLOUDFLARE_API_TOKEN` (account token) cannot deploy Workers (403 on the secrets endpoint); T010 ran with `wrangler login --device` OAuth (`account:read`, `workers_scripts:write`, `containers:write`) and `env -u CLOUDFLARE_API_TOKEN`.
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+- `Sandbox` extends the AI SDK's `Experimental_SandboxSession`, so it can be passed as a session with no cast. `sandboxFromDriver`, `local()`, `bash()`, `cloudflareSandbox()` and `createCwdSandbox` all assign. `@ai-sdk/provider-utils` 5.0.64 is a type-only dependency, so nothing from it reaches the Worker bundle.
+- Every provider implements `run`, `spawn` and the six session file methods. `spawn` streams output live on `local()` (process-group kill, unread-output cap) and on Cloudflare stubs that have `execStream`; other providers buffer it. `readTextFile` line ranges match the AI SDK's `extractLines`, and a missing file reads as `null`.
+- Breaking change: `exec` and `readFileBuffer` are removed, and `readFile`/`writeFile` take the session's stream forms. The tools, shell, context and skill loading, and `session.fs` moved onto the new methods. `SandboxDriver` and the existing blueprints are unchanged, except `sandbox--cloudflare-computer`, which is rebuilt on `SandboxDriver` as version 3.
+- The CLI docs describe the new surface, and live Cloudflare `spawn` was smoke-tested on a real container (T010).
+
+### What Went Well
+- The additive-then-breaking order (T003–T006 before T007) kept `bun run check` green at every commit, and the provider contract suite caught behaviour gaps through mutation runs.
+- T010 on a real container confirmed the `execStream` event shape the fake stub assumed, before review started.
+- The ensemble review found real defects the tests had missed: a cancelled stream counted as overflow, local `spawn` ignoring a caller abort, CRLF line ranges, a quadratic SSE rescan, a synchronous `spawn` throw, and an uncaught EMFILE spawn error.
+
+### What Could Improve
+- The review ran 14 fix commits across five loops. Several rounds re-raised findings already rejected, because the rejection ledger was stashed during a loop and similar titles do not dedupe. Keep the ledger committed while a loop runs.
+- Executor worktrees started from the session's base commit, not the track head, and had to fast-forward first.
+- Running gates outside `mise exec` picks up Bun 1.4.2, where `bun check` recurses; the plan's `Method:` lines should say `mise exec --`.
+
+### Tech Debt Created
+- TD-010: on Cloudflare, `kill()` of a live `spawn` settles `wait()` but does not stop the remote command. A real kill needs the SDK's `startProcess`/`killProcess`.
+- TD-011: for a driver whose `exists()` returns false on any failure (as its contract allows), a failed read of an existing file reads as missing, and the provider error is lost.
+- TD-012: live Cloudflare `spawn` rejects `wait()` on a stream `error` event, where `run` and `local()` report a launch failure as exit 1.
+- TD-013: `@cloudflare/sandbox` 1.x removes the `getSandbox()` stub that `cloudflareSandbox` wraps; only 0.x is supported.
+- TD-014: the 1 MiB SSE parse test asserts it finishes in under 500 ms, which may be flaky on a slow CI runner.

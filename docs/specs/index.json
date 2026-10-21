@@ -78,6 +78,89 @@
           "statement": "fetch blueprint text by default only over HTTPS from a location the amond project controls, because coding agents act on that text; an `AMOND_REGISTRY_URL` override is the user's own explicit choice"
         }
       ]
+    },
+    {
+      "id": "SPEC-002",
+      "domain": "sandbox",
+      "feature": "spec",
+      "created_at": "2026-10-21T13:37:31.365Z",
+      "updated_at": "2026-10-21T13:37:31.365Z",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "traces": [],
+      "requirements": [
+        {
+          "id": "REQ-001",
+          "kind": "functional",
+          "statement": "make every `Sandbox` value satisfy `Experimental_SandboxSession` from `@ai-sdk/provider-utils` 5.0.64 directly, with no adapter, wrapper, or cast"
+        },
+        {
+          "id": "REQ-002",
+          "kind": "functional",
+          "statement": "keep the framework extensions on `Sandbox`: `cwd`, `resolvePath`, `stat`, `readdir`, `exists`, `mkdir`, and `rm`, with relative paths resolved against `cwd` in every file operation"
+        },
+        {
+          "id": "REQ-003",
+          "kind": "functional",
+          "statement": "replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline"
+        },
+        {
+          "id": "REQ-004",
+          "kind": "functional",
+          "statement": "replace the framework's `readFile(path)`, `readFileBuffer(path)`, and `writeFile(path, content)` with the session's `readFile`, `readBinaryFile`, `readTextFile`, `writeFile`, `writeBinaryFile`, and `writeTextFile`, including their contract that a missing file resolves to `null`"
+        },
+        {
+          "id": "REQ-005",
+          "kind": "functional",
+          "statement": "keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and sandbox death rejects with `SandboxDiedError`"
+        },
+        {
+          "id": "REQ-006",
+          "kind": "functional",
+          "statement": "deliver `spawn` output live on `local()` and `cloudflareSandbox`, and on completion on `bash()` and driver-backed sandboxes, with `wait`, `kill`, and abort working on all of them"
+        },
+        {
+          "id": "REQ-007",
+          "kind": "functional",
+          "statement": "keep every existing `SandboxDriver` implementation valid without changes, and have `sandboxFromDriver` produce the new `Sandbox` from it"
+        },
+        {
+          "id": "REQ-008",
+          "kind": "functional",
+          "statement": "adapt the three built-in providers, `cloudflareSandbox`, `bash()`, and `local()`, to the new `Sandbox`, each with a `description` of its environment"
+        },
+        {
+          "id": "REQ-009",
+          "kind": "functional",
+          "statement": "port the built-in tools (read, write, edit, bash, grep, glob) onto the new methods with no change to what the model sees"
+        },
+        {
+          "id": "REQ-010",
+          "kind": "functional",
+          "statement": "update every page under `packages/cli/docs` that calls or documents the removed `Sandbox` methods, including the sandbox and agent API references, the sandbox and tool guides, and the Cloudflare, GitHub Actions, and GitLab CI deploy pages, and the `sandbox--cloudflare-computer` blueprint, which implements `Sandbox` directly rather than through `SandboxDriver`"
+        },
+        {
+          "id": "REQ-011",
+          "kind": "functional",
+          "statement": "keep the public `harness.fs` and `harness.shell` (and their `session` counterparts) unchanged in names, signatures, and behaviour, including `harness.fs.readFile` throwing on a missing file"
+        },
+        {
+          "id": "REQ-012",
+          "kind": "non-functional",
+          "statement": "add `@ai-sdk/provider-utils` to `tech-stack.md` before it becomes a dependency of `@amond-ai/agent`"
+        },
+        {
+          "id": "REQ-013",
+          "kind": "non-functional",
+          "statement": "mark the removal of `exec` and the old file-method signatures as a breaking change in the commit history, so release-please records it"
+        },
+        {
+          "id": "REQ-014",
+          "kind": "non-functional",
+          "statement": "cover the new `Sandbox` contract with tests that run on all three built-in providers. `@amond-ai/agent` has no tests today, so these are new"
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,304 @@
+{
+  "id": "SPEC-002",
+  "level": "V_M",
+  "domain": "sandbox",
+  "feature": "spec",
+  "depends": [],
+  "conflicts": [],
+  "traces": [],
+  "created_at": "2026-10-21T13:37:31.365Z",
+  "updated_at": "2026-10-21T13:37:31.365Z",
+  "source_tracks": [
+    "ai-sdk-sandbox-20261020"
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "kind": "functional",
+      "statement": "make every `Sandbox` value satisfy `Experimental_SandboxSession` from `@ai-sdk/provider-utils` 5.0.64 directly, with no adapter, wrapper, or cast",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "When a `Sandbox` from `cloudflareSandbox`, `bash()`, `local()`, or `sandboxFromDriver` is assigned to a variable typed `Experimental_SandboxSession`, the type check shall pass with no cast.",
+          "given": [],
+          "when": [
+            "a `Sandbox` from `cloudflareSandbox`, `bash()`, `local()`, or `sandboxFromDriver` is assigned to a variable typed `Experimental_SandboxSession`"
+          ],
+          "then": [
+            "pass with no cast"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "kind": "functional",
+      "statement": "keep the framework extensions on `Sandbox`: `cwd`, `resolvePath`, `stat`, `readdir`, `exists`, `mkdir`, and `rm`, with relative paths resolved against `cwd` in every file operation",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "When `readTextFile` is given a relative path, the system shall read the file at that path resolved against the sandbox's `cwd`.",
+          "given": [],
+          "when": [
+            "`readTextFile` is given a relative path"
+          ],
+          "then": [
+            "read the file at that path resolved against the sandbox's `cwd`"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "kind": "functional",
+      "statement": "replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "When `run` is called with `timeoutMs`, the system shall pass that deadline to the provider's native timeout option, rounding up and never down.",
+          "given": [],
+          "when": [
+            "`run` is called with `timeoutMs`"
+          ],
+          "then": [
+            "pass that deadline to the provider's native timeout option, rounding up and never down"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "kind": "functional",
+      "statement": "replace the framework's `readFile(path)`, `readFileBuffer(path)`, and `writeFile(path, content)` with the session's `readFile`, `readBinaryFile`, `readTextFile`, `writeFile`, `writeBinaryFile`, and `writeTextFile`, including their contract that a missing file resolves to `null`",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "When `readTextFile` or `readBinaryFile` targets a path that does not exist, the system shall resolve to `null` rather than reject.",
+          "given": [],
+          "when": [
+            "`readTextFile` or `readBinaryFile` targets a path that does not exist"
+          ],
+          "then": [
+            "resolve to `null` rather than reject"
+          ]
+        },
+        {
+          "name": "When `writeTextFile` targets a path whose parent directories do not exist, the system shall create them and write the file.",
+          "given": [],
+          "when": [
+            "`writeTextFile` targets a path whose parent directories do not exist"
+          ],
+          "then": [
+            "create them and write the file"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "kind": "functional",
+      "statement": "keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and sandbox death rejects with `SandboxDiedError`",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "If `run` is called with an `abortSignal` that is already aborted, then the system shall reject without executing the command.",
+          "given": [],
+          "when": [
+            "`run` is called with an `abortSignal` that is already aborted"
+          ],
+          "then": [
+            "reject without executing the command"
+          ]
+        },
+        {
+          "name": "When the `abortSignal` aborts while a driver-backed `run` is in flight, the system shall reject promptly with an `AbortError`.",
+          "given": [],
+          "when": [
+            "the `abortSignal` aborts while a driver-backed `run` is in flight"
+          ],
+          "then": [
+            "reject promptly with an `AbortError`"
+          ]
+        },
+        {
+          "name": "When an aborted driver-backed command later settles, the system shall report its settlement to `onOrphanSettled`.",
+          "given": [],
+          "when": [
+            "an aborted driver-backed command later settles"
+          ],
+          "then": [
+            "report its settlement to `onOrphanSettled`"
+          ]
+        },
+        {
+          "name": "If the sandbox dies while `run` is in flight, then the system shall reject with `SandboxDiedError`.",
+          "given": [],
+          "when": [
+            "the sandbox dies while `run` is in flight"
+          ],
+          "then": [
+            "reject with `SandboxDiedError`"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "kind": "functional",
+      "statement": "deliver `spawn` output live on `local()` and `cloudflareSandbox`, and on completion on `bash()` and driver-backed sandboxes, with `wait`, `kill`, and abort working on all of them",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "While a command started with `spawn` on `local()` is still running, the system shall deliver the output it has already written on `stdout`.",
+          "given": [
+            "a command started with `spawn` on `local()` is still running"
+          ],
+          "when": [],
+          "then": [
+            "deliver the output it has already written on `stdout`"
+          ]
+        },
+        {
+          "name": "When a command started with `spawn` on `bash()` or a driver-backed sandbox finishes, the system shall deliver its full output on `stdout` and `stderr`.",
+          "given": [],
+          "when": [
+            "a command started with `spawn` on `bash()` or a driver-backed sandbox finishes"
+          ],
+          "then": [
+            "deliver its full output on `stdout` and `stderr`"
+          ]
+        },
+        {
+          "name": "When a command started with `spawn` on `bash()` or a driver-backed sandbox finishes, the system shall resolve `wait()` to its exit code.",
+          "given": [],
+          "when": [
+            "a command started with `spawn` on `bash()` or a driver-backed sandbox finishes"
+          ],
+          "then": [
+            "resolve `wait()` to its exit code"
+          ]
+        },
+        {
+          "name": "When `kill()` is called on a spawned process, the system shall settle its `wait()`.",
+          "given": [],
+          "when": [
+            "`kill()` is called on a spawned process"
+          ],
+          "then": [
+            "settle its `wait()`"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-007",
+      "kind": "functional",
+      "statement": "keep every existing `SandboxDriver` implementation valid without changes, and have `sandboxFromDriver` produce the new `Sandbox` from it",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "The `SandboxDriver`-based sandbox blueprints' driver code shall type-check against `SandboxDriver` without changes.",
+          "given": [],
+          "when": [],
+          "then": [
+            "type-check against `SandboxDriver` without changes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-008",
+      "kind": "functional",
+      "statement": "adapt the three built-in providers, `cloudflareSandbox`, `bash()`, and `local()`, to the new `Sandbox`, each with a `description` of its environment",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ]
+    },
+    {
+      "id": "REQ-009",
+      "kind": "functional",
+      "statement": "port the built-in tools (read, write, edit, bash, grep, glob) onto the new methods with no change to what the model sees",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "When the model's read or edit tool targets a missing file, the system shall return a tool error that names the path, with the same wording on every provider.",
+          "given": [],
+          "when": [
+            "the model's read or edit tool targets a missing file"
+          ],
+          "then": [
+            "return a tool error that names the path, with the same wording on every provider"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-010",
+      "kind": "functional",
+      "statement": "update every page under `packages/cli/docs` that calls or documents the removed `Sandbox` methods, including the sandbox and agent API references, the sandbox and tool guides, and the Cloudflare, GitHub Actions, and GitLab CI deploy pages, and the `sandbox--cloudflare-computer` blueprint, which implements `Sandbox` directly rather than through `SandboxDriver`",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ]
+    },
+    {
+      "id": "REQ-011",
+      "kind": "functional",
+      "statement": "keep the public `harness.fs` and `harness.shell` (and their `session` counterparts) unchanged in names, signatures, and behaviour, including `harness.fs.readFile` throwing on a missing file",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ],
+      "scenarios": [
+        {
+          "name": "When `harness.fs.readFile` targets a missing file, the system shall reject, as it does today.",
+          "given": [],
+          "when": [
+            "`harness.fs.readFile` targets a missing file"
+          ],
+          "then": [
+            "reject, as it does today"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-012",
+      "kind": "non-functional",
+      "statement": "add `@ai-sdk/provider-utils` to `tech-stack.md` before it becomes a dependency of `@amond-ai/agent`",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ]
+    },
+    {
+      "id": "REQ-013",
+      "kind": "non-functional",
+      "statement": "mark the removal of `exec` and the old file-method signatures as a breaking change in the commit history, so release-please records it",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ]
+    },
+    {
+      "id": "REQ-014",
+      "kind": "non-functional",
+      "statement": "cover the new `Sandbox` contract with tests that run on all three built-in providers. `@amond-ai/agent` has no tests today, so these are new",
+      "source_tracks": [
+        "ai-sdk-sandbox-20261020"
+      ]
+    }
+  ]
+}
