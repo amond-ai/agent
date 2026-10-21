@@ -189,4 +189,15 @@ describe('local() live spawn and run', () => {
 
     expect(result.stdout).toBe('€')
   })
+
+  it('run() and spawn() report a NUL byte in the command as exit 1, not a rejection', async () => {
+    const command = 'echo a\u0000b'
+
+    const result = await sandbox.run({ command })
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).not.toBe('')
+
+    const proc = await sandbox.spawn({ command })
+    expect((await proc.wait()).exitCode).toBe(1)
+  })
 })

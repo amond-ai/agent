@@ -9,7 +9,9 @@
  * caller.
  */
 import type { Buffer } from 'node:buffer'
+import type { ChildProcessByStdio } from 'node:child_process'
 import { spawn, spawnSync } from 'node:child_process'
+import type { Readable } from 'node:stream'
 
 export const MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 
@@ -80,15 +82,32 @@ export interface ShellProcess {
  * Never throws: spawn failures surface as an `error` on {@link ShellExit}.
  */
 export function launchShell(command: string, opts: ShellProcessOptions): ShellProcess {
-  const child = spawn(command, {
-    cwd: opts.cwd,
-    env: opts.env,
-    shell: resolveShell(),
-    // POSIX: lead a new process group so abort can signal the whole
-    // tree via `process.kill(-pid)`. No-op grouping on Windows.
-    detached: process.platform !== 'win32',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  let child: ChildProcessByStdio<null, Readable, Readable>
+  try {
+    child = spawn(command, {
+      cwd: opts.cwd,
+      env: opts.env,
+      shell: resolveShell(),
+      // POSIX: lead a new process group so abort can signal the whole
+      // tree via `process.kill(-pid)`. No-op grouping on Windows.
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  }
+  catch (error) {
+    // spawn throws synchronously on invalid arguments (e.g. a NUL byte in
+    // the command or env); report it like an asynchronous spawn failure.
+    // No output callback has fired, so callers' late-bound references are safe.
+    return {
+      pid: undefined,
+      kill: () => {},
+      exited: Promise.resolve({
+        code: null,
+        signal: null,
+        error: error instanceof Error ? error : new Error(String(error)),
+      }),
+    }
+  }
 
   let settled = false
 
