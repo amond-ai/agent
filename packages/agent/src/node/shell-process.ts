@@ -4,9 +4,9 @@
  *
  * The launcher owns what both callers need and neither should duplicate:
  * the shell choice, the detached process group, tree-wide SIGTERM then SIGKILL
- * on abort, and the output cap. It hands output over as raw `Buffer` chunks
- * and reports how the process ended; decoding and exit-code mapping stay with
- * the caller.
+ * on abort. It hands output over as raw `Buffer` chunks and reports how the
+ * process ended; decoding, exit-code mapping and output caps stay with the
+ * caller.
  */
 import type { Buffer } from 'node:buffer'
 import { spawn, spawnSync } from 'node:child_process'
@@ -52,19 +52,12 @@ export interface ShellProcessOptions {
   signal?: AbortSignal
   onStdout: (chunk: Buffer) => void
   onStderr: (chunk: Buffer) => void
-  /**
-   * Lifetime output cap in bytes. Defaults to {@link MAX_OUTPUT_BYTES}; pass
-   * `Infinity` when the caller bounds output itself (live spawn caps unread bytes).
-   */
-  maxOutputBytes?: number
 }
 
 export interface ShellExit {
   /** Exit code; `null` when the shell died from a signal. */
   code: number | null
   signal: NodeJS.Signals | null
-  /** The output cap was exceeded and the process group was killed. */
-  overflowed: boolean
   /** Set when the launch failed or a post-spawn error occurred (no exit code follows). */
   error?: Error
 }
@@ -97,10 +90,7 @@ export function launchShell(command: string, opts: ShellProcessOptions): ShellPr
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  let overflowed = false
   let settled = false
-  let total = 0
-  const maxOutputBytes = opts.maxOutputBytes ?? MAX_OUTPUT_BYTES
 
   const killTree = (sig: NodeJS.Signals): void => {
     if (child.pid === undefined) { return }
@@ -140,26 +130,17 @@ export function launchShell(command: string, opts: ShellProcessOptions): ShellPr
       opts.signal?.addEventListener('abort', kill, { once: true })
     }
 
-    const onData = (chunk: Buffer, deliver: (chunk: Buffer) => void): void => {
-      if (overflowed) { return }
-      deliver(chunk)
-      total += chunk.byteLength
-      if (total > maxOutputBytes) {
-        overflowed = true
-        kill()
-      }
-    }
-    child.stdout.on('data', (chunk: Buffer) => onData(chunk, opts.onStdout))
-    child.stderr.on('data', (chunk: Buffer) => onData(chunk, opts.onStderr))
+    child.stdout.on('data', opts.onStdout)
+    child.stderr.on('data', opts.onStderr)
 
     child.once('error', (error) => {
       // Spawn failure (no 'close' will follow) or post-spawn kill error.
       killTree('SIGTERM')
-      settle({ code: null, signal: null, overflowed, error })
+      settle({ code: null, signal: null, error })
     })
 
     child.once('close', (code, signal) => {
-      settle({ code, signal, overflowed })
+      settle({ code, signal })
     })
   })
 

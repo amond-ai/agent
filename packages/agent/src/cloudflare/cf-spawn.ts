@@ -8,8 +8,8 @@
 
 import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 
-import { abortErrorFor, abortErrorWithSuffix, roundUpTimeoutMs } from '../abort.ts'
-import { ORPHANED_EXEC_SUFFIX } from '../sandbox.ts'
+import { abortErrorFor, roundUpTimeoutMs } from '../abort.ts'
+import { orphanedExecAbortError } from '../sandbox.ts'
 import { createProcessController, MAX_BUFFERED_OUTPUT_BYTES } from '../sandbox-streams.ts'
 import type { SandboxRunOptions } from '../types.ts'
 import type { CloudflareSandboxStub } from './cf-sandbox.ts'
@@ -63,7 +63,6 @@ function toEvent(data: string): ExecStreamEvent | undefined {
  */
 export function createExecStreamParser(): ExecStreamParser {
   const decoder = new TextDecoder()
-  let buffer = ''
   let data: string[] = []
 
   const dispatch = (events: ExecStreamEvent[]): void => {
@@ -86,33 +85,54 @@ export function createExecStreamParser(): ExecStreamParser {
     data.push(value.startsWith(' ') ? value.slice(1) : value)
   }
 
-  const drainLines = (events: ExecStreamEvent[]): void => {
-    for (;;) {
-      const newline = buffer.search(/\r\n|\r|\n/)
-      if (newline === -1) { return }
+  // The unterminated tail of the stream, as pieces so a long line split across
+  // many chunks is joined once, when it ends, rather than on every chunk.
+  let partial: string[] = []
+  // The tail ends in a `\r` held back until the next text shows whether a `\n` follows.
+  let heldCr = false
+
+  // Splits only the newly decoded `text`; earlier text is never rescanned.
+  const drainLines = (text: string, events: ExecStreamEvent[]): void => {
+    if (text === '') { return }
+    let start = 0
+    if (heldCr) {
+      heldCr = false
+      const held = partial.join('')
+      partial = []
+      if (text.startsWith('\n')) { start = 1 }
+      readLine(held.slice(0, -1), events)
+    }
+    const terminator = /\r\n|\r|\n/g
+    terminator.lastIndex = start
+    for (let match = terminator.exec(text); match; match = terminator.exec(text)) {
       // A trailing `\r` may be the first half of a `\r\n` split across chunks.
-      if (buffer[newline] === '\r' && newline === buffer.length - 1) { return }
-      const width = buffer.startsWith('\r\n', newline) ? 2 : 1
-      const line = buffer.slice(0, newline)
-      buffer = buffer.slice(newline + width)
+      if (match[0] === '\r' && match.index === text.length - 1) { break }
+      const line = partial.join('') + text.slice(start, match.index)
+      partial = []
+      start = match.index + match[0].length
       readLine(line, events)
+    }
+    const rest = text.slice(start)
+    if (rest !== '') {
+      partial.push(rest)
+      heldCr = rest.endsWith('\r')
     }
   }
 
   return {
     push(chunk) {
-      buffer += decoder.decode(chunk, { stream: true })
       const events: ExecStreamEvent[] = []
-      drainLines(events)
+      drainLines(decoder.decode(chunk, { stream: true }), events)
       return events
     },
     end() {
-      buffer += decoder.decode()
       const events: ExecStreamEvent[] = []
-      drainLines(events)
-      if (buffer.endsWith('\r')) { buffer = buffer.slice(0, -1) }
-      if (buffer !== '') { readLine(buffer, events) }
-      buffer = ''
+      drainLines(decoder.decode(), events)
+      let last = partial.join('')
+      if (heldCr) { last = last.slice(0, -1) }
+      if (last !== '') { readLine(last, events) }
+      partial = []
+      heldCr = false
       dispatch(events)
       return events
     },
@@ -132,15 +152,6 @@ export interface LiveSpawnContext {
   /** Resolves a relative `workingDirectory` against the sandbox's cwd, as `run` does. */
   resolvePath: (path: string) => string
   guard: ContainerCallGuard
-}
-
-/**
- * The `AbortError` a caller abort or `kill()` settles the process with. No
- * remote kill is confirmed (cancelling the event stream may leave the command
- * running), so it carries the same orphan wording as the buffered path.
- */
-function orphanAbortError(signal: AbortSignal): Error {
-  return abortErrorWithSuffix(signal, ORPHANED_EXEC_SUFFIX)
 }
 
 /**
@@ -208,7 +219,7 @@ export async function spawnLive(
 
   const onAbort = (): void => {
     stopReading(signal.reason)
-    controller.fail(orphanAbortError(signal))
+    controller.fail(orphanedExecAbortError(signal))
   }
   signal.addEventListener('abort', onAbort, { once: true })
 

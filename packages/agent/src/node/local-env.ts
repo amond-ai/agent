@@ -6,6 +6,7 @@
  * this through `local(...)`. `run` and `spawn` shell out via `child_process.spawn`;
  * file methods call `node:fs/promises` directly.
  */
+import type { Buffer } from 'node:buffer'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
@@ -48,19 +49,33 @@ async function execShell(
   const stderrDecoder = new StringDecoder('utf8')
   let stdout = ''
   let stderr = ''
+  let total = 0
+  let overflowed = false
 
-  const exit = await launchShell(command, {
+  // Lifetime output cap: deliver, then count; past the cap, drop further
+  // output and kill the process group once.
+  const capped = (deliver: (chunk: Buffer) => void) => (chunk: Buffer): void => {
+    if (overflowed) { return }
+    deliver(chunk)
+    total += chunk.byteLength
+    if (total > MAX_OUTPUT_BYTES) {
+      overflowed = true
+      shell.kill()
+    }
+  }
+  const shell = launchShell(command, {
     ...opts,
-    onStdout: (chunk) => { stdout += stdoutDecoder.write(chunk) },
-    onStderr: (chunk) => { stderr += stderrDecoder.write(chunk) },
-  }).exited
+    onStdout: capped((chunk) => { stdout += stdoutDecoder.write(chunk) }),
+    onStderr: capped((chunk) => { stderr += stderrDecoder.write(chunk) }),
+  })
+  const exit = await shell.exited
   stdout += stdoutDecoder.end()
   stderr += stderrDecoder.end()
 
   if (exit.error) {
-    return { stdout, stderr: stderr || String(exit.error.message ?? exit.error), exitCode: 1 }
+    return { stdout, stderr: stderr || exit.error.message, exitCode: 1 }
   }
-  if (exit.overflowed) {
+  if (overflowed) {
     return {
       stdout,
       stderr: stderr + OVERFLOW_NOTICE,
@@ -211,8 +226,6 @@ export function createLocalSandbox(
       cwd: options.workingDirectory ? resolvePath(options.workingDirectory) : cwd,
       env: options.env ? { ...baseEnv, ...options.env } : baseEnv,
       signal: mergedSignal,
-      // Live output is bounded by unread bytes (the controller), not lifetime bytes.
-      maxOutputBytes: Infinity,
       onStdout: chunk => controller.pushStdout(chunk),
       onStderr: chunk => controller.pushStderr(chunk),
     })
@@ -230,15 +243,8 @@ export function createLocalSandbox(
 
     void shell.exited.then((exit) => {
       callerSignal?.removeEventListener('abort', onCallerAbort)
-      if (callerSignal?.aborted) {
-        controller.fail(abortErrorFor(callerSignal))
-      }
-      else if (exit.error) {
-        controller.pushStderr(String(exit.error.message ?? exit.error))
-        controller.exit(1)
-      }
-      else if (exit.overflowed) {
-        controller.pushStderr(OVERFLOW_NOTICE)
+      if (exit.error) {
+        controller.pushStderr(exit.error.message)
         controller.exit(1)
       }
       else {

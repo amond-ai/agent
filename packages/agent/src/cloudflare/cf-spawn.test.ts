@@ -100,6 +100,20 @@ describe('createExecStreamParser', () => {
     expect(parseChunks([frame({ type: 'error', error: 'boom' })])).toEqual([{ type: 'error', error: 'boom' }])
   })
 
+  it('parses a ~1 MiB frame pushed in small chunks without rescanning the partial line', () => {
+    const data = 'x'.repeat(1024 * 1024)
+    const text = frame({ type: 'stdout', data })
+    const chunks: string[] = []
+    for (let at = 0; at < text.length; at += 64) { chunks.push(text.slice(at, at + 64)) }
+
+    const started = performance.now()
+    const events = parseChunks(chunks)
+    const elapsed = performance.now() - started
+
+    expect(events).toEqual([{ type: 'stdout', data }])
+    expect(elapsed).toBeLessThan(500)
+  })
+
   it('throws on a data payload that is not JSON', () => {
     expect(() => parseChunks(['data: not json\n\n'])).toThrow(/not JSON/)
   })

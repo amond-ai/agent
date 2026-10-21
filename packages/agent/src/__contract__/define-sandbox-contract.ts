@@ -81,9 +81,7 @@ function instrument<T>(value: T | undefined, what: string): T {
 }
 
 function abortedSignal(): AbortSignal {
-  const controller = new AbortController()
-  controller.abort()
-  return controller.signal
+  return AbortSignal.abort()
 }
 
 export function defineSandboxContract({ name, make, caps }: SandboxContractOptions): void {

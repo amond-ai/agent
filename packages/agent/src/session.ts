@@ -4313,7 +4313,7 @@ export class Session implements AmondSession, AgentSubmissionSession {
     }
 
     // Tool factories (standard and adapter alike) get the env with
-    // packaged-skill routing layered onto readFile: any tool that reads
+    // packaged-skill routing layered onto its file reads: any tool that reads
     // through the env resolves /.amond/packaged-skills/ paths, no
     // tool-level special-casing.
     const toolEnv = overlayPackagedSkills(env, packagedSkills)

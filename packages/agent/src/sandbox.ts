@@ -56,6 +56,11 @@ export interface OrphanedExecSettlement {
 export const ORPHANED_EXEC_SUFFIX =
   ' The sandbox command could not be confirmed cancelled and may still be running.'
 
+/** The `AbortError` for an abort whose command could not be confirmed cancelled. */
+export function orphanedExecAbortError(signal: AbortSignal): Error {
+  return abortErrorWithSuffix(signal, ORPHANED_EXEC_SUFFIX)
+}
+
 /**
  * The `Sandbox.run` abort race, implemented once for every wrapper-built
  * adapter: when `signal` aborts mid-flight, reject promptly with an
@@ -111,7 +116,7 @@ function raceExecAbort(
         result => record({ result }),
         (error: unknown) => record({ error }),
       )
-      reject(abortErrorWithSuffix(signal, ORPHANED_EXEC_SUFFIX))
+      reject(orphanedExecAbortError(signal))
     }
     signal.addEventListener('abort', onAbort, { once: true })
 
