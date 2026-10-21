@@ -139,6 +139,22 @@ describe('createSandboxFileMethods writes', () => {
     expect(primitives.write).not.toHaveBeenCalled()
   })
 
+  it('releases the input stream lock after a successful and an aborted writeFile', async () => {
+    const { methods } = setup()
+    const done = stringToStream('x')
+    await methods.writeFile({ path: 'a', content: done })
+    expect(done.locked).toBe(false)
+
+    const content = new ReadableStream<Uint8Array>()
+    const controller = new AbortController()
+    const pending = methods.writeFile({ path: 'a', content, abortSignal: controller.signal })
+    await Promise.resolve()
+    controller.abort('stop')
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(content.locked).toBe(false)
+  })
+
   it('writes text, bytes, and streams to the resolved path', async () => {
     const { methods, files } = setup()
     await methods.writeTextFile({ path: 't', content: 'text' })

@@ -135,11 +135,12 @@ export function launchShell(command: string, opts: ShellProcessOptions): ShellPr
     }
 
     const onData = (chunk: Buffer, deliver: (chunk: Buffer) => void): void => {
+      if (overflowed) { return }
       deliver(chunk)
       total += chunk.byteLength
-      if (!overflowed && total > MAX_OUTPUT_BYTES) {
+      if (total > MAX_OUTPUT_BYTES) {
         overflowed = true
-        killTree('SIGTERM')
+        kill()
       }
     }
     child.stdout.on('data', (chunk: Buffer) => onData(chunk, opts.onStdout))

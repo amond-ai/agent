@@ -30,15 +30,21 @@ export function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8
   return readerToBytes(stream.getReader())
 }
 
-/** Drain an already-acquired `reader` into one contiguous `Uint8Array`. */
+/** Drain an already-acquired `reader` into one contiguous `Uint8Array`, then release its lock. */
 export async function readerToBytes(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<Uint8Array> {
   const chunks: Uint8Array[] = []
   let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) { break }
-    chunks.push(value)
-    total += value.byteLength
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) { break }
+      chunks.push(value)
+      total += value.byteLength
+    }
+  }
+  finally {
+    // Unlock the source stream so the caller can still cancel or inspect it.
+    reader.releaseLock()
   }
   const out = new Uint8Array(total)
   let offset = 0
@@ -71,7 +77,19 @@ export interface ProcessControllerOptions {
   /** Provider hook that terminates the real process. Called at most once. */
   kill: () => void | PromiseLike<void>
   pid?: number
+  /**
+   * Cap on the bytes queued but not yet read from each of stdout and stderr.
+   * A chunk that would exceed it is dropped and the process settles like
+   * `local()`'s output overflow: a stderr notice and exit code 1. Unset means
+   * unbounded.
+   */
+  maxBufferedBytes?: number
+  /** Called once on overflow, so the provider can stop reading and terminate the command. */
+  onOverflow?: () => void
 }
+
+/** Unread-output cap {@link createProcessController} callers apply to live spawns. */
+export const MAX_BUFFERED_OUTPUT_BYTES = 64 * 1024 * 1024
 
 export interface ProcessController {
   process: Experimental_SandboxProcess
@@ -95,8 +113,11 @@ export interface ProcessController {
 export function createProcessController(options: ProcessControllerOptions): ProcessController {
   let stdoutController!: ReadableStreamDefaultController<Uint8Array>
   let stderrController!: ReadableStreamDefaultController<Uint8Array>
-  const stdout = new ReadableStream<Uint8Array>({ start: (c) => { stdoutController = c } })
-  const stderr = new ReadableStream<Uint8Array>({ start: (c) => { stderrController = c } })
+  const strategy = options.maxBufferedBytes === undefined
+    ? undefined
+    : { highWaterMark: options.maxBufferedBytes, size: (chunk: Uint8Array) => chunk.byteLength }
+  const stdout = new ReadableStream<Uint8Array>({ start: (c) => { stdoutController = c } }, strategy)
+  const stderr = new ReadableStream<Uint8Array>({ start: (c) => { stderrController = c } }, strategy)
 
   let settled = false
   let resolveWait!: (result: { exitCode: number }) => void
@@ -109,12 +130,29 @@ export function createProcessController(options: ProcessControllerOptions): Proc
 
   const push = (target: ReadableStreamDefaultController<Uint8Array>, chunk: Uint8Array | string): void => {
     if (settled) { return }
+    const bytes = typeof chunk === 'string' ? encoder.encode(chunk) : chunk
+    if (options.maxBufferedBytes !== undefined && bytes.byteLength > (target.desiredSize ?? 0)) {
+      overflow()
+      return
+    }
     try {
-      target.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk)
+      target.enqueue(bytes)
     }
     catch {
       /* the consumer cancelled this stream; drop the chunk */
     }
+  }
+
+  // Settles the process as a failed command rather than an error: the notice
+  // goes in past the cap (it is tiny), then the streams close.
+  const overflow = (): void => {
+    if (settled) { return }
+    settled = true
+    try { stderrController.enqueue(encoder.encode(`\n[amond] process output exceeded ${options.maxBufferedBytes} unread bytes; process killed`)) }
+    catch { /* the consumer cancelled stderr */ }
+    closeBoth()
+    resolveWait({ exitCode: 1 })
+    options.onOverflow?.()
   }
 
   const closeBoth = (): void => {

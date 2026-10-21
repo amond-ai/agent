@@ -10,7 +10,7 @@ import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 
 import { abortErrorFor, abortErrorWithSuffix, roundUpTimeoutMs } from '../abort.ts'
 import { ORPHANED_EXEC_SUFFIX } from '../sandbox.ts'
-import { createProcessController } from '../sandbox-streams.ts'
+import { createProcessController, MAX_BUFFERED_OUTPUT_BYTES } from '../sandbox-streams.ts'
 import type { SandboxRunOptions } from '../types.ts'
 import type { CloudflareSandboxStub } from './cf-sandbox.ts'
 
@@ -162,16 +162,17 @@ export async function spawnLive(
 
   const killer = new AbortController()
   const signal = callerSignal ? AbortSignal.any([callerSignal, killer.signal]) : killer.signal
-  const controller = createProcessController({
-    kill: () => killer.abort(new DOMException('The process was killed.', 'AbortError')),
-  })
-
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
   let stopped = false
   const stopReading = (reason?: unknown): void => {
     stopped = true
     reader?.cancel(reason).catch(() => {})
   }
+  const controller = createProcessController({
+    kill: () => killer.abort(new DOMException('The process was killed.', 'AbortError')),
+    maxBufferedBytes: MAX_BUFFERED_OUTPUT_BYTES,
+    onOverflow: () => stopReading(),
+  })
 
   const readExitCode = async (): Promise<number> => {
     const stream = await context.stub.execStream(options.command, {

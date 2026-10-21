@@ -27,14 +27,16 @@ The blueprint creates the adapter at `<source-root>/sandboxes/cloudflare-compute
 }
 ```
 
+The adapter implements amond's `SandboxDriver` (`exec`, the file verbs, and the remote kill on abort), and `sandboxFromDriver` builds the full `Sandbox` around it, so the abort handling and the `Sandbox` surface are not hand-written.
+
 Two one-line re-exports complete the wiring: the project's `cloudflare.ts` re-exports `WorkspaceServiceProxy` (the loopback the shell dials back through), and each sandbox-using agent module re-exports the generated `workspaceHost` extension so its Durable Object hosts the workspace.
 
 ```ts title="<source-root>/sandboxes/cloudflare-computer.ts (abridged)"
-// amond-blueprint: sandbox/cloudflare-computer@1
+// amond-blueprint: sandbox/cloudflare-computer@3
 import { Workspace, type WorkspaceOptions /* ... */ } from '@cloudflare/computer';
 import { WorkerShellBackend } from '@cloudflare/computer/backends/worker-shell';
 import { createGitClient } from '@cloudflare/computer/git';
-import type { Sandbox, SandboxFactory /* ... */ } from '@amond-ai/agent';
+import { type Sandbox, type SandboxDriver, type SandboxFactory, sandboxFromDriver /* ... */ } from '@amond-ai/agent';
 import { extend, getDurableObjectIdentity } from '@amond-ai/agent/cloudflare';
 
 /** Re-export from each agent module: `export { workspaceHost as cloudflare } ...` */
@@ -55,11 +57,19 @@ export function getComputerSandbox(options: GetComputerWorkspaceOptions): Sandbo
     async createSandbox(): Promise<ComputerSandboxEnv> {
       const workspace = getComputerWorkspace(options);
       await workspace.fs.mkdir('/workspace', { recursive: true });
-      return { ...createWorkspaceSandbox(workspace, '/workspace'), workspace };
+      const sandbox = sandboxFromDriver(createWorkspaceDriver(workspace, '/workspace'), '/workspace', {
+        description: /* ... working directory and just-bash shell notes ... */,
+      });
+      return { ...sandbox, workspace };
     },
-    // No `tools` override: run() works here, so the framework's standard
+    // No `tools` override: exec() works here, so the framework's standard
     // set (bash/grep/glob/read/write/edit) applies as-is.
   };
+}
+
+/** The `SandboxDriver`: `exec`, the file verbs, and the best-effort remote kill on abort. */
+function createWorkspaceDriver(workspace: Workspace, cwd: string): SandboxDriver {
+  /* ... */
 }
 ```
 

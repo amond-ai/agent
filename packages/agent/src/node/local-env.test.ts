@@ -118,6 +118,13 @@ describe('local() live spawn and run', () => {
     await expect(sandbox.run({ command: 'sleep 5', timeoutMs: 100 })).resolves.toMatchObject({ exitCode: 124 })
   })
 
+  it('run() settles with the overflow result when a SIGTERM-ignoring producer exceeds the cap', async () => {
+    const result = await sandbox.run({ command: `trap '' TERM; yes` })
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('output exceeded')
+  }, 20_000)
+
   it('run() decodes a multibyte character split across chunks', async () => {
     const result = await sandbox.run({ command: 'printf "\\xe2\\x82"; sleep 0.2; printf "\\xac"' })
 

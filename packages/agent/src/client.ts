@@ -578,12 +578,26 @@ function isSandboxFactory(value: unknown): value is SandboxFactory {
 // together with SandboxFactory.createSessionEnv.
 let warnedLegacyCreateSessionEnv = false
 
+function assertSandboxShape(value: unknown): asserts value is Sandbox {
+  const candidate = value as Record<string, unknown> | null | undefined
+  const missing = ['run', 'spawn', 'readTextFile', 'writeTextFile'].filter(
+    member => typeof candidate?.[member] !== 'function',
+  )
+  if (missing.length > 0) {
+    throw new Error(
+      `[amond] The sandbox returned by createSandbox() is missing ${missing.map(m => `${m}()`).join(', ')}. `
+      + 'It looks like a legacy adapter: migrate it to `run`/`spawn` and the session file methods '
+      + '(`readTextFile`/`writeTextFile`), or build the sandbox with `sandboxFromDriver`.',
+    )
+  }
+}
+
 /**
  * Resolve the sandbox option to its live sandbox and optional tool factory.
  * No `useSandbox()` means no environment: the built-in shell and filesystem
  * tools aren't added, and sandbox-backed operations throw.
  */
-async function resolveSandbox(
+export async function resolveSandbox(
   id: string,
   sandbox: AgentRuntimeConfig['sandbox'],
 ): Promise<{ env: Sandbox | undefined, toolFactory?: SandboxToolFactory }> {
@@ -606,6 +620,7 @@ async function resolveSandbox(
       throw new Error('[amond] Invalid sandbox option composed by the agent function.')
     }
     const env = await create.call(sandbox, { id })
+    assertSandboxShape(env)
     return { env, toolFactory: sandbox.tools }
   }
   throw new Error('[amond] Invalid sandbox option composed by the agent function.')

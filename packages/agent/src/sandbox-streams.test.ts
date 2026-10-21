@@ -156,3 +156,31 @@ describe('createProcessController', () => {
     expect(await c.process.wait()).toEqual({ exitCode: 0 })
   })
 })
+
+describe('createProcessController output cap', () => {
+  it('stops enqueuing, settles with a stderr notice and exit 1, and calls onOverflow once', async () => {
+    const onOverflow = vi.fn()
+    const controller = createProcessController({ kill: () => {}, maxBufferedBytes: 8, onOverflow })
+
+    controller.pushStdout('12345')
+    controller.pushStdout('67890')
+    controller.pushStdout('more')
+
+    await expect(controller.process.wait()).resolves.toEqual({ exitCode: 1 })
+    expect(onOverflow).toHaveBeenCalledTimes(1)
+    expect(await readChunks(controller.process.stdout)).toEqual(['12345'])
+    expect((await readChunks(controller.process.stderr)).join('')).toContain('output exceeded 8 unread bytes')
+  })
+
+  it('does not count bytes the consumer has already read', async () => {
+    const controller = createProcessController({ kill: () => {}, maxBufferedBytes: 8 })
+    const reader = controller.process.stdout.getReader()
+
+    for (let i = 0; i < 5; i++) {
+      controller.pushStdout('12345')
+      expect(decode((await reader.read()).value!)).toBe('12345')
+    }
+    controller.exit(0)
+    await expect(controller.process.wait()).resolves.toEqual({ exitCode: 0 })
+  })
+})
