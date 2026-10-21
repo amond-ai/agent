@@ -210,7 +210,13 @@ export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
       ...(shell.pid !== undefined ? { pid: shell.pid } : {}),
     })
 
+    // Fail promptly on a caller abort; the process-group teardown continues
+    // in the background and `exited` then finds the controller settled.
+    const onCallerAbort = (): void => controller.fail(abortErrorFor(callerSignal!))
+    callerSignal?.addEventListener('abort', onCallerAbort, { once: true })
+
     void shell.exited.then((exit) => {
+      callerSignal?.removeEventListener('abort', onCallerAbort)
       if (callerSignal?.aborted) {
         controller.fail(abortErrorFor(callerSignal))
       }

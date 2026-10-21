@@ -172,6 +172,7 @@ export async function spawnLive(
     kill: () => killer.abort(new DOMException('The process was killed.', 'AbortError')),
     maxBufferedBytes: MAX_BUFFERED_OUTPUT_BYTES,
     onOverflow: () => stopReading(),
+    overflowNoticeSuffix: 'output reading stopped; the remote command may still be running',
   })
 
   const readExitCode = async (): Promise<number> => {

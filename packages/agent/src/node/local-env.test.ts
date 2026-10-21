@@ -109,6 +109,26 @@ describe('local() live spawn and run', () => {
     await expect(aborted.wait()).rejects.toMatchObject({ name: 'AbortError' })
   })
 
+  it('rejects wait() promptly on abort even when the command ignores SIGTERM', async () => {
+    const controller = new AbortController()
+    const proc = await sandbox.spawn({
+      command: `trap '' TERM; echo ready; sleep 10`,
+      abortSignal: controller.signal,
+    })
+    const reader = proc.stdout.getReader()
+    let seen = ''
+    while (!seen.includes('ready')) {
+      const { done, value } = await reader.read()
+      if (done) { break }
+      seen += decoder.decode(value)
+    }
+
+    const start = Date.now()
+    controller.abort()
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError' })
+    expect(Date.now() - start).toBeLessThan(1000)
+  })
+
   it('run() keeps its output and exit codes, with 124 on timeout', async () => {
     await expect(sandbox.run({ command: 'printf "é"; echo err >&2; exit 3' })).resolves.toEqual({
       stdout: 'é',

@@ -84,8 +84,13 @@ export interface ProcessControllerOptions {
    * unbounded.
    */
   maxBufferedBytes?: number
-  /** Called once on overflow, so the provider can stop reading and terminate the command. */
+  /** Called once on overflow, so the provider can stop reading the command's output. */
   onOverflow?: () => void
+  /**
+   * Closing clause of the stderr overflow notice. Defaults to `process killed`;
+   * a provider whose `onOverflow` cannot terminate the command words its own.
+   */
+  overflowNoticeSuffix?: string
 }
 
 /** Unread-output cap {@link createProcessController} callers apply to live spawns. */
@@ -116,8 +121,15 @@ export function createProcessController(options: ProcessControllerOptions): Proc
   const strategy = options.maxBufferedBytes === undefined
     ? undefined
     : { highWaterMark: options.maxBufferedBytes, size: (chunk: Uint8Array) => chunk.byteLength }
-  const stdout = new ReadableStream<Uint8Array>({ start: (c) => { stdoutController = c } }, strategy)
-  const stderr = new ReadableStream<Uint8Array>({ start: (c) => { stderrController = c } }, strategy)
+  const cancelled = new Set<ReadableStreamDefaultController<Uint8Array>>()
+  const stdout = new ReadableStream<Uint8Array>({
+    start: (c) => { stdoutController = c },
+    cancel: () => { cancelled.add(stdoutController) },
+  }, strategy)
+  const stderr = new ReadableStream<Uint8Array>({
+    start: (c) => { stderrController = c },
+    cancel: () => { cancelled.add(stderrController) },
+  }, strategy)
 
   let settled = false
   let resolveWait!: (result: { exitCode: number }) => void
@@ -129,7 +141,7 @@ export function createProcessController(options: ProcessControllerOptions): Proc
   waitPromise.catch(() => {})
 
   const push = (target: ReadableStreamDefaultController<Uint8Array>, chunk: Uint8Array | string): void => {
-    if (settled) { return }
+    if (settled || cancelled.has(target)) { return }
     const bytes = typeof chunk === 'string' ? encoder.encode(chunk) : chunk
     if (options.maxBufferedBytes !== undefined && bytes.byteLength > (target.desiredSize ?? 0)) {
       overflow()
@@ -148,7 +160,7 @@ export function createProcessController(options: ProcessControllerOptions): Proc
   const overflow = (): void => {
     if (settled) { return }
     settled = true
-    try { stderrController.enqueue(encoder.encode(`\n[amond] process output exceeded ${options.maxBufferedBytes} unread bytes; process killed`)) }
+    try { stderrController.enqueue(encoder.encode(`\n[amond] process output exceeded ${options.maxBufferedBytes} unread bytes; ${options.overflowNoticeSuffix ?? 'process killed'}`)) }
     catch { /* the consumer cancelled stderr */ }
     closeBoth()
     resolveWait({ exitCode: 1 })

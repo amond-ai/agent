@@ -172,6 +172,32 @@ describe('createProcessController output cap', () => {
     expect((await readChunks(controller.process.stderr)).join('')).toContain('output exceeded 8 unread bytes')
   })
 
+  it('drops chunks for a cancelled stream without counting them toward overflow', async () => {
+    const onOverflow = vi.fn()
+    const controller = createProcessController({ kill: () => {}, maxBufferedBytes: 8, onOverflow })
+
+    await controller.process.stdout.cancel()
+    controller.pushStdout('0123456789')
+    controller.exit(0)
+
+    await expect(controller.process.wait()).resolves.toEqual({ exitCode: 0 })
+    expect(onOverflow).not.toHaveBeenCalled()
+    expect(await readChunks(controller.process.stderr)).toEqual([])
+  })
+
+  it('uses a caller-supplied overflow notice suffix', async () => {
+    const controller = createProcessController({
+      kill: () => {},
+      maxBufferedBytes: 4,
+      overflowNoticeSuffix: 'reading stopped',
+    })
+    controller.pushStdout('too long')
+    await controller.process.wait()
+    const notice = (await readChunks(controller.process.stderr)).join('')
+    expect(notice).toContain('output exceeded 4 unread bytes; reading stopped')
+    expect(notice).not.toContain('killed')
+  })
+
   it('does not count bytes the consumer has already read', async () => {
     const controller = createProcessController({ kill: () => {}, maxBufferedBytes: 8 })
     const reader = controller.process.stdout.getReader()
