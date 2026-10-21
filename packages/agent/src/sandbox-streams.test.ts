@@ -67,8 +67,15 @@ describe('sliceLines', () => {
     expect(sliceLines('', 1, 1)).toBe('')
   })
 
-  it('treats a start below 1 as line 1 and preserves CRLF', () => {
-    expect(sliceLines('a\r\nb\r\n', 0, 1)).toBe('a\r')
+  it('treats a start below 1 as line 1 and splits on the detected line ending', () => {
+    expect(sliceLines('a\r\nb\r\n', 0, 1)).toBe('a')
+  })
+
+  it('keeps CRLF and CR-only line endings within and at the end of a range', () => {
+    expect(sliceLines('a\r\nb\r\nc\r\n', 1, 2)).toBe('a\r\nb')
+    expect(sliceLines('a\r\nb\r\nc\r\n', 2)).toBe('b\r\nc\r\n')
+    expect(sliceLines('a\rb\rc', 2, 2)).toBe('b')
+    expect(sliceLines('a\rb\rc\r', 2)).toBe('b\rc\r')
   })
 })
 

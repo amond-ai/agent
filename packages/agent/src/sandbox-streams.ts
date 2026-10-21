@@ -58,19 +58,20 @@ export async function readerToBytes(reader: ReadableStreamDefaultReader<Uint8Arr
 /**
  * Select lines `startLine..endLine` (1-based, inclusive) of `text`, keeping the
  * original line endings. An `endLine` past EOF returns through EOF; a
- * `startLine` past EOF returns `""`. Lines are split on `\n` only, so the `\r`
- * of a CRLF file stays attached to its line.
+ * `startLine` past EOF returns `""`. The line ending is detected like the AI
+ * SDK's `extractLines`: `\r\n` if present, else `\n`, else `\r`.
  */
 export function sliceLines(text: string, startLine?: number, endLine?: number): string {
   if (startLine === undefined && endLine === undefined) { return text }
-  const endsWithNewline = text.endsWith('\n')
-  const lines = text.split('\n')
-  if (endsWithNewline) { lines.pop() }
+  const eol = text.includes('\r\n') ? '\r\n' : text.includes('\n') ? '\n' : text.includes('\r') ? '\r' : '\n'
+  const endsWithEol = text.endsWith(eol)
+  const lines = text.split(eol)
+  if (endsWithEol) { lines.pop() }
   const from = Math.max(1, startLine ?? 1) - 1
   const to = Math.min(lines.length, endLine ?? lines.length)
   if (from >= to) { return '' }
-  const selected = lines.slice(from, to).join('\n')
-  return endsWithNewline && to === lines.length ? `${selected}\n` : selected
+  const selected = lines.slice(from, to).join(eol)
+  return endsWithEol && to === lines.length ? `${selected}${eol}` : selected
 }
 
 export interface ProcessControllerOptions {
