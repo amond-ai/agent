@@ -82,7 +82,7 @@ export interface ShellProcess {
  * Never throws: spawn failures surface as an `error` on {@link ShellExit}.
  */
 export function launchShell(command: string, opts: ShellProcessOptions): ShellProcess {
-  let child: ChildProcessByStdio<null, Readable, Readable>
+  let child: ChildProcessByStdio<null, Readable | null, Readable | null>
   try {
     child = spawn(command, {
       cwd: opts.cwd,
@@ -149,14 +149,15 @@ export function launchShell(command: string, opts: ShellProcessOptions): ShellPr
       opts.signal?.addEventListener('abort', kill, { once: true })
     }
 
-    child.stdout.on('data', opts.onStdout)
-    child.stderr.on('data', opts.onStderr)
-
     child.once('error', (error) => {
       // Spawn failure (no 'close' will follow) or post-spawn kill error.
       killTree('SIGTERM')
       settle({ code: null, signal: null, error })
     })
+
+    // On EMFILE/ENFILE spawn leaves the pipes undefined and emits 'error' later.
+    child.stdout?.on('data', opts.onStdout)
+    child.stderr?.on('data', opts.onStderr)
 
     child.once('close', (code, signal) => {
       settle({ code, signal })
