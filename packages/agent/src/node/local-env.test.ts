@@ -161,6 +161,29 @@ describe('local() live spawn and run', () => {
     await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
   })
 
+  it('spawn() kills the process group when unread output exceeds the cap', async () => {
+    const small = createLocalSandbox({ cwd }, { maxBufferedBytes: 4096 })
+    const proc = await small.spawn!({ command: 'head -c 20000 /dev/zero; sleep 10; echo late > late.marker' })
+    const pid = proc.pid!
+    expect(pidAlive(pid)).toBe(true)
+
+    const start = Date.now()
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 1 })
+    expect(Date.now() - start).toBeLessThan(5000)
+
+    const stderrReader = proc.stderr.getReader()
+    let stderr = ''
+    for (;;) {
+      const { done, value } = await stderrReader.read()
+      if (done) { break }
+      stderr += decoder.decode(value)
+    }
+    expect(stderr).toContain('output exceeded 4096 unread bytes; process killed')
+
+    expect(await waitUntil(() => !pidAlive(pid), 4000)).toBe(true)
+    expect(existsSync(path.join(cwd, 'late.marker'))).toBe(false)
+  }, 20_000)
+
   it('run() decodes a multibyte character split across chunks', async () => {
     const result = await sandbox.run({ command: 'printf "\\xe2\\x82"; sleep 0.2; printf "\\xac"' })
 
