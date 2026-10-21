@@ -79,13 +79,13 @@ Rejected:
 - [x] T007 Remove `exec` and `readFileBuffer`, switch `readFile`/`writeFile` to the session's stream forms, and prove assignability (file: packages/agent/src/types.ts) (depends on T006) [FR-1, NFR-2, AC-001, AC-014]
   Validation: each provider's sandbox, and the result of `sandboxFromDriver`, assigns to `Experimental_SandboxSession` with no cast under `bun run check` (AC-001); the existing `SandboxDriver` blueprints compile unchanged (AC-014); the commit carries a `BREAKING CHANGE:` footer naming the removed methods.
   Method: `bun run check && bun run build && CI=true bun run test`
-- [ ] T008 Rebuild the `sandbox--cloudflare-computer` blueprint on `SandboxDriver` and regenerate the CLI's blueprint copy (file: blueprints/sandbox--cloudflare-computer.md) (depends on T007) [FR-10]
+- [x] T008 Rebuild the `sandbox--cloudflare-computer` blueprint on `SandboxDriver` and regenerate the CLI's blueprint copy (file: blueprints/sandbox--cloudflare-computer.md) (depends on T007) [FR-10]
   Validation: the blueprint's whole extracted code compiles against the new `@amond-ai/agent` and no longer implements `Sandbox` by hand; `packages/cli/src/generated/blueprints.ts` matches the source; `docs-content.test.ts` passes.
   Method: `bunx turbo run test --filter=amond` plus compiling the extracted blueprint file with `bun check`
-- [ ] T009 Update the `packages/cli/docs` pages for the new `Sandbox` surface (file: packages/cli/docs/reference/sandbox-api.md) (depends on T007) [FR-10]
+- [x] T009 Update the `packages/cli/docs` pages for the new `Sandbox` surface (file: packages/cli/docs/reference/sandbox-api.md) (depends on T007) [FR-10]
   Validation: no page under `packages/cli/docs` calls `harness.sandbox.exec`, `readFileBuffer`, or the path forms of `readFile`/`writeFile`; the `Sandbox` reference lists `run`, `spawn`, the session file methods, `timeoutMs`, and which providers stream `spawn` live.
   Method: `grep -rnE "sandbox\.(exec|readFileBuffer)\(" packages/cli/docs` returns nothing, and `bunx turbo run test --filter=amond` passes
-- [ ] T010 Smoke-test live `spawn` against a real Cloudflare Sandbox container (file: packages/agent/src/cloudflare/cf-sandbox.ts) (depends on T005) [FR-6]
+- [x] T010 Smoke-test live `spawn` against a real Cloudflare Sandbox container (file: packages/agent/src/cloudflare/cf-sandbox.ts) (depends on T005) [FR-6]
   Validation: under `wrangler dev`, a spawned `for i in 1 2 3; do echo $i; sleep 1; done` delivers lines before exit and `wait()` resolves 0; `kill()` mid-run settles `wait()`; the result is recorded in Surprises & Discoveries.
   Method: manual `wrangler dev` run with a scratch Worker; record output
   STOP: the real `execStream` event shape or cancellation differs from the fake stub. Ship buffered `spawn` on Cloudflare and report the FR-6 gap.
@@ -126,6 +126,12 @@ Rejected:
   Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` → 9 files, 155 passed / 6 skipped (AC-015 read+edit on local(), bash(), sandboxFromDriver fake → exact `File not found: {path}`; AC-016 createAmondFs readFile/readFileBuffer reject with FileNotFoundError; shell forwards timeoutMs to run; packaged-skill overlay serves readTextFile/readBinaryFile; grep probe runs once across overlay spreads); `bun check` → no type errors. After merging with T004/T005: 10 files, 205 passed / 7 skipped, no type errors in 151 files; orchestrator grep → only legacy member definitions (createCwdSandbox, overlay `readFile`) remain for T007
 - [x] (2026-10-20 17:32 KST) T007 Remove `exec` and `readFileBuffer`, switch `readFile`/`writeFile` to the session's stream forms, and prove assignability — 69ebc421
   Evidence: `mise exec -- bun run check --force` → 16/16 tasks successful; `mise exec -- bun run build` → 11/11 successful; `CI=true mise exec -- bun run test` → 22/22 tasks, `@amond-ai/agent` 11 files 211 passed / 7 skipped, every other workspace green; `mise exec -- bun run lint` → 11/11 successful. AC-001: `src/sandbox.assignability.test.ts` assigns `sandboxFromDriver`, `createLocalSandbox`, `local().createSandbox`, `bash()`, `cloudflareSandbox().createSandbox`, and `createCwdSandbox` results to `Experimental_SandboxSession` with no cast (compiled by `bun check`). dist `.mjs` has no `@ai-sdk` reference; two `.d.mts` import the session/process types. AC-014: extracted every ```ts block of the nine `SandboxDriver` blueprints to /tmp/bpcheck, stubbed vendor SDK exports as `any` (value + type), compiled with tsc 5.9.3 against the built `dist/index.d.mts` before (HEAD e4dd57a4) and after T007 → the same 18 errors in both, all `unknown` artifacts of the vendor stubs in boxd/daytona/modal, none from `SandboxDriver`; the only change is `sandbox--cloudflare-computer` (hand-written `Sandbox`, already failing since T003 with missing members, now failing on the path-form `readFile`/`writeFile`) — T008's scope. Commit carries the `BREAKING CHANGE:` footer naming the removed methods
+- [x] (2026-10-20 17:40 KST) T009 Update the `packages/cli/docs` pages for the new `Sandbox` surface — b63670be
+  Evidence: `grep -rnE "sandbox\.(exec|readFileBuffer)\(|sandbox\.(readFile|writeFile)\('" packages/cli/docs` → no matches (re-run by orchestrator after merge); `mise exec -- bunx turbo run test --filter=amond` → 61 passed; eslint on packages/cli/docs → clean; sandbox-api.md lists run/spawn, session file methods, `timeoutMs`, and a live-vs-buffered spawn table
+- [x] (2026-10-20 17:45 KST) T008 Rebuild the `sandbox--cloudflare-computer` blueprint on `SandboxDriver` and regenerate the CLI's blueprint copy — d69fed34
+  Evidence: extracted blueprint compiled with `node_modules/.bin/tsc -p /tmp/bp8/tsconfig.json` against the freshly built `@amond-ai/agent` → exit 0 (re-run by orchestrator on the merged tree); `mise exec -- bunx turbo run test --filter=amond` → 61 passed (docs-content.test.ts included); blueprint index regenerated twice with no diff
+- [x] (2026-10-21 11:44 KST) T010 Smoke-test live `spawn` against a real Cloudflare Sandbox container
+  Evidence: temporary Worker `amond-t010-smoke-6139bccd` (account 밸런스프렌즈, `@cloudflare/sandbox` 0.11.0, image `docker.io/cloudflare/sandbox:0.11.0`, `cloudflareSandbox(getSandbox(...))` from the built `@amond-ai/agent`) → stub has `execStream`; `run({command: 'echo warm && pwd'})` → `warm\n/workspace`, exit 0; `spawn('for i in 1 2 3; do echo $i; sleep 1; done')` → stdout chunks at 122 ms / 1128 ms / 2132 ms, `wait()` → `{ exitCode: 0 }` at 3138 ms (live, not buffered); `kill()` at 2500 ms on an 8-line loop → `wait()` rejected at once with the orphan AbortError ("could not be confirmed cancelled and may still be running"), both streams errored with it; the remote loop kept running (7 lines in its log file by ~6.5 s). Worker and container application `a034647f-…` deleted afterwards (`wrangler delete`, `wrangler containers delete`; Worker URL → 404)
 
 ## Decision Log
 
@@ -156,6 +162,12 @@ Rejected:
 - Decision: `overlayPackagedSkills` keeps its legacy `readFile` override until T007 converts it to the stream form; its `readBinaryFile` returns raw decoded bytes while `readTextFile` keeps the model-readable form.
   Rationale: the stream-form `readFile` does not exist on `Sandbox` before T007.
   Date/Author: 2026-10-20 / implement-executor (T006)
+- Decision: the `SandboxDriver`/`BashLike` blocks and the driver pages under `ecosystem/sandboxes/*` keep `exec` and `readFileBuffer`.
+  Rationale: those interfaces are unchanged (FR-7).
+  Date/Author: 2026-10-20 / implement-executor (T009)
+- Decision: bump `sandbox--cloudflare-computer` to version 3 with a diff-bearing upgrade-guide entry.
+  Rationale: the change breaks installed v2 copies, and the blueprint index generator requires a unified diff for every version after 1.
+  Date/Author: 2026-10-20 / implement-executor (T008)
 
 ## Surprises & Discoveries
 
@@ -165,3 +177,7 @@ Rejected:
 - `AmondHarness` has no `fs` member; `AmondFs` is exposed as `AmondSession.fs`, although the `AmondFs` JSDoc and the spec say `harness.fs`.
 - The `BREAKING CHANGE:` footer must wrap at 100 characters: commitlint's `footer-max-line-length` rejects the one-line footer.
   Evidence: husky commit-msg → `✖ footer's lines must not be longer than 100 characters [footer-max-line-length]`.
+- `packages/cli/src/generated/blueprints.ts` is gitignored and holds only the blueprint index (slug, kind, version, aliases); the CLI's test and check scripts regenerate it, so T008's commit contains only the blueprint.
+- T010 on a real container confirmed the `execStream` event shape the fake assumed (live chunks, `complete` with `exitCode`). Cancelling the stream does **not** stop the remote command: after `kill()` the loop kept writing. `wait()` still settles at once with the orphan AbortError, as designed. A real remote kill needs the SDK's process API (`startProcess` + `killProcess` in 0.11); follow-up, not in this track.
+- `@cloudflare/sandbox` 1.0.2 (published 2026-10-20) removes the 0.x `getSandbox()` stub (`exec`, `readFile`, `execStream`) that `cloudflareSandbox` wraps; in 1.0 the user's Durable Object starts the container and calls `ctx.container.exec`. The repo's blueprint pins `^0.11.0`, so nothing breaks today; supporting 1.0 is a separate issue.
+- Cloudflare's env `CLOUDFLARE_API_TOKEN` (account token) cannot deploy Workers (403 on the secrets endpoint); T010 ran with `wrangler login --device` OAuth (`account:read`, `workers_scripts:write`, `containers:write`) and `env -u CLOUDFLARE_API_TOKEN`.
