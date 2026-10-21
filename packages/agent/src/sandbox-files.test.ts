@@ -172,6 +172,62 @@ describe('createSandboxFileMethods writes', () => {
   })
 })
 
+describe('createSandboxFileMethods mid-flight aborts', () => {
+  function deferred<T>() {
+    let resolve!: (v: T) => void
+    let reject!: (e: unknown) => void
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+    return { promise, resolve, reject }
+  }
+
+  it('abort while a provider read is pending rejects even if the provider later resolves', async () => {
+    const { methods, primitives } = setup()
+    const read = deferred<Uint8Array>()
+    primitives.readBytes.mockImplementation(() => read.promise)
+    const controller = new AbortController()
+    const pending = methods.readBinaryFile({ path: 'a', abortSignal: controller.signal })
+    await Promise.resolve()
+    controller.abort('stop')
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    read.resolve(enc.encode('late'))
+    await Promise.resolve()
+    expect(primitives.isMissing).not.toHaveBeenCalled()
+  })
+
+  it('abort while a provider write is pending rejects with an AbortError', async () => {
+    const { methods, primitives } = setup()
+    const write = deferred<void>()
+    primitives.write.mockImplementation(() => write.promise)
+    const controller = new AbortController()
+    const pending = methods.writeTextFile({ path: 'a', content: 'x', abortSignal: controller.signal })
+    await Promise.resolve()
+    controller.abort('stop')
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    write.resolve()
+  })
+
+  it('does not leak an unhandled rejection when the abandoned provider call later rejects', async () => {
+    const { methods, primitives } = setup()
+    const read = deferred<Uint8Array>()
+    primitives.readBytes.mockImplementation(() => read.promise)
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const controller = new AbortController()
+      const pending = methods.readBinaryFile({ path: 'a', abortSignal: controller.signal })
+      await Promise.resolve()
+      controller.abort('stop')
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      read.reject(new Error('late failure'))
+      await new Promise(resolve => setTimeout(resolve, 10))
+      expect(unhandled).not.toHaveBeenCalled()
+    }
+    finally {
+      process.off('unhandledRejection', unhandled)
+    }
+  })
+})
+
 describe('createAmondFs', () => {
   async function bashSandbox(): Promise<Sandbox> {
     return bash(() => new Bash({ cwd: '/work' })).createSandbox({ id: 'fs' })

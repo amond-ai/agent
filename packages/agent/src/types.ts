@@ -341,7 +341,12 @@ export interface Sandbox extends Experimental_SandboxSession {
   readTextFile(
     options: Parameters<Experimental_SandboxSession['readTextFile']>[0],
   ): Promise<string | null>
-  /** Write a byte stream, creating missing parent directories. */
+  /**
+   * Write a byte stream, creating missing parent directories. Aborting
+   * mid-write rejects the caller promptly, but the provider write may still
+   * land (as with `run` on a signal-blind provider); the same holds for
+   * `writeBinaryFile` and `writeTextFile`.
+   */
   writeFile(
     options: Parameters<Experimental_SandboxSession['writeFile']>[0],
   ): Promise<void>

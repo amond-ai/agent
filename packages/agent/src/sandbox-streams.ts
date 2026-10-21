@@ -26,8 +26,12 @@ export function stringToStream(text: string): ReadableStream<Uint8Array> {
 }
 
 /** Drain `stream` into one contiguous `Uint8Array`. */
-export async function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-  const reader = stream.getReader()
+export function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  return readerToBytes(stream.getReader())
+}
+
+/** Drain an already-acquired `reader` into one contiguous `Uint8Array`. */
+export async function readerToBytes(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<Uint8Array> {
   const chunks: Uint8Array[] = []
   let total = 0
   for (;;) {

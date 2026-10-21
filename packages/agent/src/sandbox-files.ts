@@ -8,7 +8,7 @@
 
 import { abortErrorFor } from './abort.ts'
 import { FileNotFoundError } from './errors.ts'
-import { bytesToStream, sliceLines, streamToBytes } from './sandbox-streams.ts'
+import { bytesToStream, readerToBytes, sliceLines, streamToBytes } from './sandbox-streams.ts'
 import type { AmondFs, Sandbox } from './types.ts'
 
 export interface ReadFileArgs {
@@ -81,26 +81,38 @@ async function drainStream(
   })
   // The losing side must never surface as an unhandled rejection.
   aborted.catch(() => {})
-  const drained = (async () => {
-    const chunks: Uint8Array[] = []
-    let total = 0
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) { break }
-      chunks.push(value)
-      total += value.byteLength
-    }
-    const out = new Uint8Array(total)
-    let offset = 0
-    for (const chunk of chunks) {
-      out.set(chunk, offset)
-      offset += chunk.byteLength
-    }
-    return out
-  })()
+  const drained = readerToBytes(reader)
   drained.catch(() => {})
   try {
     return await Promise.race([drained, aborted])
+  }
+  finally {
+    if (onAbort) { signal.removeEventListener('abort', onAbort) }
+  }
+}
+
+/**
+ * Run a provider primitive so `signal` can end the wait: an abort mid-flight
+ * rejects promptly with the abort error, the late settlement of the abandoned
+ * call is swallowed, and the listener is removed once the call settles. A
+ * provider write that is abandoned this way may still land. Without a signal
+ * the primitive runs untouched.
+ */
+async function abortable<T>(start: () => Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) { return start() }
+  throwIfAborted(signal)
+  let onAbort: (() => void) | undefined
+  try {
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(abortErrorFor(signal))
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+    aborted.catch(() => {})
+    const pending = start()
+    pending.catch(() => {})
+    const result = await Promise.race([pending, aborted])
+    throwIfAborted(signal)
+    return result
   }
   finally {
     if (onAbort) { signal.removeEventListener('abort', onAbort) }
@@ -111,13 +123,18 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
   const { resolvePath, readText, readBytes, write, isMissing } = primitives
 
   /** Run a read; a missing file becomes `null`, every other failure is rethrown as-is. */
-  async function readOrNull<T>(path: string, read: (resolved: string) => Promise<T>): Promise<T | null> {
+  async function readOrNull<T>(
+    path: string,
+    read: (resolved: string) => Promise<T>,
+    signal: AbortSignal | undefined,
+  ): Promise<T | null> {
     const resolved = resolvePath(path)
     try {
-      return await read(resolved)
+      return await abortable(() => read(resolved), signal)
     }
     catch (error) {
-      if (await isMissing(error, resolved)) { return null }
+      throwIfAborted(signal)
+      if (await abortable(async () => isMissing(error, resolved), signal)) { return null }
       throw error
     }
   }
@@ -125,13 +142,13 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
   return {
     async readFile({ path, abortSignal }) {
       throwIfAborted(abortSignal)
-      const bytes = await readOrNull(path, readBytes)
+      const bytes = await readOrNull(path, readBytes, abortSignal)
       return bytes === null ? null : bytesToStream(bytes)
     },
 
     async readBinaryFile({ path, abortSignal }) {
       throwIfAborted(abortSignal)
-      return readOrNull(path, readBytes)
+      return readOrNull(path, readBytes, abortSignal)
     },
 
     async readTextFile({ path, abortSignal, encoding, startLine, endLine }) {
@@ -144,7 +161,7 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
           return readText(resolved)
         }
         return new TextDecoder(encoding).decode(await readBytes(resolved))
-      })
+      }, abortSignal)
       return decoded === null ? null : sliceLines(decoded, startLine, endLine)
     },
 
@@ -152,12 +169,12 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
       throwIfAborted(abortSignal)
       const bytes = await drainStream(content, abortSignal)
       throwIfAborted(abortSignal)
-      await write(resolvePath(path), bytes)
+      await abortable(() => write(resolvePath(path), bytes), abortSignal)
     },
 
     async writeBinaryFile({ path, content, abortSignal }) {
       throwIfAborted(abortSignal)
-      await write(resolvePath(path), content)
+      await abortable(() => write(resolvePath(path), content), abortSignal)
     },
 
     async writeTextFile({ path, content, encoding, abortSignal }) {
@@ -165,7 +182,7 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
       if (encoding !== undefined && canonicalEncoding(encoding) !== 'utf-8') {
         throw new TypeError(`Unsupported encoding "${encoding}": writeTextFile supports utf-8 only.`)
       }
-      await write(resolvePath(path), content)
+      await abortable(() => write(resolvePath(path), content), abortSignal)
     },
   }
 }
