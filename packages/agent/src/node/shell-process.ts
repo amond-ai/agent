@@ -52,6 +52,11 @@ export interface ShellProcessOptions {
   signal?: AbortSignal
   onStdout: (chunk: Buffer) => void
   onStderr: (chunk: Buffer) => void
+  /**
+   * Lifetime output cap in bytes. Defaults to {@link MAX_OUTPUT_BYTES}; pass
+   * `Infinity` when the caller bounds output itself (live spawn caps unread bytes).
+   */
+  maxOutputBytes?: number
 }
 
 export interface ShellExit {
@@ -95,6 +100,7 @@ export function launchShell(command: string, opts: ShellProcessOptions): ShellPr
   let overflowed = false
   let settled = false
   let total = 0
+  const maxOutputBytes = opts.maxOutputBytes ?? MAX_OUTPUT_BYTES
 
   const killTree = (sig: NodeJS.Signals): void => {
     if (child.pid === undefined) { return }
@@ -138,7 +144,7 @@ export function launchShell(command: string, opts: ShellProcessOptions): ShellPr
       if (overflowed) { return }
       deliver(chunk)
       total += chunk.byteLength
-      if (total > MAX_OUTPUT_BYTES) {
+      if (total > maxOutputBytes) {
         overflowed = true
         kill()
       }

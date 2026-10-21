@@ -5,6 +5,7 @@ import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineSandboxContract } from '../__contract__/define-sandbox-contract.ts'
 import type { Sandbox } from '../types.ts'
+import { createLocalSandbox } from './local-env.ts'
 import { local } from './local.ts'
 
 defineSandboxContract({
@@ -144,6 +145,21 @@ describe('local() live spawn and run', () => {
     expect(result.exitCode).toBe(1)
     expect(result.stderr).toContain('output exceeded')
   }, 20_000)
+
+  it('spawn() does not cap lifetime output while the caller keeps reading', async () => {
+    const small = createLocalSandbox({ cwd }, { maxBufferedBytes: 4096 })
+    const proc = await small.spawn!({ command: 'for i in $(seq 1 100); do printf "%0100d\\n" 0; sleep 0.01; done' })
+    const reader = proc.stdout.getReader()
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) { break }
+      total += value.byteLength
+    }
+
+    expect(total).toBe(100 * 101)
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
+  })
 
   it('run() decodes a multibyte character split across chunks', async () => {
     const result = await sandbox.run({ command: 'printf "\\xe2\\x82"; sleep 0.2; printf "\\xac"' })

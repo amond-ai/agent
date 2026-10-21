@@ -13,7 +13,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { abortErrorFor, composeTimeoutSignal } from '../abort.ts'
 import { writeFileCreatingParents } from '../sandbox.ts'
 import { createSandboxFileMethods } from '../sandbox-files.ts'
-import { createProcessController } from '../sandbox-streams.ts'
+import { createProcessController, MAX_BUFFERED_OUTPUT_BYTES } from '../sandbox-streams.ts'
 import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 import type { FileStat, Sandbox, SandboxRunOptions, ShellResult } from '../types.ts'
 import type { ShellExit } from './shell-process.ts'
@@ -160,7 +160,16 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === code
 }
 
-export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
+/** Test seams; not part of the public `local()` options. */
+export interface LocalSandboxInternals {
+  /** Unread-output cap for live spawns. Defaults to {@link MAX_BUFFERED_OUTPUT_BYTES}. */
+  maxBufferedBytes?: number
+}
+
+export function createLocalSandbox(
+  options: LocalSandboxOptions = {},
+  internals: LocalSandboxInternals = {},
+): Sandbox {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const baseEnv = resolveBaseEnv(options.env)
 
@@ -202,11 +211,15 @@ export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
       cwd: options.workingDirectory ? resolvePath(options.workingDirectory) : cwd,
       env: options.env ? { ...baseEnv, ...options.env } : baseEnv,
       signal: mergedSignal,
+      // Live output is bounded by unread bytes (the controller), not lifetime bytes.
+      maxOutputBytes: Infinity,
       onStdout: chunk => controller.pushStdout(chunk),
       onStderr: chunk => controller.pushStderr(chunk),
     })
     const controller = createProcessController({
       kill: () => shell.kill(),
+      maxBufferedBytes: internals.maxBufferedBytes ?? MAX_BUFFERED_OUTPUT_BYTES,
+      onOverflow: () => shell.kill(),
       ...(shell.pid !== undefined ? { pid: shell.pid } : {}),
     })
 

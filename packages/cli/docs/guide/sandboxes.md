@@ -60,7 +60,9 @@ export const reviewDocument = defineTool({
   async run({ harness, data }) {
     await harness.sandbox.writeTextFile({ path: 'document.md', content: data.document });
     await harness.prompt('Review document.md and write your findings to review.md.');
-    return { output: { review: await harness.sandbox.readTextFile({ path: 'review.md' }) } };
+    const review = await harness.sandbox.readTextFile({ path: 'review.md' });
+    if (review === null) { throw new Error('The agent did not write review.md.'); }
+    return { output: { review } };
   },
 });
 ```

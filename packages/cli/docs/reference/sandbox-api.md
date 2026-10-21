@@ -386,7 +386,7 @@ Supporting files of a [packaged skill](/docs/guide/skills/#supporting-files-at-r
 
 - The env passed to every tool factory (standard and adapter alike) has the three read methods (`readFile`, `readBinaryFile`, `readTextFile`) wrapped: paths under `/.amond/packaged-skills/` resolve from the in-memory skill catalog, everything else delegates to the adapter. Adapters need no special-casing; any tool that reads through its env resolves skill paths transparently.
 - An unknown path under that root resolves with `null`, like any missing file, instead of reaching the adapter.
-- Binary skill files are served as base64 text, wrapped to 76-character lines.
+- `readBinaryFile` and `readFile` return a skill file's raw bytes. `readTextFile` (and so the standard `read` tool) serves binary skill files as base64 text, wrapped to 76-character lines.
 - The overlay is session-internal. `harness.sandbox` and `useTool` handlers see the adapter's real env; the virtual root is not visible there.
 - Only the read methods are overlaid. `run`, `spawn`, `exists`, `stat`, and the other verbs pass straight through, so shell commands cannot see the virtual root — the standard `read` tool (or the framework's `read_skill_resource` tool) is the access path.
 
