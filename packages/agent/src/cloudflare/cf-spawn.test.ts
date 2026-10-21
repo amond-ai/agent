@@ -227,9 +227,13 @@ describe('cloudflareSandbox live spawn', () => {
 
   it('passes the resolved working directory, env, and rounded-up timeout to execStream', async () => {
     const driven = drivenStub()
-    await spawnOn(driven.stub, { command: 'pwd', workingDirectory: 'sub', env: { A: '1' }, timeoutMs: 1500.4 })
+    const proc = await spawnOn(driven.stub, { command: 'pwd', workingDirectory: 'sub', env: { A: '1' }, timeoutMs: 1500.4 })
 
     expect(driven.calls).toEqual([{ command: 'pwd', options: { cwd: '/workspace/sub', env: { A: '1' }, timeout: 1501 } }])
+
+    driven.send(frame({ type: 'complete', exitCode: 0 }))
+    driven.end()
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
   })
 
   it('rejects wait() with SandboxDiedError and errors the streams when the container dies', async () => {
