@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SandboxDiedError } from '../errors.ts'
 import type { OrphanedExecSettlement } from '../sandbox.ts'
 import { createCwdSandbox } from '../sandbox.ts'
-import { streamToBytes } from '../sandbox-streams.ts'
+import { bytesToStream, streamToBytes } from '../sandbox-streams.ts'
 import type { Sandbox } from '../types.ts'
 
 /** One provider instance under test, with the instruments its capabilities need. */
@@ -168,6 +168,35 @@ export function defineSandboxContract({ name, make, caps }: SandboxContractOptio
         await sandbox.writeBinaryFile({ path: 'latin1.txt', content: new Uint8Array([0x63, 0x61, 0x66, 0xE9]) })
 
         await expect(sandbox.readTextFile({ path: 'latin1.txt', encoding: 'latin1' })).resolves.toBe('café')
+      })
+
+      it('round-trips a byte stream through writeFile and readFile', async () => {
+        const bytes = new Uint8Array([0xFF, 0x00, 0x80, 0x41, 0xC3, 0x28])
+        await sandbox.writeFile({ path: 'stream/data.bin', content: bytesToStream(bytes) })
+
+        const stream = await sandbox.readFile({ path: 'stream/data.bin' })
+
+        expect(stream).not.toBeNull()
+        await expect(streamToBytes(stream!)).resolves.toEqual(bytes)
+      })
+
+      it('resolves a missing path to null from readFile', async () => {
+        await expect(sandbox.readFile({ path: 'missing.bin' })).resolves.toBeNull()
+      })
+
+      it('rejects a pre-aborted readFile and writeFile with an AbortError', async () => {
+        await sandbox.writeTextFile({ path: 'abort.txt', content: 'x' })
+
+        const read = sandbox.readFile({ path: 'abort.txt', abortSignal: abortedSignal() })
+        const write = sandbox.writeFile({
+          path: 'abort-out.bin',
+          content: bytesToStream(new Uint8Array([1])),
+          abortSignal: abortedSignal(),
+        })
+
+        await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+        await expect(write).rejects.toMatchObject({ name: 'AbortError' })
+        await expect(sandbox.readFile({ path: 'abort-out.bin' })).resolves.toBeNull()
       })
     })
 

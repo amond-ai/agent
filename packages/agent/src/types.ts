@@ -313,7 +313,8 @@ export interface Sandbox extends Experimental_SandboxSession {
    * Run a command to completion. `workingDirectory` resolves against `cwd`.
    *
    * `timeoutMs` is forwarded to the provider's native timeout option, so
-   * signal-blind providers still observe the deadline. `abortSignal` is
+   * signal-blind providers still observe the deadline; a provider with no
+   * native option enforces it through an abort signal. `abortSignal` is
    * independent of it: a pre-aborted signal rejects without executing the
    * command, and a mid-flight abort rejects promptly with an `AbortError`,
    * never gated on the command's settlement. On a provider that cannot

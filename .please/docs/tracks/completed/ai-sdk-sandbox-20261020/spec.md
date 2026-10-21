@@ -34,15 +34,15 @@ Decisions taken while scoping:
 
 - [ ] FR-1: make every `Sandbox` value satisfy `Experimental_SandboxSession` from `@ai-sdk/provider-utils` 5.0.64 directly, with no adapter, wrapper, or cast
 - [ ] FR-2: keep the framework extensions on `Sandbox`: `cwd`, `resolvePath`, `stat`, `readdir`, `exists`, `mkdir`, and `rm`, with relative paths resolved against `cwd` in every file operation
-- [ ] FR-3: replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline
+- [ ] FR-3: replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline where the provider has one, and enforced through an abort signal otherwise
 - [ ] FR-4: replace the framework's `readFile(path)`, `readFileBuffer(path)`, and `writeFile(path, content)` with the session's `readFile`, `readBinaryFile`, `readTextFile`, `writeFile`, `writeBinaryFile`, and `writeTextFile`, including their contract that a missing file resolves to `null`
-- [ ] FR-5: keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and sandbox death rejects with `SandboxDiedError`
+- [ ] FR-5: keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`
 - [ ] FR-6: deliver `spawn` output live on `local()` and `cloudflareSandbox`, and on completion on `bash()` and driver-backed sandboxes, with `wait`, `kill`, and abort working on all of them
 - [ ] FR-7: keep every existing `SandboxDriver` implementation valid without changes, and have `sandboxFromDriver` produce the new `Sandbox` from it
 - [ ] FR-8: adapt the three built-in providers, `cloudflareSandbox`, `bash()`, and `local()`, to the new `Sandbox`, each with a `description` of its environment
 - [ ] FR-9: port the built-in tools (read, write, edit, bash, grep, glob) onto the new methods with no change to what the model sees
 - [ ] FR-10: update every page under `packages/cli/docs` that calls or documents the removed `Sandbox` methods, including the sandbox and agent API references, the sandbox and tool guides, and the Cloudflare, GitHub Actions, and GitLab CI deploy pages, and the `sandbox--cloudflare-computer` blueprint, which implements `Sandbox` directly rather than through `SandboxDriver`
-- [ ] FR-11: keep the public `harness.fs` and `harness.shell` (and their `session` counterparts) unchanged in names, signatures, and behaviour, including `harness.fs.readFile` throwing on a missing file
+- [ ] FR-11: keep the public `session.fs` and `session.shell` unchanged in names, signatures, and behaviour, including `session.fs.readFile` throwing on a missing file
 
 ### Non-functional Requirements
 
@@ -56,18 +56,18 @@ Decisions taken while scoping:
 - [ ] AC-002 (FR-2): When `readTextFile` is given a relative path, the system shall read the file at that path resolved against the sandbox's `cwd`.
 - [ ] AC-003 (FR-4): When `readTextFile` or `readBinaryFile` targets a path that does not exist, the system shall resolve to `null` rather than reject.
 - [ ] AC-004 (FR-4): When `writeTextFile` targets a path whose parent directories do not exist, the system shall create them and write the file.
-- [ ] AC-005 (FR-3): When `run` is called with `timeoutMs`, the system shall pass that deadline to the provider's native timeout option, rounding up and never down.
+- [ ] AC-005 (FR-3): When `run` is called with `timeoutMs`, the system shall pass that deadline to the provider's native timeout option, or enforce it with an abort signal when the provider has none, rounding up and never down.
 - [ ] AC-006 (FR-5): If `run` is called with an `abortSignal` that is already aborted, then the system shall reject without executing the command.
 - [ ] AC-007 (FR-5): When the `abortSignal` aborts while a driver-backed `run` is in flight, the system shall reject promptly with an `AbortError`.
 - [ ] AC-008 (FR-5): When an aborted driver-backed command later settles, the system shall report its settlement to `onOrphanSettled`.
-- [ ] AC-009 (FR-5): If the sandbox dies while `run` is in flight, then the system shall reject with `SandboxDiedError`.
+- [ ] AC-009 (FR-5): If the sandbox dies while `run` is in flight on a provider that detects sandbox death, then the system shall reject with `SandboxDiedError`.
 - [ ] AC-010 (FR-6): While a command started with `spawn` on `local()` is still running, the system shall deliver the output it has already written on `stdout`.
 - [ ] AC-011 (FR-6): When a command started with `spawn` on `bash()` or a driver-backed sandbox finishes, the system shall deliver its full output on `stdout` and `stderr`.
 - [ ] AC-012 (FR-6): When a command started with `spawn` on `bash()` or a driver-backed sandbox finishes, the system shall resolve `wait()` to its exit code.
 - [ ] AC-013 (FR-6): When `kill()` is called on a spawned process, the system shall settle its `wait()`.
 - [ ] AC-014 (FR-7): The `SandboxDriver`-based sandbox blueprints' driver code shall type-check against `SandboxDriver` without changes.
 - [ ] AC-015 (FR-9): When the model's read or edit tool targets a missing file, the system shall return a tool error that names the path, with the same wording on every provider.
-- [ ] AC-016 (FR-11): When `harness.fs.readFile` targets a missing file, the system shall reject, as it does today.
+- [ ] AC-016 (FR-11): When `session.fs.readFile` targets a missing file, the system shall reject, as it does today.
 
 ## Out of Scope
 

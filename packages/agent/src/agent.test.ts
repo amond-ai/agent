@@ -12,7 +12,9 @@ import {
   formatPackagedSkillFilePath,
   overlayPackagedSkills,
 } from './agent.ts'
+import { fakeStub } from './__contract__/fake-cloudflare-stub.ts'
 import { encodeBase64 } from './base64.ts'
+import { cloudflareSandbox } from './cloudflare/cf-sandbox.ts'
 import { FileNotFoundError } from './errors.ts'
 import { local } from './node/local.ts'
 import type { SandboxDriver } from './sandbox.ts'
@@ -61,6 +63,10 @@ const providers: Array<{ name: string, make: () => Promise<Sandbox> }> = [
   {
     name: 'sandboxFromDriver',
     make: async () => sandboxFromDriver(justBashDriver(new Bash({ cwd: '/work' })), '/work'),
+  },
+  {
+    name: 'cloudflareSandbox',
+    make: () => cloudflareSandbox(fakeStub('/work').stub, { cwd: '/work' }).createSandbox({ id: 'tools' }),
   },
 ]
 

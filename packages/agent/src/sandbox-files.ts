@@ -166,7 +166,11 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
     },
 
     async writeFile({ path, content, abortSignal }) {
-      throwIfAborted(abortSignal)
+      if (abortSignal?.aborted) {
+        // Release the caller's source; it will never be read.
+        content.cancel(abortSignal.reason).catch(() => {})
+        throwIfAborted(abortSignal)
+      }
       const bytes = await drainStream(content, abortSignal)
       throwIfAborted(abortSignal)
       await abortable(() => write(resolvePath(path), bytes), abortSignal)
@@ -188,7 +192,7 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
 }
 
 /**
- * The path-based `AmondFs` facade (`harness.fs`, `session.fs`) over the
+ * The path-based `AmondFs` facade (`session.fs`) over the
  * session file methods. `getEnv` is called on every operation, so a swapped
  * sandbox is immediately what the facade operates on. A read of a missing
  * file rejects with {@link FileNotFoundError}, as `AmondFs` documents.

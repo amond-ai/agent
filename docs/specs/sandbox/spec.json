@@ -7,7 +7,7 @@
   "conflicts": [],
   "traces": [],
   "created_at": "2026-10-21T13:37:31.365Z",
-  "updated_at": "2026-10-21T13:37:31.365Z",
+  "updated_at": "2026-10-21T13:50:41.837Z",
   "source_tracks": [
     "ai-sdk-sandbox-20261020"
   ],
@@ -55,19 +55,19 @@
     {
       "id": "REQ-003",
       "kind": "functional",
-      "statement": "replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline",
+      "statement": "replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline where the provider has one, and enforced through an abort signal otherwise",
       "source_tracks": [
         "ai-sdk-sandbox-20261020"
       ],
       "scenarios": [
         {
-          "name": "When `run` is called with `timeoutMs`, the system shall pass that deadline to the provider's native timeout option, rounding up and never down.",
+          "name": "When `run` is called with `timeoutMs`, the system shall pass that deadline to the provider's native timeout option, or enforce it with an abort signal when the provider has none, rounding up and never down.",
           "given": [],
           "when": [
             "`run` is called with `timeoutMs`"
           ],
           "then": [
-            "pass that deadline to the provider's native timeout option, rounding up and never down"
+            "pass that deadline to the provider's native timeout option, or enforce it with an abort signal when the provider has none, rounding up and never down"
           ]
         }
       ]
@@ -105,7 +105,7 @@
     {
       "id": "REQ-005",
       "kind": "functional",
-      "statement": "keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and sandbox death rejects with `SandboxDiedError`",
+      "statement": "keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`",
       "source_tracks": [
         "ai-sdk-sandbox-20261020"
       ],
@@ -141,10 +141,10 @@
           ]
         },
         {
-          "name": "If the sandbox dies while `run` is in flight, then the system shall reject with `SandboxDiedError`.",
+          "name": "If the sandbox dies while `run` is in flight on a provider that detects sandbox death, then the system shall reject with `SandboxDiedError`.",
           "given": [],
           "when": [
-            "the sandbox dies while `run` is in flight"
+            "the sandbox dies while `run` is in flight on a provider that detects sandbox death"
           ],
           "then": [
             "reject with `SandboxDiedError`"
@@ -259,16 +259,16 @@
     {
       "id": "REQ-011",
       "kind": "functional",
-      "statement": "keep the public `harness.fs` and `harness.shell` (and their `session` counterparts) unchanged in names, signatures, and behaviour, including `harness.fs.readFile` throwing on a missing file",
+      "statement": "keep the public `session.fs` and `session.shell` unchanged in names, signatures, and behaviour, including `session.fs.readFile` throwing on a missing file",
       "source_tracks": [
         "ai-sdk-sandbox-20261020"
       ],
       "scenarios": [
         {
-          "name": "When `harness.fs.readFile` targets a missing file, the system shall reject, as it does today.",
+          "name": "When `session.fs.readFile` targets a missing file, the system shall reject, as it does today.",
           "given": [],
           "when": [
-            "`harness.fs.readFile` targets a missing file"
+            "`session.fs.readFile` targets a missing file"
           ],
           "then": [
             "reject, as it does today"

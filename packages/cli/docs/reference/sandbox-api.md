@@ -65,17 +65,27 @@ interface Sandbox extends Experimental_SandboxSession {
   run(options: SandboxRunOptions): Promise<ShellResult>;
   spawn(options: SandboxRunOptions): Promise<SandboxProcess>;
 
-  readFile(options: { path: string }): Promise<ReadableStream<Uint8Array> | null>;
-  readBinaryFile(options: { path: string }): Promise<Uint8Array | null>;
+  readFile(options: { path: string; abortSignal?: AbortSignal }): Promise<ReadableStream<Uint8Array> | null>;
+  readBinaryFile(options: { path: string; abortSignal?: AbortSignal }): Promise<Uint8Array | null>;
   readTextFile(options: {
     path: string;
     encoding?: string;
     startLine?: number;
     endLine?: number;
+    abortSignal?: AbortSignal;
   }): Promise<string | null>;
-  writeFile(options: { path: string; content: ReadableStream<Uint8Array> }): Promise<void>;
-  writeBinaryFile(options: { path: string; content: Uint8Array }): Promise<void>;
-  writeTextFile(options: { path: string; content: string }): Promise<void>;
+  writeFile(options: {
+    path: string;
+    content: ReadableStream<Uint8Array>;
+    abortSignal?: AbortSignal;
+  }): Promise<void>;
+  writeBinaryFile(options: { path: string; content: Uint8Array; abortSignal?: AbortSignal }): Promise<void>;
+  writeTextFile(options: {
+    path: string;
+    content: string;
+    encoding?: string;
+    abortSignal?: AbortSignal;
+  }): Promise<void>;
 
   stat(path: string): Promise<FileStat>;
   readdir(path: string): Promise<string[]>;
@@ -122,7 +132,7 @@ Most adapters should not implement this interface by hand: [`sandboxFromDriver`]
 - `options.command` — the shell command line.
 - `options.workingDirectory` — working directory for this command. A relative value resolves against `cwd`; when omitted, the command runs in `cwd`.
 - `options.env` — environment variables supplied to the command, layered on top of whatever base environment the adapter defines.
-- `options.timeoutMs` — amond's extension to the AI SDK options: a wall-clock deadline in milliseconds, and the primary cancellation contract. Forward it to the provider's native timeout option (E2B `timeoutMs`, Daytona `timeout`, Modal `timeout`, and so on) so signal-blind providers still observe the deadline. A fractional value is rounded up, never down.
+- `options.timeoutMs` — amond's extension to the AI SDK options: a wall-clock deadline in milliseconds, and the primary cancellation contract. Forward it to the provider's native timeout option (E2B `timeoutMs`, Daytona `timeout`, Modal `timeout`, and so on) so signal-blind providers still observe the deadline. A provider with no native timeout option, such as `bash()` or `local()`, enforces it through an abort signal instead. A fractional value is rounded up, never down.
 - `options.abortSignal` — cancellation. Aborting rejects the returned promise promptly with an `AbortError` (`DOMException`) carrying the signal's reason as `cause` — never gated on the remote command's settlement. A signal that is already aborted rejects before the command runs. An adapter whose provider can cancel mid-flight does so, so the rejection is exact; one that can't leaves the command running as an **orphan** that keeps executing (and mutating the workspace) after the rejection, its eventual result discarded rather than surfacing later. The `AbortError` message says so. See [`sandboxFromDriver`](#sandboxfromdriverdriver-cwd-options) for how the wrapper implements this and how to observe an orphan's settlement.
 - `timeoutMs` and `abortSignal` are independent. Callers with a deadline that also want ad-hoc cancellation pass both; adapters that support both should observe whichever fires first. The standard `bash` tool passes both whenever the model requests a timeout.
 
@@ -149,6 +159,7 @@ Each of the first six methods takes a single options object with `path`.
 - `readBinaryFile({ path })` — reads raw bytes as a `Uint8Array`.
 - `readTextFile({ path, encoding?, startLine?, endLine? })` — reads a file as text. `startLine` and `endLine` select a 1-based, inclusive line range.
 - A read of a path that does not exist resolves with `null` rather than throwing.
+- Every file method accepts an optional `abortSignal`. A signal that is already aborted rejects with an `AbortError` before any I/O. An abort mid-flight rejects promptly, but a write may still land.
 - `writeFile({ path, content })` writes a `ReadableStream<Uint8Array>`, `writeBinaryFile` writes a `Uint8Array`, and `writeTextFile` writes a string. `writeTextFile` accepts only UTF-8 encoding labels (`encoding: 'utf-8'`, `'utf8'`) and rejects any other with a `TypeError`. All three create or replace the file and must create missing parent directories — a cross-mode guarantee (`writeTextFile({ path: 'out/nested/report.md', … })` never requires a prior `mkdir`). `sandboxFromDriver`, `bash()`, and `local()` all implement it by retrying a failed write once after `mkdir -p` on the parent; a hand-written sandbox must provide the same guarantee.
 - `stat(path)` — file metadata. Throws if the path does not exist.
 - `readdir(path)` — directory entry names (names only, no paths). Throws if the path is not a directory.
@@ -252,7 +263,7 @@ interface SandboxDriver {
 }
 ```
 
-Identical to the corresponding `Sandbox` members except that paths arrive pre-resolved (absolute) and the `writeFile` parent guarantee is handled by the wrapper.
+`SandboxDriver` deliberately keeps the older shapes: `exec` instead of `run`/`spawn`, and path-based `readFile`, `readFileBuffer`, and `writeFile` instead of the session file methods. `sandboxFromDriver` translates them into the `Sandbox` members. The remaining members match `Sandbox`, except that paths arrive pre-resolved (absolute) and the `writeFile` parent guarantee is handled by the wrapper.
 
 File-verb implementation notes:
 

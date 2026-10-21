@@ -7,7 +7,7 @@ depends: []
 conflicts: []
 traces: []
 created_at: 2026-10-21T13:37:31.365Z
-updated_at: 2026-10-21T13:37:31.365Z
+updated_at: 2026-10-21T13:50:41.837Z
 source_tracks: ["ai-sdk-sandbox-20261020"]
 ---
 
@@ -39,15 +39,15 @@ The system MUST keep the framework extensions on `Sandbox`: `cwd`, `resolvePath`
 - WHEN `readTextFile` is given a relative path
 - THEN read the file at that path resolved against the sandbox's `cwd`
 
-### Requirement: replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline
+### Requirement: replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline where the provider has one, and enforced through an abort signal otherwise
 <!-- req: REQ-003 tracks=ai-sdk-sandbox-20261020 -->
 
-The system MUST replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline.
+The system MUST replace `Sandbox.exec` with the session's `run` and `spawn`, and accept an optional `timeoutMs` on their options that is forwarded to the provider's native deadline where the provider has one, and enforced through an abort signal otherwise.
 
-#### Scenario: When `run` is called with `timeoutMs`, the system shall pass that deadline to the provider's native timeout option, rounding up and never down.
+#### Scenario: When `run` is called with `timeoutMs`, the system shall pass that deadline to the provider's native timeout option, or enforce it with an abort signal when the provider has none, rounding up and never down.
 
 - WHEN `run` is called with `timeoutMs`
-- THEN pass that deadline to the provider's native timeout option, rounding up and never down
+- THEN pass that deadline to the provider's native timeout option, or enforce it with an abort signal when the provider has none, rounding up and never down
 
 ### Requirement: replace the framework's `readFile(path)`, `readFileBuffer(path)`, and `writeFile(path, content)` with the session's `readFile`, `readBinaryFile`, `readTextFile`, `writeFile`, `writeBinaryFile`, and `writeTextFile`, including their contract that a missing file resolves to `null`
 <!-- req: REQ-004 tracks=ai-sdk-sandbox-20261020 -->
@@ -64,10 +64,10 @@ The system MUST replace the framework's `readFile(path)`, `readFileBuffer(path)`
 - WHEN `writeTextFile` targets a path whose parent directories do not exist
 - THEN create them and write the file
 
-### Requirement: keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and sandbox death rejects with `SandboxDiedError`
+### Requirement: keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`
 <!-- req: REQ-005 tracks=ai-sdk-sandbox-20261020 -->
 
-The system MUST keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and sandbox death rejects with `SandboxDiedError`.
+The system MUST keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`.
 
 #### Scenario: If `run` is called with an `abortSignal` that is already aborted, then the system shall reject without executing the command.
 
@@ -84,9 +84,9 @@ The system MUST keep the existing abort and liveness contract for `run` and `spa
 - WHEN an aborted driver-backed command later settles
 - THEN report its settlement to `onOrphanSettled`
 
-#### Scenario: If the sandbox dies while `run` is in flight, then the system shall reject with `SandboxDiedError`.
+#### Scenario: If the sandbox dies while `run` is in flight on a provider that detects sandbox death, then the system shall reject with `SandboxDiedError`.
 
-- WHEN the sandbox dies while `run` is in flight
+- WHEN the sandbox dies while `run` is in flight on a provider that detects sandbox death
 - THEN reject with `SandboxDiedError`
 
 ### Requirement: deliver `spawn` output live on `local()` and `cloudflareSandbox`, and on completion on `bash()` and driver-backed sandboxes, with `wait`, `kill`, and abort working on all of them
@@ -143,14 +143,14 @@ The system MUST port the built-in tools (read, write, edit, bash, grep, glob) on
 
 The system MUST update every page under `packages/cli/docs` that calls or documents the removed `Sandbox` methods, including the sandbox and agent API references, the sandbox and tool guides, and the Cloudflare, GitHub Actions, and GitLab CI deploy pages, and the `sandbox--cloudflare-computer` blueprint, which implements `Sandbox` directly rather than through `SandboxDriver`.
 
-### Requirement: keep the public `harness.fs` and `harness.shell` (and their `session` counterparts) unchanged in names, signatures, and behaviour, including `harness.fs.readFile` throwing on a missing file
+### Requirement: keep the public `session.fs` and `session.shell` unchanged in names, signatures, and behaviour, including `session.fs.readFile` throwing on a missing file
 <!-- req: REQ-011 tracks=ai-sdk-sandbox-20261020 -->
 
-The system MUST keep the public `harness.fs` and `harness.shell` (and their `session` counterparts) unchanged in names, signatures, and behaviour, including `harness.fs.readFile` throwing on a missing file.
+The system MUST keep the public `session.fs` and `session.shell` unchanged in names, signatures, and behaviour, including `session.fs.readFile` throwing on a missing file.
 
-#### Scenario: When `harness.fs.readFile` targets a missing file, the system shall reject, as it does today.
+#### Scenario: When `session.fs.readFile` targets a missing file, the system shall reject, as it does today.
 
-- WHEN `harness.fs.readFile` targets a missing file
+- WHEN `session.fs.readFile` targets a missing file
 - THEN reject, as it does today
 
 ## Non-functional Requirements
