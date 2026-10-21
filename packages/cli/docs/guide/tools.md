@@ -99,7 +99,7 @@ A sandbox adapter can replace this set with its own — see [Sandbox-provided to
 
 An ordinary tool is a pure function of its input: data in, result out. Declare `harness: true` when a tool needs to reach back into the agent's own runtime — its sandbox, or the model itself. The `run` function then receives `harness`, the tool's interface to both:
 
-- `harness.sandbox` — the agent's live environment: `readFile`, `writeFile`, `exec`, and the other [sandbox verbs](/docs/reference/agent-api/#harnesssandbox), touched directly with no conversation record. Throws when the agent declared no [sandbox](/docs/guide/sandboxes/).
+- `harness.sandbox` — the agent's live environment: `readTextFile`, `writeTextFile`, `run`, and the other [sandbox verbs](/docs/reference/agent-api/#harnesssandbox), touched directly with no conversation record. Throws when the agent declared no [sandbox](/docs/guide/sandboxes/).
 - `harness.prompt(text, options?)` — run a model operation in the harness's own scratch conversation. Repeated calls continue it, so a later prompt sees what earlier calls established. Pass `options.result` (a Valibot schema) to require validated structured data, or `options.tools` to offer extra tools for just that operation.
 
 A harness tool can stage inputs, run focused model work, and validate the result behind one tool call:
@@ -116,7 +116,7 @@ export const reviewContract = defineTool({
   input: v.object({ contract: v.string() }),
   harness: true,
   async run({ harness, data }) {
-    await harness.sandbox.writeFile('contract.md', data.contract);
+    await harness.sandbox.writeTextFile({ path: 'contract.md', content: data.contract });
     const { data: report } = await harness.prompt(
       'Review contract.md for non-standard terms and assess the risk.',
       { result: Report },

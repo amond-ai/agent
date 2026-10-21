@@ -311,10 +311,10 @@ export function Support() {
     input: v.object({ message: v.string() }),
     harness: true,
     async run({ harness, data }) {
-      await harness.sandbox.writeFile(
-        '/workspace/articles/reset-password.md',
-        '# Reset your password\n\nUse the account settings page to request a password reset email.',
-      );
+      await harness.sandbox.writeTextFile({
+        path: '/workspace/articles/reset-password.md',
+        content: '# Reset your password\n\nUse the account settings page to request a password reset email.',
+      });
 
       const { text } = await harness.prompt(
         `Search the workspace for articles relevant to this request, then write a helpful response.\n\nCustomer: ${data.message}`,

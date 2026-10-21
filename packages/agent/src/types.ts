@@ -1,3 +1,4 @@
+import type { Experimental_SandboxProcess, Experimental_SandboxSession } from '@ai-sdk/provider-utils'
 import type { AgentMessage, AgentTool, ThinkingLevel } from '@earendil-works/pi-agent-core'
 import type { ImageContent, Model } from '@earendil-works/pi-ai'
 
@@ -276,50 +277,93 @@ export interface FileStat {
 // ─── Sandbox ─────────────────────────────────────────────────────────────────
 
 /**
+ * Options for {@link Sandbox.run} and {@link Sandbox.spawn}: the AI SDK
+ * sandbox session's command options plus an optional provider deadline.
+ */
+export type SandboxRunOptions = Parameters<Experimental_SandboxSession['run']>[0] & {
+  /**
+   * Wall-clock deadline in milliseconds, forwarded to the provider's native
+   * timeout option. A fractional value is rounded up, never down.
+   */
+  timeoutMs?: number
+}
+
+/**
  * The agent's live sandbox: the universal environment interface. All sandbox
  * modes (isolate, local, remote) implement this — no mode-specific branching
  * needed in core logic.
  *
+ * A `Sandbox` is an AI SDK `Experimental_SandboxSession` as is, with no
+ * adapter: it can be handed to the AI SDK harness directly. On top of the
+ * session it carries the framework's extensions (`cwd`, `resolvePath`,
+ * `stat`, `readdir`, `exists`, `mkdir`, `rm`), and `run`/`spawn` accept an
+ * optional provider deadline (`timeoutMs`).
+ *
  * File methods accept both absolute and relative paths (resolved against `cwd`).
+ * The read methods resolve to `null` when the file does not exist.
  */
-export interface Sandbox {
-  exec(
-    command: string,
-    options?: {
-      cwd?: string
-      env?: Record<string, string>
-      /**
-       * Wall-clock deadline hint in milliseconds. Forwarded to the
-       * underlying sandbox adapter's native timeout option (E2B
-       * `timeoutMs`, Daytona `timeout`, etc.) so signal-blind providers
-       * still observe the deadline with full fidelity. Sandbox adapters whose
-       * provider only supports a coarser granularity may round the value
-       * up, never down.
-       *
-       * Independent of `signal`. Callers that have a deadline AND want
-       * mid-flight cancellation should pass both: `timeoutMs` for
-       * provider-native enforcement, `signal` for ad-hoc abort. The
-       * bash tool does this when the model emits a `timeout` parameter.
-       */
-      timeoutMs?: number
-      /**
-       * Cancel the in-flight command. When the signal aborts, the
-       * returned promise rejects with an `AbortError` promptly — never
-       * gated on the remote command's settlement. Sandbox adapters that
-       * wrap a signal-aware SDK also cancel the command itself; on a
-       * signal-blind provider the command becomes an orphan that may
-       * keep running (and keep mutating the workspace) after the
-       * rejection — the abort message says so. Use `timeoutMs` for
-       * provider-native deadline enforcement.
-       */
-      signal?: AbortSignal
-    },
-  ): Promise<ShellResult>
+export interface Sandbox extends Experimental_SandboxSession {
+  /**
+   * The sandbox environment in prose, for the agent's instructions: what
+   * kind of environment it is and its working directory.
+   */
+  readonly description: string
 
-  readFile(path: string): Promise<string>
-  readFileBuffer(path: string): Promise<Uint8Array>
-  /** Creates missing parent directories (the `AmondFs.writeFile` guarantee). */
-  writeFile(path: string, content: string | Uint8Array): Promise<void>
+  /**
+   * Run a command to completion. `workingDirectory` resolves against `cwd`.
+   *
+   * `timeoutMs` is forwarded to the provider's native timeout option, so
+   * signal-blind providers still observe the deadline; a provider with no
+   * native option enforces it through an abort signal. `abortSignal` is
+   * independent of it: a pre-aborted signal rejects without executing the
+   * command, and a mid-flight abort rejects promptly with an `AbortError`,
+   * never gated on the command's settlement. On a provider that cannot
+   * cancel, the command becomes an orphan that may keep running after the
+   * rejection — the abort message says so.
+   */
+  run(options: SandboxRunOptions): Promise<ShellResult>
+
+  /**
+   * Start a command and return a handle to its output streams, `wait()`, and
+   * `kill()`. Providers that cannot stream deliver the whole output when the
+   * command finishes.
+   */
+  spawn(options: SandboxRunOptions): Promise<Experimental_SandboxProcess>
+
+  /** Read a file as a byte stream; `null` when it does not exist. */
+  readFile(
+    options: Parameters<Experimental_SandboxSession['readFile']>[0],
+  ): Promise<ReadableStream<Uint8Array> | null>
+  /** Read a file as bytes; `null` when it does not exist. */
+  readBinaryFile(
+    options: Parameters<Experimental_SandboxSession['readBinaryFile']>[0],
+  ): Promise<Uint8Array | null>
+  /** Read a file as text, optionally a 1-based inclusive line range; `null` when it does not exist. */
+  readTextFile(
+    options: Parameters<Experimental_SandboxSession['readTextFile']>[0],
+  ): Promise<string | null>
+  /**
+   * Write a byte stream, creating missing parent directories. Aborting
+   * mid-write rejects the caller promptly, but the provider write may still
+   * land (as with `run` on a signal-blind provider); the same holds for
+   * `writeBinaryFile` and `writeTextFile`.
+   */
+  writeFile(
+    options: Parameters<Experimental_SandboxSession['writeFile']>[0],
+  ): Promise<void>
+  /** Write bytes, creating missing parent directories. */
+  writeBinaryFile(
+    options: Parameters<Experimental_SandboxSession['writeBinaryFile']>[0],
+  ): Promise<void>
+  /**
+   * Write text, creating missing parent directories. Only UTF-8 is supported
+   * (the web platform has no other text encoder): any other `encoding` label
+   * rejects with a `TypeError`.
+   */
+  writeTextFile(
+    options: Parameters<Experimental_SandboxSession['writeTextFile']>[0],
+  ): Promise<void>
+
   stat(path: string): Promise<FileStat>
   readdir(path: string): Promise<string[]>
   exists(path: string): Promise<boolean>
@@ -759,8 +803,9 @@ export interface AmondHarness {
   /**
    * The environment this agent runs in: the live {@link Sandbox} resolved
    * from the agent's declared sandbox (`useSandbox()`). One object carries
-   * the whole surface — `exec`, the file verbs (`readFile`/`writeFile`/
-   * `stat`/`readdir`/`exists`/`mkdir`/`rm`), `cwd`, `resolvePath` — and
+   * the whole surface — `run`/`spawn`, the session file methods
+   * (`readTextFile`/`writeTextFile` and their binary and stream forms),
+   * `stat`/`readdir`/`exists`/`mkdir`/`rm`, `cwd`, `resolvePath` — and
    * operations on it are never recorded in a conversation.
    *
    * THROWS when the agent declared no sandbox: there is no default
@@ -979,7 +1024,7 @@ export interface ShellOptions {
   cwd?: string
   /**
    * Wall-clock deadline in milliseconds, forwarded to the sandbox
-   * sandbox adapter. See `Sandbox.exec`.
+   * sandbox adapter. See `Sandbox.run`.
    */
   timeoutMs?: number
   /** Cancel this call. See `CallHandle`. */

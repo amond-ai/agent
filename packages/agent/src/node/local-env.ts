@@ -3,156 +3,88 @@
  *
  * Internal implementation behind the `local()` sandbox factory (see
  * `./local.ts`). Not exported from `@amond-ai/agent/node` — user code reaches
- * this through `local(...)`. `exec` shells out via `child_process.spawn`;
+ * this through `local(...)`. `run` and `spawn` shell out via `child_process.spawn`;
  * file methods call `node:fs/promises` directly.
  */
-import { spawn, spawnSync } from 'node:child_process'
+import type { Buffer } from 'node:buffer'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
+import { StringDecoder } from 'node:string_decoder'
 
 import { abortErrorFor, composeTimeoutSignal } from '../abort.ts'
 import { writeFileCreatingParents } from '../sandbox.ts'
-import type { FileStat, Sandbox, ShellResult } from '../types.ts'
+import { createSandboxFileMethods } from '../sandbox-files.ts'
+import { createProcessController, MAX_BUFFERED_OUTPUT_BYTES } from '../sandbox-streams.ts'
+import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
+import type { FileStat, Sandbox, SandboxRunOptions, ShellResult } from '../types.ts'
+import type { ShellExit } from './shell-process.ts'
+import { launchShell, MAX_OUTPUT_BYTES } from './shell-process.ts'
 
-const MAX_OUTPUT_BYTES = 64 * 1024 * 1024
-
-/** Grace period between SIGTERM and SIGKILL when tearing down a process group. */
-const KILL_GRACE_MS = 2000
+/** Appended to stderr when the shell's output exceeded {@link MAX_OUTPUT_BYTES}. */
+const OVERFLOW_NOTICE = `\n[amond] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`
 
 /**
- * Shell used for `exec()`. The model-facing tool is named `bash` and the
- * default virtual sandbox emulates bash, so prefer real bash over Node's
- * default `/bin/sh` — on hosts where sh is dash (Debian/Ubuntu CI images)
- * bashisms like `[[ ]]` and `set -o pipefail` would otherwise fail with
- * syntax errors the model can't explain. Falls back to the platform default
- * shell when bash is absent (minimal images, Windows). Probed once per
- * process, lazily on first exec.
- *
- * The probe resolves an absolute path (using the host `process.env` PATH)
- * so exec() never depends on the sandbox env's PATH to find its own shell —
- * `/bin/sh` was absolute, and a sandbox with an overridden PATH must still
- * be able to run commands.
+ * The exit code of a shell that neither failed to start nor overflowed.
+ * `code` is null when the child died from a signal; a kill driven by this
+ * adapter's own abort or deadline maps to the timeout(1) convention's 124,
+ * and a signal death we did not initiate keeps the generic failure code 1.
  */
-let resolvedShell: string | true | undefined
-function resolveShell(): string | true {
-  if (resolvedShell === undefined) {
-    if (process.platform === 'win32') {
-      resolvedShell = true
-    }
-    else {
-      const probe = spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' })
-      const found = probe.status === 0 ? probe.stdout.trim() : ''
-      resolvedShell = found.startsWith('/') ? found : true
-    }
-  }
-  return resolvedShell
+function shellExitCode(exit: ShellExit, signal: AbortSignal | undefined): number {
+  return exit.code ?? (signal?.aborted ? 124 : 1)
 }
 
 /**
- * Run `command` through the shell from `resolveShell()` in its own process group and
- * collect output. On abort (caller signal or timeout) the entire group is
- * signalled (SIGTERM, escalating to SIGKILL) so compound commands can't
- * orphan grandchildren on the host — `child_process.exec`'s `signal` option
- * kills only the shell itself, leaving e.g. backgrounded dev servers alive.
+ * Run `command` through the shared shell launcher and collect its output as
+ * strings.
  *
  * Always resolves with a `ShellResult`; spawn failures surface as
  * `exitCode: 1` with the error message on stderr, matching the previous
  * `exec`-based behavior for non-zero exits.
  */
-function execShell(
+async function execShell(
   command: string,
   opts: { cwd: string, env: NodeJS.ProcessEnv, signal?: AbortSignal },
 ): Promise<ShellResult> {
-  return new Promise((resolve) => {
-    const child = spawn(command, {
-      cwd: opts.cwd,
-      env: opts.env,
-      shell: resolveShell(),
-      // POSIX: lead a new process group so abort can signal the whole
-      // tree via `process.kill(-pid)`. No-op grouping on Windows.
-      detached: process.platform !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+  const stdoutDecoder = new StringDecoder('utf8')
+  const stderrDecoder = new StringDecoder('utf8')
+  let stdout = ''
+  let stderr = ''
+  let total = 0
+  let overflowed = false
 
-    let stdout = ''
-    let stderr = ''
-    let truncated = false
-    let settled = false
-
-    const killTree = (sig: NodeJS.Signals): void => {
-      if (child.pid === undefined) { return }
-      try {
-        // Negative pid → signal the process group (POSIX).
-        process.kill(-child.pid, sig)
-      }
-      catch {
-        try {
-          child.kill(sig)
-        }
-        catch {
-          // Already gone.
-        }
-      }
+  // Lifetime output cap: deliver, then count; past the cap, drop further
+  // output and kill the process group once.
+  const capped = (deliver: (chunk: Buffer) => void) => (chunk: Buffer): void => {
+    if (overflowed) { return }
+    deliver(chunk)
+    total += chunk.byteLength
+    if (total > MAX_OUTPUT_BYTES) {
+      overflowed = true
+      shell.kill()
     }
-
-    const onAbort = (): void => {
-      killTree('SIGTERM')
-      setTimeout(() => killTree('SIGKILL'), KILL_GRACE_MS).unref()
-    }
-
-    const settle = (result: ShellResult): void => {
-      if (settled) { return }
-      settled = true
-      // A pending SIGKILL stays armed: a group member that ignores SIGTERM
-      // and holds none of the shell's pipes outlives the shell's exit.
-      opts.signal?.removeEventListener('abort', onAbort)
-      resolve(result)
-    }
-
-    if (opts.signal?.aborted) {
-      onAbort()
-    }
-    else {
-      opts.signal?.addEventListener('abort', onAbort, { once: true })
-    }
-
-    const onData = (chunk: string, target: 'stdout' | 'stderr'): void => {
-      if (target === 'stdout') { stdout += chunk }
-      else { stderr += chunk }
-      if (!truncated && stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
-        truncated = true
-        killTree('SIGTERM')
-      }
-    }
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => onData(chunk, 'stdout'))
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk: string) => onData(chunk, 'stderr'))
-
-    child.once('error', (err) => {
-      // Spawn failure (no 'close' will follow) or post-spawn kill error.
-      killTree('SIGTERM')
-      settle({ stdout, stderr: stderr || String(err.message ?? err), exitCode: 1 })
-    })
-
-    child.once('close', (code) => {
-      if (truncated) {
-        settle({
-          stdout,
-          stderr: `${stderr}\n[amond] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`,
-          exitCode: 1,
-        })
-        return
-      }
-      // `code` is null when the child died from a signal. A kill driven
-      // by this adapter's own abort resolves with the timeout(1)
-      // convention's exit code 124; callers only ever see it for
-      // `timeoutMs` kills, because the caller-abort path rethrows
-      // AbortError before the result surfaces. A signal death we did
-      // not initiate keeps the generic failure code.
-      settle({ stdout, stderr, exitCode: code ?? (opts.signal?.aborted ? 124 : 1) })
-    })
+  }
+  const shell = launchShell(command, {
+    ...opts,
+    onStdout: capped((chunk) => { stdout += stdoutDecoder.write(chunk) }),
+    onStderr: capped((chunk) => { stderr += stderrDecoder.write(chunk) }),
   })
+  const exit = await shell.exited
+  stdout += stdoutDecoder.end()
+  stderr += stderrDecoder.end()
+
+  if (exit.error) {
+    return { stdout, stderr: stderr || exit.error.message, exitCode: 1 }
+  }
+  if (overflowed) {
+    return {
+      stdout,
+      stderr: stderr + OVERFLOW_NOTICE,
+      exitCode: 1,
+    }
+  }
+  // Callers only see 124 for `timeoutMs` kills: the caller-abort path
+  // rethrows AbortError before the result surfaces.
+  return { stdout, stderr, exitCode: shellExitCode(exit, opts.signal) }
 }
 
 /**
@@ -186,7 +118,7 @@ export interface LocalSandboxOptions {
   cwd?: string
   /**
    * Env vars layered on top of `DEFAULT_LOCAL_ENV_ALLOWLIST`. Set a key
-   * to `undefined` to drop a default. Per-call `opts.env` on `exec()`
+   * to `undefined` to drop a default. Per-call `env` on `run()`/`spawn()`
    * layers on top of this.
    *
    * Pass-through is intentionally explicit:
@@ -205,7 +137,7 @@ export interface LocalSandboxOptions {
 /**
  * Snapshot `process.env` through the allowlist, then layer user overrides.
  * Called once per sandbox; the result is captured in a closure and reused
- * across every `exec()` so per-call cost stays minimal and the env shape
+ * across every command so per-call cost stays minimal and the env shape
  * is stable for the sandbox's lifetime (host mutations to `process.env`
  * after construction are NOT picked up).
  */
@@ -239,55 +171,124 @@ function resolveBaseEnv(userEnv: LocalSandboxOptions['env']): NodeJS.ProcessEnv 
   return base
 }
 
-export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === code
+}
+
+/** Test seams; not part of the public `local()` options. */
+export interface LocalSandboxInternals {
+  /** Unread-output cap for live spawns. Defaults to {@link MAX_BUFFERED_OUTPUT_BYTES}. */
+  maxBufferedBytes?: number
+}
+
+export function createLocalSandbox(
+  options: LocalSandboxOptions = {},
+  internals: LocalSandboxInternals = {},
+): Sandbox {
   const cwd = path.resolve(options.cwd ?? process.cwd())
   const baseEnv = resolveBaseEnv(options.env)
 
   const resolvePath = (p: string): string => (path.isAbsolute(p) ? p : path.resolve(cwd, p))
 
+  const run = async (options: SandboxRunOptions): Promise<ShellResult> => {
+    const signal = options.abortSignal
+    if (signal?.aborted) { throw abortErrorFor(signal) }
+
+    // Compose timeoutMs with the caller's signal so signal-blind
+    // callers still observe deadlines and signal-aware ones can abort
+    // mid-flight. Mirrors the bashFactory adapter's behavior.
+    const { mergedSignal } = composeTimeoutSignal(options.timeoutMs, signal)
+
+    const result = await execShell(options.command, {
+      cwd: options.workingDirectory ? resolvePath(options.workingDirectory) : cwd,
+      // Per-call env layers on top of `baseEnv` (allowlist +
+      // sandbox `env` option). `process.env` is intentionally
+      // never read here.
+      env: options.env ? { ...baseEnv, ...options.env } : baseEnv,
+      signal: mergedSignal,
+    })
+    if (signal?.aborted) { throw abortErrorFor(signal) }
+    return result
+  }
+
+  /**
+   * Live `spawn`: chunks reach the streams as the shell writes them.
+   * `kill()` and either abort path signal the whole process group. A caller
+   * abort rejects `wait()` with an `AbortError`; a `timeoutMs` expiry alone
+   * resolves it with 124, like `run`.
+   */
+  const spawnLive = async (options: SandboxRunOptions): Promise<Experimental_SandboxProcess> => {
+    const callerSignal = options.abortSignal
+    if (callerSignal?.aborted) { throw abortErrorFor(callerSignal) }
+
+    const { mergedSignal } = composeTimeoutSignal(options.timeoutMs, callerSignal)
+    const shell = launchShell(options.command, {
+      cwd: options.workingDirectory ? resolvePath(options.workingDirectory) : cwd,
+      env: options.env ? { ...baseEnv, ...options.env } : baseEnv,
+      signal: mergedSignal,
+      onStdout: chunk => controller.pushStdout(chunk),
+      onStderr: chunk => controller.pushStderr(chunk),
+    })
+    const controller = createProcessController({
+      kill: () => shell.kill(),
+      maxBufferedBytes: internals.maxBufferedBytes ?? MAX_BUFFERED_OUTPUT_BYTES,
+      onOverflow: () => shell.kill(),
+      ...(shell.pid !== undefined ? { pid: shell.pid } : {}),
+    })
+
+    // Fail promptly on a caller abort; the process-group teardown continues
+    // in the background and `exited` then finds the controller settled.
+    const onCallerAbort = (): void => controller.fail(abortErrorFor(callerSignal!))
+    callerSignal?.addEventListener('abort', onCallerAbort, { once: true })
+
+    void shell.exited.then((exit) => {
+      callerSignal?.removeEventListener('abort', onCallerAbort)
+      if (exit.error) {
+        controller.pushStderr(exit.error.message)
+        controller.exit(1)
+      }
+      else {
+        controller.exit(shellExitCode(exit, mergedSignal))
+      }
+    })
+    return controller.process
+  }
+
+  const readBytes = async (resolved: string): Promise<Uint8Array> => {
+    const buf = await fs.readFile(resolved)
+    // Return a fresh Uint8Array view; Node Buffers are subclasses but
+    // downstream code shouldn't rely on Buffer-only methods.
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+  }
+
+  // AmondFs.writeFile guarantees parents are created as needed in every
+  // sandbox mode; the shared lazy implementation keeps the happy path at a
+  // single fs call.
+  const write = (resolved: string, content: string | Uint8Array): Promise<void> =>
+    writeFileCreatingParents(
+      () => fs.writeFile(resolved, content),
+      () => fs.mkdir(path.dirname(resolved), { recursive: true }),
+    )
+
+  const fileMethods = createSandboxFileMethods({
+    resolvePath,
+    readText: resolved => fs.readFile(resolved, 'utf8'),
+    readBytes,
+    write,
+    // ENOTDIR: a path component is a file, so the path cannot exist.
+    isMissing: error => isNodeErrorCode(error, 'ENOENT') || isNodeErrorCode(error, 'ENOTDIR'),
+  })
+
   return {
-    async exec(command, opts): Promise<ShellResult> {
-      const signal = opts?.signal
-      if (signal?.aborted) { throw abortErrorFor(signal) }
+    description:
+      'The host machine\'s own shell and filesystem, with no isolation. ' +
+      `The working directory is ${cwd}; relative paths and commands resolve against it.`,
 
-      // Compose timeoutMs with the caller's signal so signal-blind
-      // callers still observe deadlines and signal-aware ones can abort
-      // mid-flight. Mirrors the bashFactory adapter's behavior.
-      const { mergedSignal } = composeTimeoutSignal(opts?.timeoutMs, signal)
+    run,
 
-      const result = await execShell(command, {
-        cwd: opts?.cwd ? resolvePath(opts.cwd) : cwd,
-        // Per-call env layers on top of `baseEnv` (allowlist +
-        // sandbox `env` option). `process.env` is intentionally
-        // never read here.
-        env: opts?.env ? { ...baseEnv, ...opts.env } : baseEnv,
-        signal: mergedSignal,
-      })
-      if (signal?.aborted) { throw abortErrorFor(signal) }
-      return result
-    },
+    spawn: spawnLive,
 
-    async readFile(p) {
-      return fs.readFile(resolvePath(p), 'utf8')
-    },
-
-    async readFileBuffer(p) {
-      const buf = await fs.readFile(resolvePath(p))
-      // Return a fresh Uint8Array view; Node Buffers are subclasses but
-      // downstream code shouldn't rely on Buffer-only methods.
-      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
-    },
-
-    async writeFile(p, content) {
-      const resolved = resolvePath(p)
-      // AmondFs.writeFile guarantees parents are created as needed in
-      // every sandbox mode; the shared lazy implementation keeps the
-      // happy path at a single fs call.
-      await writeFileCreatingParents(
-        () => fs.writeFile(resolved, content),
-        () => fs.mkdir(path.dirname(resolved), { recursive: true }),
-      )
-    },
+    ...fileMethods,
 
     async stat(p): Promise<FileStat> {
       const resolved = resolvePath(p)

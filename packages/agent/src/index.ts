@@ -31,6 +31,7 @@ export {
   AmondError,
   AttachmentNotAvailableError,
   DelegationDepthExceededError,
+  FileNotFoundError,
   InstrumentationAlreadyInstalledError,
   OperationFailedError,
   SandboxDiedError,
@@ -164,6 +165,7 @@ export type {
   PromptUsage,
   Sandbox,
   SandboxFactory,
+  SandboxRunOptions,
   SandboxToolFactory,
   SandboxToolFactoryOptions,
   // Deprecated aliases for Sandbox, SandboxToolFactory, and

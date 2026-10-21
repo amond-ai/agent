@@ -474,7 +474,7 @@ interface CallHandle<T> extends Promise<T> {
 }
 ```
 
-The awaitable handle `prompt()` returns. Aborting — via `abort()` or an `options.signal` — rejects the awaited value with a standard `AbortError` (`DOMException`). `signal` fires on abort from either source, so tools passed to the call can observe cancellation. `harness.sandbox.exec()` is cancelled the same way — pass its `options.signal` — since it resolves a plain `Promise`, not a `CallHandle`.
+The awaitable handle `prompt()` returns. Aborting — via `abort()` or an `options.signal` — rejects the awaited value with a standard `AbortError` (`DOMException`). `signal` fires on abort from either source, so tools passed to the call can observe cancellation. `harness.sandbox.run()` is cancelled the same way — pass its `abortSignal` option — since it resolves a plain `Promise`, not a `CallHandle`.
 
 ## `harness.compact()`
 
@@ -482,10 +482,10 @@ Triggers compaction of the harness conversation immediately. Resolves as a no-op
 
 ## `harness.sandbox`
 
-The agent's environment itself: the live [`Sandbox`](/docs/reference/sandbox-api/#sandbox) resolved from the agent's [`useSandbox()`](/docs/reference/agent-hooks-api/#usesandbox) declaration. One object carries the whole surface — `exec()`, the file verbs (`readFile`, `readFileBuffer`, `writeFile`, `stat`, `readdir`, `exists`, `mkdir`, `rm`), `cwd`, and `resolvePath()`. Accessing it in an agent that declared no sandbox throws `[amond] This agent has no sandbox. ...` — tools that may run in sandbox-less agents should not touch it. The full `Sandbox` contract is documented in the [Sandbox Adapter API](/docs/reference/sandbox-api/).
+The agent's environment itself: the live [`Sandbox`](/docs/reference/sandbox-api/#sandbox) resolved from the agent's [`useSandbox()`](/docs/reference/agent-hooks-api/#usesandbox) declaration. One object carries the whole surface — `run()` and `spawn()` for commands, the file methods (`readFile`, `readBinaryFile`, `readTextFile`, `writeFile`, `writeBinaryFile`, `writeTextFile`, `stat`, `readdir`, `exists`, `mkdir`, `rm`), `cwd`, and `resolvePath()`. It is an AI SDK sandbox session, so it can be passed to the AI SDK harness as is. Each file method takes an options object (`readTextFile({ path })`, `writeTextFile({ path, content })`), and a read of a missing file resolves with `null`. Accessing it in an agent that declared no sandbox throws `[amond] This agent has no sandbox. ...` — tools that may run in sandbox-less agents should not touch it. The full `Sandbox` contract is documented in the [Sandbox Adapter API](/docs/reference/sandbox-api/).
 
 - Operations on it are never recorded in a conversation. The model has its own tools for filesystem work it should reason about; `harness.sandbox` is for plumbing the model shouldn't see.
-- `writeFile` creates missing parent directories in every sandbox mode.
+- The write methods (`writeFile`, `writeBinaryFile`, `writeTextFile`) create missing parent directories in every sandbox mode.
 - Relative paths resolve against the agent's cwd (`useSandbox(factory, { cwd })` when set, else the adapter default); use absolute paths for portability across adapters. `resolvePath()` resolves a relative path against `cwd` without touching the filesystem.
 - Sandboxes are heterogeneous: an adapter may not support every generic verb (it throws where it cannot) and may enrich the returned object with its native surface. Adapter packages ship runtime-checked accessors that narrow to that surface, such as Cloudflare Computer's `computerWorkspace(harness.sandbox)`.
 - It is a live getter, not a snapshot: a [conditional `useSandbox()`](/docs/guide/sandboxes/#conditional-attachment) may swap the environment at a turn boundary, and this property follows. Do not cache the returned reference across turn boundaries if the agent swaps environments.

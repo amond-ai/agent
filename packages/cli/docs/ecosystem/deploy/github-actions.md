@@ -89,7 +89,7 @@ Now let's build something useful — an issue triage agent that analyzes an issu
 
 An agent's deterministic orchestration lives in [harness tools](/docs/guide/tools/#harness-tools) — finite, schema-validated jobs the model calls — and [skills](/docs/guide/skills/), reusable instruction files. Inside either, the harness gives you two core methods:
 
-- **`harness.sandbox.exec(cmd)`** — Run a shell command in the sandbox. Returns `{ stdout, stderr, exitCode }`.
+- **`harness.sandbox.run({ command })`** — Run a shell command in the sandbox. Returns `{ stdout, stderr, exitCode }`.
 - **`harness.prompt(text, opts)`** — Send a prompt to the agent and get back a result. `harness.prompt(...)` runs in the same conversation context as the agent's own turns, so naming a mounted skill in the instruction is enough to direct the model to apply it.
 
 `prompt()` accepts a `result` option — a [Valibot](https://valibot.dev) schema that defines the expected output shape. amond parses the agent's response and returns it on `response.data`, fully typed:

@@ -2,20 +2,26 @@
  * Sandbox adapters: wraps BashFactory or SandboxDriver into a live Sandbox.
  */
 
-import { abortErrorFor, composeTimeoutSignal } from './abort.ts'
+import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
+
+import { abortErrorFor, abortErrorWithSuffix, composeTimeoutSignal, roundUpTimeoutMs } from './abort.ts'
+import { SandboxDiedError } from './errors.ts'
+import { createSandboxFileMethods } from './sandbox-files.ts'
+import { createProcessController } from './sandbox-streams.ts'
 import type {
   BashFactory,
   BashLike,
   FileStat,
   Sandbox,
   SandboxFactory,
+  SandboxRunOptions,
   ShellResult,
 } from './types.ts'
 
 export type { Sandbox } from './types.ts'
 
 /**
- * Settlement report for an orphaned command: an `exec` whose caller was
+ * Settlement report for an orphaned command: a `run` whose caller was
  * released by an abort while the provider call was still in flight. The
  * runtime's `Sandbox` wrappers reject promptly on abort — never gated on
  * the remote command's settlement — so on a provider that cannot cancel
@@ -47,11 +53,16 @@ export interface OrphanedExecSettlement {
  * rejection time, and the message reaches the model verbatim through the
  * error tool result.
  */
-const ORPHANED_EXEC_SUFFIX =
+export const ORPHANED_EXEC_SUFFIX =
   ' The sandbox command could not be confirmed cancelled and may still be running.'
 
+/** The `AbortError` for an abort whose command could not be confirmed cancelled. */
+export function orphanedExecAbortError(signal: AbortSignal): Error {
+  return abortErrorWithSuffix(signal, ORPHANED_EXEC_SUFFIX)
+}
+
 /**
- * The `Sandbox.exec` abort race, implemented once for every wrapper-built
+ * The `Sandbox.run` abort race, implemented once for every wrapper-built
  * adapter: when `signal` aborts mid-flight, reject promptly with an
  * `AbortError` — never gated on the provider promise, which most sandbox
  * SDKs cannot cancel. The provider promise becomes an orphan whose
@@ -105,16 +116,7 @@ function raceExecAbort(
         result => record({ result }),
         (error: unknown) => record({ error }),
       )
-      const base = abortErrorFor(signal)
-      const error = new DOMException(base.message + ORPHANED_EXEC_SUFFIX, 'AbortError')
-      // `cause` is read-only on DOMException in some runtimes.
-      try {
-        Object.defineProperty(error, 'cause', { value: signal.reason, configurable: true })
-      }
-      catch {
-        /* leave cause unset */
-      }
-      reject(error)
+      reject(orphanedExecAbortError(signal))
     }
     signal.addEventListener('abort', onAbort, { once: true })
 
@@ -170,6 +172,61 @@ export async function writeFileCreatingParents(
   await write()
 }
 
+/**
+ * Buffered `spawn` for providers that cannot stream output: start `run` at
+ * once and deliver the whole stdout, stderr, and exit code when it settles.
+ *
+ * A pre-aborted `abortSignal` rejects before `run` starts. Otherwise `run`
+ * sees the caller's signal merged with an internal one that `kill()` aborts,
+ * so a caller abort and a kill both go through the provider's own abort
+ * handling (prompt rejection, orphan reporting); either way both streams
+ * error and `wait()` rejects with the resulting `AbortError`.
+ */
+export async function spawnFromRun(
+  run: (options: SandboxRunOptions) => Promise<ShellResult>,
+  options: SandboxRunOptions,
+): Promise<Experimental_SandboxProcess> {
+  const callerSignal = options.abortSignal
+  if (callerSignal?.aborted) { throw abortErrorFor(callerSignal) }
+
+  const killer = new AbortController()
+  const abortSignal = callerSignal ? AbortSignal.any([callerSignal, killer.signal]) : killer.signal
+  const controller = createProcessController({
+    kill: () => killer.abort(new DOMException('The process was killed.', 'AbortError')),
+  })
+
+  run({ ...options, abortSignal }).then(
+    (result) => {
+      if (result.stdout) { controller.pushStdout(result.stdout) }
+      if (result.stderr) { controller.pushStderr(result.stderr) }
+      controller.exit(result.exitCode)
+    },
+    (error: unknown) => controller.fail(error),
+  )
+  return controller.process
+}
+
+/**
+ * `isMissing` for providers whose read errors carry no portable "not found"
+ * code: after a failed read, ask `exists`. When `exists` itself fails the
+ * answer is "not missing", so the original read error is rethrown.
+ */
+function missingWhenAbsent(
+  exists: (path: string) => Promise<boolean>,
+): (error: unknown, path: string) => Promise<boolean> {
+  return async (error, path) => {
+    if (error instanceof SandboxDiedError || (error instanceof Error && error.name === 'AbortError')) {
+      return false
+    }
+    try {
+      return !(await exists(path))
+    }
+    catch {
+      return false
+    }
+  }
+}
+
 /** Parent directory of an absolute POSIX path (`/a/b.txt` → `/a`, `/a.txt` → `/`). */
 function posixParentDir(p: string): string {
   return p.replace(/\/[^/]*$/, '') || '/'
@@ -200,21 +257,31 @@ function makeResolvePath(cwd: string): (p: string) => string {
   }
 }
 
+/**
+ * Scope `parentEnv` to `cwd`: commands default to it, and relative
+ * `workingDirectory` values and file paths resolve against it. The
+ * description keeps the parent's and adds the scoped working directory, so
+ * the agent is not told the parent's directory alone.
+ */
 export function createCwdSandbox(parentEnv: Sandbox, cwd: string): Sandbox {
   const scopedCwd = normalizePath(cwd)
   const resolvePath = makeResolvePath(scopedCwd)
+  const scopeRun = (options: SandboxRunOptions): SandboxRunOptions => ({
+    ...options,
+    workingDirectory:
+      options.workingDirectory !== undefined ? resolvePath(options.workingDirectory) : scopedCwd,
+  })
 
   return {
-    exec: (cmd, opts) =>
-      parentEnv.exec(cmd, {
-        cwd: opts?.cwd !== undefined ? resolvePath(opts.cwd) : scopedCwd,
-        env: opts?.env,
-        timeoutMs: opts?.timeoutMs,
-        signal: opts?.signal,
-      }),
-    readFile: p => parentEnv.readFile(resolvePath(p)),
-    readFileBuffer: p => parentEnv.readFileBuffer(resolvePath(p)),
-    writeFile: (p, c) => parentEnv.writeFile(resolvePath(p), c),
+    description: `${parentEnv.description} In this session the working directory is ${scopedCwd}.`,
+    run: options => parentEnv.run(scopeRun(options)),
+    spawn: options => parentEnv.spawn(scopeRun(options)),
+    readFile: options => parentEnv.readFile({ ...options, path: resolvePath(options.path) }),
+    readBinaryFile: options => parentEnv.readBinaryFile({ ...options, path: resolvePath(options.path) }),
+    readTextFile: options => parentEnv.readTextFile({ ...options, path: resolvePath(options.path) }),
+    writeFile: options => parentEnv.writeFile({ ...options, path: resolvePath(options.path) }),
+    writeBinaryFile: options => parentEnv.writeBinaryFile({ ...options, path: resolvePath(options.path) }),
+    writeTextFile: options => parentEnv.writeTextFile({ ...options, path: resolvePath(options.path) }),
     stat: p => parentEnv.stat(resolvePath(p)),
     readdir: p => parentEnv.readdir(resolvePath(p)),
     exists: p => parentEnv.exists(resolvePath(p)),
@@ -246,40 +313,58 @@ function createBashSandbox(bash: BashLike): Sandbox {
   const cwd = bash.getCwd()
   const resolve = (p: string) => (p.startsWith('/') ? p : fs.resolvePath(cwd, p))
 
+  const run = async (options: SandboxRunOptions): Promise<ShellResult> => {
+    const signal = options.abortSignal
+    // Pre-check before composing the timeout signal so a pre-aborted
+    // call never schedules a stray timer (raceExecAbort re-checks, but
+    // only after composition would have run).
+    if (signal?.aborted) { throw abortErrorFor(signal) }
+
+    // Just-bash has no native timeout option. Translate `timeoutMs`
+    // into an AbortSignal and compose with the caller's signal so
+    // bash factories observe deadlines with the same fidelity as
+    // signal-aware sandbox adapters.
+    const { mergedSignal } = composeTimeoutSignal(options.timeoutMs, signal)
+
+    // The abort race applies here for contract uniformity: a
+    // signal-blind Bash-like keeps executing in-process after the
+    // early rejection (shared event loop, shared FS) — a signal-aware
+    // one cancels via `mergedSignal` and the orphan window is bounded
+    // by its kill latency.
+    return raceExecAbort(
+      options.command,
+      () =>
+        bash.exec(options.command, {
+          cwd: options.workingDirectory !== undefined ? resolve(options.workingDirectory) : undefined,
+          env: options.env,
+          signal: mergedSignal,
+        }),
+      signal,
+    )
+  }
+
+  const write = (resolved: string, content: string | Uint8Array): Promise<void> =>
+    writeFileCreatingParents(
+      () => fs.writeFile(resolved, content),
+      () => fs.mkdir(posixParentDir(resolved), { recursive: true }),
+    )
+
+  const fileMethods = createSandboxFileMethods({
+    resolvePath: resolve,
+    readText: p => fs.readFile(p),
+    readBytes: p => fs.readFileBuffer(p),
+    write,
+    isMissing: missingWhenAbsent(p => fs.exists(p)),
+  })
+
   return {
-    exec: async (cmd, opts) => {
-      // Pre-check before composing the timeout signal so a pre-aborted
-      // call never schedules a stray timer (raceExecAbort re-checks, but
-      // only after composition would have run).
-      if (opts?.signal?.aborted) { throw abortErrorFor(opts.signal) }
-
-      // Just-bash has no native timeout option. Translate `timeoutMs`
-      // into an AbortSignal and compose with the caller's signal so
-      // bash factories observe deadlines with the same fidelity as
-      // signal-aware sandbox adapters.
-      const { mergedSignal } = composeTimeoutSignal(opts?.timeoutMs, opts?.signal)
-
-      // The abort race applies here for contract uniformity: a
-      // signal-blind Bash-like keeps executing in-process after the
-      // early rejection (shared event loop, shared FS) — a signal-aware
-      // one cancels via `mergedSignal` and the orphan window is bounded
-      // by its kill latency.
-      return raceExecAbort(
-        cmd,
-        () =>
-          bash.exec(cmd, opts ? { cwd: opts.cwd, env: opts.env, signal: mergedSignal } : undefined),
-        opts?.signal,
-      )
-    },
-    readFile: p => fs.readFile(resolve(p)),
-    readFileBuffer: p => fs.readFileBuffer(resolve(p)),
-    writeFile: (p, content) => {
-      const resolved = resolve(p)
-      return writeFileCreatingParents(
-        () => fs.writeFile(resolved, content),
-        () => fs.mkdir(posixParentDir(resolved), { recursive: true }),
-      )
-    },
+    description:
+      'A virtual bash shell emulated in-process (just-bash) over its own virtual filesystem; ' +
+      `it is not a real operating system. The working directory is ${cwd}; relative paths and ` +
+      'commands resolve against it.',
+    run,
+    spawn: options => spawnFromRun(run, options),
+    ...fileMethods,
     stat: p => fs.stat(resolve(p)),
     readdir: p => fs.readdir(resolve(p)),
     exists: p => fs.exists(resolve(p)),
@@ -381,62 +466,77 @@ export type SandboxApi = SandboxDriver
  * `options.onOrphanSettled` observes {@link OrphanedExecSettlement}s: the
  * eventual settlement of commands whose caller was released early by an
  * abort. Adapter-facing only — the runtime never records orphan settlements.
+ *
+ * `spawn` is buffered: a driver has no streaming method, so the output
+ * arrives when the command finishes. An adapter with its own streaming exec
+ * (as `cloudflareSandbox` has) replaces `spawn` on the returned object. A
+ * missing file is detected by calling `exists` after a read fails.
  */
 export function sandboxFromDriver(
   driver: SandboxDriver,
   cwd: string,
-  options?: { onOrphanSettled?: (settlement: OrphanedExecSettlement) => void },
+  options?: {
+    onOrphanSettled?: (settlement: OrphanedExecSettlement) => void
+    /**
+     * The sandbox environment in prose (see {@link Sandbox.description}).
+     * Defaults to a generic remote-sandbox description naming `cwd`.
+     */
+    description?: string
+  },
 ): Sandbox {
   const resolvePath = makeResolvePath(cwd)
   const onOrphanSettled = options?.onOrphanSettled
 
+  // Abort semantics live here — not in every sandbox adapter. Most
+  // provider SDKs (E2B, Daytona, Modal, Boxd, etc.) don't accept an
+  // AbortSignal, so adapters only wire `signal` into their provider
+  // SDK when one supports it (Mirage, Vercel); the rest get the
+  // `Sandbox.run` abort contract for free: a pre-aborted call
+  // never executes, and a mid-flight abort rejects promptly —
+  // orphaning the remote command rather than awaiting it.
+  const run = async (runOptions: SandboxRunOptions): Promise<ShellResult> => {
+    const { command, workingDirectory, timeoutMs } = runOptions
+    const signal = runOptions.abortSignal
+    return raceExecAbort(
+      command,
+      () =>
+        driver.exec(command, {
+          cwd: workingDirectory !== undefined ? resolvePath(workingDirectory) : cwd,
+          env: runOptions.env,
+          timeoutMs: timeoutMs !== undefined ? roundUpTimeoutMs(timeoutMs) : undefined,
+          signal,
+        }),
+      signal,
+      onOrphanSettled,
+    )
+  }
+
+  const write = (resolved: string, content: string | Uint8Array): Promise<void> =>
+    writeFileCreatingParents(
+      () => driver.writeFile(resolved, content),
+      () => driver.mkdir(posixParentDir(resolved), { recursive: true }),
+    )
+
+  // Drivers report a missing file with provider-specific errors, so a
+  // failed read asks `exists` (one extra call, on the failure path only).
+  const fileMethods = createSandboxFileMethods({
+    resolvePath,
+    readText: path => driver.readFile(path),
+    readBytes: path => driver.readFileBuffer(path),
+    write,
+    isMissing: missingWhenAbsent(path => driver.exists(path)),
+  })
+
   return {
-    async exec(
-      command: string,
-      execOptions?: {
-        cwd?: string
-        env?: Record<string, string>
-        timeoutMs?: number
-        signal?: AbortSignal
-      },
-    ): Promise<ShellResult> {
-      // Abort semantics live here — not in every sandbox adapter. Most
-      // provider SDKs (E2B, Daytona, Modal, Boxd, etc.) don't accept an
-      // AbortSignal, so adapters only wire `signal` into their provider
-      // SDK when one supports it (Mirage, Vercel); the rest get the
-      // `Sandbox.exec` abort contract for free: a pre-aborted call
-      // never executes, and a mid-flight abort rejects promptly —
-      // orphaning the remote command rather than awaiting it.
-      const signal = execOptions?.signal
-      return raceExecAbort(
-        command,
-        () =>
-          driver.exec(command, {
-            cwd: execOptions?.cwd !== undefined ? resolvePath(execOptions.cwd) : cwd,
-            env: execOptions?.env,
-            timeoutMs: execOptions?.timeoutMs,
-            signal,
-          }),
-        signal,
-        onOrphanSettled,
-      )
-    },
+    description:
+      options?.description ??
+      `A remote sandbox. The working directory is ${cwd}; relative paths and commands resolve against it.`,
 
-    async readFile(path: string): Promise<string> {
-      return driver.readFile(resolvePath(path))
-    },
+    run,
 
-    async readFileBuffer(path: string): Promise<Uint8Array> {
-      return driver.readFileBuffer(resolvePath(path))
-    },
+    spawn: runOptions => spawnFromRun(run, runOptions),
 
-    async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-      const resolved = resolvePath(path)
-      return writeFileCreatingParents(
-        () => driver.writeFile(resolved, content),
-        () => driver.mkdir(posixParentDir(resolved), { recursive: true }),
-      )
-    },
+    ...fileMethods,
 
     async stat(path: string): Promise<FileStat> {
       return driver.stat(resolvePath(path))

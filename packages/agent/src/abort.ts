@@ -4,6 +4,11 @@ import type { CallHandle } from './types.ts'
 
 /** Build a standard `AbortError` (`DOMException`) carrying the signal's reason as `cause`. */
 export function abortErrorFor(signal: AbortSignal): Error {
+  return abortErrorWithSuffix(signal, '')
+}
+
+/** {@link abortErrorFor} with `suffix` appended to the message; `cause` is still the signal's reason. */
+export function abortErrorWithSuffix(signal: AbortSignal, suffix: string): Error {
   const reason = signal.reason
   const message =
     reason instanceof Error && reason.message
@@ -11,7 +16,7 @@ export function abortErrorFor(signal: AbortSignal): Error {
       : typeof reason === 'string' && reason
         ? reason
         : 'The operation was aborted.'
-  const error = new DOMException(message, 'AbortError')
+  const error = new DOMException(message + suffix, 'AbortError')
   // `cause` is read-only on DOMException in some runtimes.
   try {
     Object.defineProperty(error, 'cause', { value: reason, configurable: true })
@@ -23,6 +28,15 @@ export function abortErrorFor(signal: AbortSignal): Error {
 }
 
 /**
+ * Round a millisecond deadline up to a whole millisecond. `AbortSignal.timeout`
+ * and most native provider deadlines truncate a fractional value, which would
+ * fire before the caller's deadline; rounding up never shortens it.
+ */
+export function roundUpTimeoutMs(timeoutMs: number): number {
+  return Math.ceil(timeoutMs)
+}
+
+/**
  * Translate a millisecond deadline into an `AbortSignal` and compose it with
  * the caller's signal. Single implementation of the timeout-to-signal
  * cancellation composition shared by the LLM bash tool and the
@@ -30,13 +44,14 @@ export function abortErrorFor(signal: AbortSignal): Error {
  *
  * Returns both signals: callers that distinguish a recoverable timeout from
  * a host abort (the bash tool's 124-shaped result) need `timeoutSignal` on
- * its own; everything downstream gets `mergedSignal`.
+ * its own; everything downstream gets `mergedSignal`. A fractional
+ * `timeoutMs` is rounded up ({@link roundUpTimeoutMs}).
  */
 export function composeTimeoutSignal(
   timeoutMs: number | undefined,
   signal: AbortSignal | undefined,
 ): { timeoutSignal: AbortSignal | undefined, mergedSignal: AbortSignal | undefined } {
-  const timeoutSignal = typeof timeoutMs === 'number' ? AbortSignal.timeout(timeoutMs) : undefined
+  const timeoutSignal = typeof timeoutMs === 'number' ? AbortSignal.timeout(roundUpTimeoutMs(timeoutMs)) : undefined
   const mergedSignal =
     signal && timeoutSignal ? AbortSignal.any([signal, timeoutSignal]) : (signal ?? timeoutSignal)
   return { timeoutSignal, mergedSignal }
@@ -150,15 +165,7 @@ export function abandonToolOnAbort<T>(
           () => {},
           () => {},
         )
-        const base = abortErrorFor(signal)
-        const error = new DOMException(base.message + ABANDONED_TOOL_SUFFIX, 'AbortError')
-        try {
-          Object.defineProperty(error, 'cause', { value: signal.reason, configurable: true })
-        }
-        catch {
-          /* leave cause unset */
-        }
-        reject(error)
+        reject(abortErrorWithSuffix(signal, ABANDONED_TOOL_SUFFIX))
       }, 0)
     }
     signal.addEventListener('abort', onAbort, { once: true })

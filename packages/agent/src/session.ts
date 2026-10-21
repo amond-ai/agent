@@ -108,6 +108,7 @@ import {
   classifyError,
   ConversationRecordInvariantError,
   DelegationDepthExceededError,
+  FileNotFoundError,
   normalizeLogAttributes,
   OperationFailedError,
   serializeEventError,
@@ -186,6 +187,7 @@ import {
 } from './runtime/ids.ts'
 import { getRuntimeModels, providerTelemetryName } from './runtime/providers.ts'
 import { createCwdSandbox } from './sandbox.ts'
+import { createAmondFs } from './sandbox-files.ts'
 import { valibotToJsonSchema } from './schema.ts'
 import { execShellWithEvents, getErrorMessage } from './shell.ts'
 import { isSkillDefinition, packageSkillDefinition } from './skill-definition.ts'
@@ -2237,16 +2239,7 @@ export class Session implements AmondSession, AgentSubmissionSession {
     this.envRuntime = options.envRuntime
     // Live facade: every call reads the slot's CURRENT env, so a swapped
     // environment is immediately what `session.fs` operates on.
-    this.fs = {
-      readFile: path => this.env.readFile(path),
-      readFileBuffer: path => this.env.readFileBuffer(path),
-      writeFile: (path, content) => this.env.writeFile(path, content),
-      stat: path => this.env.stat(path),
-      readdir: path => this.env.readdir(path),
-      exists: path => this.env.exists(path),
-      mkdir: (path, mkdirOptions) => this.env.mkdir(path, mkdirOptions),
-      rm: (path, rmOptions) => this.env.rm(path, rmOptions),
-    }
+    this.fs = createAmondFs(() => this.env)
     this.agentTools = options.agentTools ?? []
     this.activeHarnessTools = options.activeHarnessTools ?? EMPTY_HARNESS_TOOL_LINEAGE
     this.mcpUnavailable = options.mcpUnavailable ?? []
@@ -3883,11 +3876,13 @@ export class Session implements AmondSession, AgentSubmissionSession {
       return `Skill "${name}" is not available. Available skills: ${available.join(', ')}.`
     }
     if (isWorkspaceSkill(registered)) {
+      const skillMd = await this.env.readTextFile({ path: registered.skillMdPath })
+      if (skillMd === null) { throw new FileNotFoundError({ path: registered.skillMdPath }) }
       return buildWorkspaceSkillPrompt(
         registered.name,
         registered.directory,
         registered.skillMdPath,
-        await this.env.readFile(registered.skillMdPath),
+        skillMd,
       )
     }
     return buildPackagedSkillPrompt(this.resolveRegisteredPackage(registered))
@@ -4318,7 +4313,7 @@ export class Session implements AmondSession, AgentSubmissionSession {
     }
 
     // Tool factories (standard and adapter alike) get the env with
-    // packaged-skill routing layered onto readFile: any tool that reads
+    // packaged-skill routing layered onto its file reads: any tool that reads
     // through the env resolves /.amond/packaged-skills/ paths, no
     // tool-level special-casing.
     const toolEnv = overlayPackagedSkills(env, packagedSkills)

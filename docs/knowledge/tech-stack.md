@@ -50,6 +50,7 @@ package uses yet:
 | valibot, `@valibot/to-json-schema` | Schema validation and JSON Schema output | `agent` |
 | `@earendil-works/pi-agent-core`, `@earendil-works/pi-ai` | Pi agent loop and model client. Removal planned in [#16](https://github.com/amond-ai/agent/issues/16)–[#18](https://github.com/amond-ai/agent/issues/18) | `agent` |
 | `@modelcontextprotocol/client` | MCP tools | `agent` |
+| `@ai-sdk/provider-utils` 5.0.64 | `Experimental_SandboxSession`, the AI SDK sandbox shape that `Sandbox` extends so the harness can share it ([#15](https://github.com/amond-ai/agent/issues/15)). Imported for types only; pinned exactly because the type is experimental | `agent` |
 | Cloudflare `agents` SDK | Durable Object agent base on Cloudflare | `agent-vite` |
 | Vite 8, `@cloudflare/vite-plugin` | The build that turns `'use agent'` modules into a Node server or Worker | `agent-vite` (`vite` peer); `cli` uses Vite only |
 | `@durable-streams/client` | Streams conversation state to clients | `agent-sdk` |

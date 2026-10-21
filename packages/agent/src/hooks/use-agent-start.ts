@@ -16,7 +16,10 @@ import { requireRenderFrame } from './frame.ts'
  *   useAgentStart(async ({ harness, log }) => {
  *     if (issue) return; // durable guard: intake happens once
  *     const loaded = await loadIssue(issueNumber);
- *     await harness.sandbox.writeFile(`triage/gh-${loaded.number}/issue.md`, digest(loaded));
+ *     await harness.sandbox.writeTextFile({
+ *       path: `triage/gh-${loaded.number}/issue.md`,
+ *       content: digest(loaded),
+ *     });
  *     setIssue(loaded);
  *     log.info('issue loaded', { issue: loaded.number });
  *     await dispatch({ kind: 'signal', type: 'intake', body: `Issue #${loaded.number} loaded.` });
