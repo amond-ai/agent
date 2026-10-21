@@ -578,14 +578,17 @@ function isSandboxFactory(value: unknown): value is SandboxFactory {
 // together with SandboxFactory.createSessionEnv.
 let warnedLegacyCreateSessionEnv = false
 
-function assertSandboxShape(value: unknown): asserts value is Sandbox {
+function assertSandboxShape(
+  value: unknown,
+  factoryMethod: 'createSandbox' | 'createSessionEnv',
+): asserts value is Sandbox {
   const candidate = value as Record<string, unknown> | null | undefined
   const missing = ['run', 'spawn', 'readTextFile', 'writeTextFile'].filter(
     member => typeof candidate?.[member] !== 'function',
   )
   if (missing.length > 0) {
     throw new Error(
-      `[amond] The sandbox returned by createSandbox() is missing ${missing.map(m => `${m}()`).join(', ')}. `
+      `[amond] The sandbox returned by ${factoryMethod}() is missing ${missing.map(m => `${m}()`).join(', ')}. `
       + 'It looks like a legacy adapter: migrate it to `run`/`spawn` and the session file methods '
       + '(`readTextFile`/`writeTextFile`), or build the sandbox with `sandboxFromDriver`.',
     )
@@ -620,7 +623,7 @@ export async function resolveSandbox(
       throw new Error('[amond] Invalid sandbox option composed by the agent function.')
     }
     const env = await create.call(sandbox, { id })
-    assertSandboxShape(env)
+    assertSandboxShape(env, create === sandbox.createSandbox ? 'createSandbox' : 'createSessionEnv')
     return { env, toolFactory: sandbox.tools }
   }
   throw new Error('[amond] Invalid sandbox option composed by the agent function.')

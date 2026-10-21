@@ -132,9 +132,10 @@ export function setContainerDeathCadenceForTests(override?: DeathDetectorCadence
  * unrecognized future values — counts as alive, so a legitimately slow
  * command on a healthy container is never interrupted.
  *
- * Liveness only: caller aborts are owned one layer up by
- * `sandboxFromDriver`'s exec abort race, which also consumes this
- * promise's eventual settlement when the caller has already been released.
+ * Liveness only: caller aborts are owned one layer up — by
+ * `sandboxFromDriver`'s exec abort race for driver calls, and by `spawnLive`
+ * (cf-spawn.ts) for live spawn — each of which also consumes this promise's
+ * eventual settlement when the caller has already been released.
  */
 function raceContainerDeath<T>(
   sandbox: CloudflareSandboxStub,
