@@ -5,6 +5,7 @@
 import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 
 import { abortErrorFor, abortErrorWithSuffix, composeTimeoutSignal, roundUpTimeoutMs } from './abort.ts'
+import { SandboxDiedError } from './errors.ts'
 import { createSandboxFileMethods } from './sandbox-files.ts'
 import { createProcessController } from './sandbox-streams.ts'
 import type {
@@ -208,7 +209,10 @@ export async function spawnFromRun(
 function missingWhenAbsent(
   exists: (path: string) => Promise<boolean>,
 ): (error: unknown, path: string) => Promise<boolean> {
-  return async (_error, path) => {
+  return async (error, path) => {
+    if (error instanceof SandboxDiedError || (error instanceof Error && error.name === 'AbortError')) {
+      return false
+    }
     try {
       return !(await exists(path))
     }
@@ -485,7 +489,7 @@ export function sandboxFromDriver(
   // `Sandbox.run` abort contract for free: a pre-aborted call
   // never executes, and a mid-flight abort rejects promptly —
   // orphaning the remote command rather than awaiting it.
-  const run = (runOptions: SandboxRunOptions): Promise<ShellResult> => {
+  const run = async (runOptions: SandboxRunOptions): Promise<ShellResult> => {
     const { command, workingDirectory, timeoutMs } = runOptions
     const signal = runOptions.abortSignal
     return raceExecAbort(

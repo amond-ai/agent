@@ -1,5 +1,6 @@
 import { Bash } from 'just-bash'
 import { describe, expect, it, vi } from 'vitest'
+import { SandboxDiedError } from './errors.ts'
 import { defineSandboxContract } from './__contract__/define-sandbox-contract.ts'
 import type { OrphanedExecSettlement, SandboxDriver } from './sandbox.ts'
 import { bash, sandboxFromDriver } from './sandbox.ts'
@@ -69,6 +70,33 @@ describe('sandboxFromDriver', () => {
 
     await expect(sandbox.readTextFile({ path: 'a.txt' })).rejects.toBe(readError)
     await expect(sandbox.readBinaryFile({ path: 'a.txt' })).rejects.toBe(readError)
+  })
+
+  it('rejects run() asynchronously when the driver exec throws synchronously', async () => {
+    const execError = new TypeError('boom')
+    const { driver } = justBashDriver(new Bash({ cwd: '/work' }))
+    const sandbox = sandboxFromDriver({
+      ...driver,
+      exec: () => { throw execError },
+    }, '/work')
+
+    let pending: Promise<unknown> | undefined
+    expect(() => { pending = sandbox.run({ command: 'echo hi' }) }).not.toThrow()
+    await expect(pending).rejects.toBe(execError)
+  })
+
+  it('rethrows SandboxDiedError from a read without consulting exists()', async () => {
+    const died = new SandboxDiedError({ operation: 'readFile', reason: 'stopped' })
+    const exists = vi.fn(async () => false)
+    const { driver } = justBashDriver(new Bash({ cwd: '/work' }))
+    const sandbox = sandboxFromDriver({
+      ...driver,
+      readFile: async () => { throw died },
+      exists,
+    }, '/work')
+
+    await expect(sandbox.readTextFile({ path: 'a.txt' })).rejects.toBe(died)
+    expect(exists).not.toHaveBeenCalled()
   })
 
   it('takes a custom description', () => {
