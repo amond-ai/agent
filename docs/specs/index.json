@@ -84,7 +84,7 @@
       "domain": "sandbox",
       "feature": "spec",
       "created_at": "2026-10-21T13:37:31.365Z",
-      "updated_at": "2026-10-21T13:50:41.837Z",
+      "updated_at": "2026-10-21T13:55:59.013Z",
       "source_tracks": [
         "ai-sdk-sandbox-20261020"
       ],
@@ -113,12 +113,12 @@
         {
           "id": "REQ-005",
           "kind": "functional",
-          "statement": "keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`"
+          "statement": "keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled` when the caller supplies one, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`"
         },
         {
           "id": "REQ-006",
           "kind": "functional",
-          "statement": "deliver `spawn` output live on `local()` and `cloudflareSandbox`, and on completion on `bash()` and driver-backed sandboxes, with `wait`, `kill`, and abort working on all of them"
+          "statement": "deliver `spawn` output live on `local()` and on `cloudflareSandbox` stubs that provide `execStream`, and on completion on `bash()`, driver-backed sandboxes, and `cloudflareSandbox` stubs without `execStream`, with `wait`, `kill`, and abort working on all of them"
         },
         {
           "id": "REQ-007",

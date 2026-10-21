@@ -11,7 +11,7 @@ there.
 
 **Impact**: This is a breaking change to the sandbox API. Commands run through the AI SDK's
 `run` and `spawn` instead of `exec`, and file reads and writes use the AI SDK's method names.
-Existing sandbox adapters keep working without changes. Nothing is published yet, so no released
+Adapters built on the framework's driver interface keep working without changes; an adapter that implements the sandbox directly has to move to the new methods. Nothing is published yet, so no released
 version is affected.
 
 **Next steps**: We will write the implementation plan, then build and test the change on all
@@ -36,7 +36,7 @@ arriving all at once at the end.
 
 **What to expect**: This is the breaking change described when we picked up the request. Commands
 use `run` and `spawn` instead of `exec`, and file reads and writes use the AI SDK's method names.
-Existing sandbox adapters keep working without changes. One known limit: on Cloudflare, stopping a
+Adapters built on the framework's driver interface keep working without changes; an adapter that implements the sandbox directly has to move to the new methods. One known limit: on Cloudflare, stopping a
 spawned command releases the caller at once, but the command itself keeps running in the
 container. Stopping it for real is planned as a follow-up.
 

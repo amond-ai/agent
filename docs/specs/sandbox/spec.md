@@ -7,7 +7,7 @@ depends: []
 conflicts: []
 traces: []
 created_at: 2026-10-21T13:37:31.365Z
-updated_at: 2026-10-21T13:50:41.837Z
+updated_at: 2026-10-21T13:55:59.013Z
 source_tracks: ["ai-sdk-sandbox-20261020"]
 ---
 
@@ -64,10 +64,10 @@ The system MUST replace the framework's `readFile(path)`, `readFileBuffer(path)`
 - WHEN `writeTextFile` targets a path whose parent directories do not exist
 - THEN create them and write the file
 
-### Requirement: keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`
+### Requirement: keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled` when the caller supplies one, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`
 <!-- req: REQ-005 tracks=ai-sdk-sandbox-20261020 -->
 
-The system MUST keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled`, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`.
+The system MUST keep the existing abort and liveness contract for `run` and `spawn`: a pre-aborted call never executes, a mid-flight abort rejects promptly, an orphaned command's eventual settlement is reported to `onOrphanSettled` when the caller supplies one, and on providers that detect sandbox death, that death rejects with `SandboxDiedError`.
 
 #### Scenario: If `run` is called with an `abortSignal` that is already aborted, then the system shall reject without executing the command.
 
@@ -89,10 +89,10 @@ The system MUST keep the existing abort and liveness contract for `run` and `spa
 - WHEN the sandbox dies while `run` is in flight on a provider that detects sandbox death
 - THEN reject with `SandboxDiedError`
 
-### Requirement: deliver `spawn` output live on `local()` and `cloudflareSandbox`, and on completion on `bash()` and driver-backed sandboxes, with `wait`, `kill`, and abort working on all of them
+### Requirement: deliver `spawn` output live on `local()` and on `cloudflareSandbox` stubs that provide `execStream`, and on completion on `bash()`, driver-backed sandboxes, and `cloudflareSandbox` stubs without `execStream`, with `wait`, `kill`, and abort working on all of them
 <!-- req: REQ-006 tracks=ai-sdk-sandbox-20261020 -->
 
-The system MUST deliver `spawn` output live on `local()` and `cloudflareSandbox`, and on completion on `bash()` and driver-backed sandboxes, with `wait`, `kill`, and abort working on all of them.
+The system MUST deliver `spawn` output live on `local()` and on `cloudflareSandbox` stubs that provide `execStream`, and on completion on `bash()`, driver-backed sandboxes, and `cloudflareSandbox` stubs without `execStream`, with `wait`, `kill`, and abort working on all of them.
 
 #### Scenario: While a command started with `spawn` on `local()` is still running, the system shall deliver the output it has already written on `stdout`.
 
