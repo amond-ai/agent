@@ -59,6 +59,54 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) { throw abortErrorFor(signal) }
 }
 
+/**
+ * Drain `stream` into bytes, stopping as soon as `signal` aborts: the reader
+ * is cancelled and the read rejects with the abort error, even if the stream
+ * never produces another chunk.
+ */
+async function drainStream(
+  stream: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+): Promise<Uint8Array> {
+  if (!signal) { return streamToBytes(stream) }
+  throwIfAborted(signal)
+  const reader = stream.getReader()
+  let onAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      reader.cancel(signal.reason).catch(() => {})
+      reject(abortErrorFor(signal))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  // The losing side must never surface as an unhandled rejection.
+  aborted.catch(() => {})
+  const drained = (async () => {
+    const chunks: Uint8Array[] = []
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) { break }
+      chunks.push(value)
+      total += value.byteLength
+    }
+    const out = new Uint8Array(total)
+    let offset = 0
+    for (const chunk of chunks) {
+      out.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return out
+  })()
+  drained.catch(() => {})
+  try {
+    return await Promise.race([drained, aborted])
+  }
+  finally {
+    if (onAbort) { signal.removeEventListener('abort', onAbort) }
+  }
+}
+
 export function createSandboxFileMethods(primitives: SandboxFilePrimitives): SandboxFileMethods {
   const { resolvePath, readText, readBytes, write, isMissing } = primitives
 
@@ -88,6 +136,9 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
 
     async readTextFile({ path, abortSignal, encoding, startLine, endLine }) {
       throwIfAborted(abortSignal)
+      if (encoding !== undefined && canonicalEncoding(encoding) === undefined) {
+        throw new RangeError(`Unsupported encoding "${encoding}".`)
+      }
       const decoded = await readOrNull(path, async (resolved) => {
         if (encoding === undefined || canonicalEncoding(encoding) === 'utf-8') {
           return readText(resolved)
@@ -99,7 +150,9 @@ export function createSandboxFileMethods(primitives: SandboxFilePrimitives): San
 
     async writeFile({ path, content, abortSignal }) {
       throwIfAborted(abortSignal)
-      await write(resolvePath(path), await streamToBytes(content))
+      const bytes = await drainStream(content, abortSignal)
+      throwIfAborted(abortSignal)
+      await write(resolvePath(path), bytes)
     },
 
     async writeBinaryFile({ path, content, abortSignal }) {

@@ -16,7 +16,21 @@ import { createSandboxFileMethods } from '../sandbox-files.ts'
 import { createProcessController } from '../sandbox-streams.ts'
 import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 import type { FileStat, Sandbox, SandboxRunOptions, ShellResult } from '../types.ts'
+import type { ShellExit } from './shell-process.ts'
 import { launchShell, MAX_OUTPUT_BYTES } from './shell-process.ts'
+
+/** Appended to stderr when the shell's output exceeded {@link MAX_OUTPUT_BYTES}. */
+const OVERFLOW_NOTICE = `\n[amond] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`
+
+/**
+ * The exit code of a shell that neither failed to start nor overflowed.
+ * `code` is null when the child died from a signal; a kill driven by this
+ * adapter's own abort or deadline maps to the timeout(1) convention's 124,
+ * and a signal death we did not initiate keeps the generic failure code 1.
+ */
+function shellExitCode(exit: ShellExit, signal: AbortSignal | undefined): number {
+  return exit.code ?? (signal?.aborted ? 124 : 1)
+}
 
 /**
  * Run `command` through the shared shell launcher and collect its output as
@@ -49,17 +63,13 @@ async function execShell(
   if (exit.overflowed) {
     return {
       stdout,
-      stderr: `${stderr}\n[amond] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`,
+      stderr: stderr + OVERFLOW_NOTICE,
       exitCode: 1,
     }
   }
-  // `code` is null when the child died from a signal. A kill driven
-  // by this adapter's own abort resolves with the timeout(1)
-  // convention's exit code 124; callers only ever see it for
-  // `timeoutMs` kills, because the caller-abort path rethrows
-  // AbortError before the result surfaces. A signal death we did
-  // not initiate keeps the generic failure code.
-  return { stdout, stderr, exitCode: exit.code ?? (opts.signal?.aborted ? 124 : 1) }
+  // Callers only see 124 for `timeoutMs` kills: the caller-abort path
+  // rethrows AbortError before the result surfaces.
+  return { stdout, stderr, exitCode: shellExitCode(exit, opts.signal) }
 }
 
 /**
@@ -209,11 +219,11 @@ export function createLocalSandbox(options: LocalSandboxOptions = {}): Sandbox {
         controller.exit(1)
       }
       else if (exit.overflowed) {
-        controller.pushStderr(`\n[amond] local exec output exceeded ${MAX_OUTPUT_BYTES} bytes; process tree killed`)
+        controller.pushStderr(OVERFLOW_NOTICE)
         controller.exit(1)
       }
       else {
-        controller.exit(exit.code ?? (mergedSignal?.aborted ? 124 : 1))
+        controller.exit(shellExitCode(exit, mergedSignal))
       }
     })
     return controller.process

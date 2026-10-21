@@ -349,7 +349,11 @@ export interface Sandbox extends Experimental_SandboxSession {
   writeBinaryFile(
     options: Parameters<Experimental_SandboxSession['writeBinaryFile']>[0],
   ): Promise<void>
-  /** Write text, creating missing parent directories. */
+  /**
+   * Write text, creating missing parent directories. Only UTF-8 is supported
+   * (the web platform has no other text encoder): any other `encoding` label
+   * rejects with a `TypeError`.
+   */
   writeTextFile(
     options: Parameters<Experimental_SandboxSession['writeTextFile']>[0],
   ): Promise<void>

@@ -4,6 +4,11 @@ import type { CallHandle } from './types.ts'
 
 /** Build a standard `AbortError` (`DOMException`) carrying the signal's reason as `cause`. */
 export function abortErrorFor(signal: AbortSignal): Error {
+  return abortErrorWithSuffix(signal, '')
+}
+
+/** {@link abortErrorFor} with `suffix` appended to the message; `cause` is still the signal's reason. */
+export function abortErrorWithSuffix(signal: AbortSignal, suffix: string): Error {
   const reason = signal.reason
   const message =
     reason instanceof Error && reason.message
@@ -11,7 +16,7 @@ export function abortErrorFor(signal: AbortSignal): Error {
       : typeof reason === 'string' && reason
         ? reason
         : 'The operation was aborted.'
-  const error = new DOMException(message, 'AbortError')
+  const error = new DOMException(message + suffix, 'AbortError')
   // `cause` is read-only on DOMException in some runtimes.
   try {
     Object.defineProperty(error, 'cause', { value: reason, configurable: true })
@@ -160,15 +165,7 @@ export function abandonToolOnAbort<T>(
           () => {},
           () => {},
         )
-        const base = abortErrorFor(signal)
-        const error = new DOMException(base.message + ABANDONED_TOOL_SUFFIX, 'AbortError')
-        try {
-          Object.defineProperty(error, 'cause', { value: signal.reason, configurable: true })
-        }
-        catch {
-          /* leave cause unset */
-        }
-        reject(error)
+        reject(abortErrorWithSuffix(signal, ABANDONED_TOOL_SUFFIX))
       }, 0)
     }
     signal.addEventListener('abort', onAbort, { once: true })

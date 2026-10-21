@@ -99,6 +99,13 @@ describe('createSandboxFileMethods reads', () => {
     expect(calls.at(-1)).toBe('readText /work/f')
   })
 
+  it('rejects an unknown encoding label even when the file is missing', async () => {
+    const { methods, primitives } = setup()
+    await expect(methods.readTextFile({ path: 'nope', encoding: 'not-a-codec' })).rejects.toBeInstanceOf(RangeError)
+    expect(primitives.readText).not.toHaveBeenCalled()
+    expect(primitives.readBytes).not.toHaveBeenCalled()
+  })
+
   it('rejects with an AbortError before any provider call when already aborted', async () => {
     const { methods, primitives } = setup({ '/work/a': 'x' })
     const abortSignal = AbortSignal.abort('stop')
@@ -119,6 +126,19 @@ describe('createSandboxFileMethods reads', () => {
 })
 
 describe('createSandboxFileMethods writes', () => {
+  it('aborting while the input stream drains rejects, cancels the stream, and never writes', async () => {
+    const { methods, primitives } = setup()
+    const cancel = vi.fn()
+    const content = new ReadableStream<Uint8Array>({ cancel })
+    const controller = new AbortController()
+    const pending = methods.writeFile({ path: 'a', content, abortSignal: controller.signal })
+    await Promise.resolve()
+    controller.abort('stop')
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(cancel).toHaveBeenCalled()
+    expect(primitives.write).not.toHaveBeenCalled()
+  })
+
   it('writes text, bytes, and streams to the resolved path', async () => {
     const { methods, files } = setup()
     await methods.writeTextFile({ path: 't', content: 'text' })

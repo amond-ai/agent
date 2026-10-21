@@ -8,7 +8,7 @@
 
 import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 
-import { abortErrorFor, roundUpTimeoutMs } from '../abort.ts'
+import { abortErrorFor, abortErrorWithSuffix, roundUpTimeoutMs } from '../abort.ts'
 import { ORPHANED_EXEC_SUFFIX } from '../sandbox.ts'
 import { createProcessController } from '../sandbox-streams.ts'
 import type { SandboxRunOptions } from '../types.ts'
@@ -140,15 +140,7 @@ export interface LiveSpawnContext {
  * running), so it carries the same orphan wording as the buffered path.
  */
 function orphanAbortError(signal: AbortSignal): Error {
-  const error = new DOMException(abortErrorFor(signal).message + ORPHANED_EXEC_SUFFIX, 'AbortError')
-  // `cause` is read-only on DOMException in some runtimes.
-  try {
-    Object.defineProperty(error, 'cause', { value: signal.reason, configurable: true })
-  }
-  catch {
-    /* leave cause unset */
-  }
-  return error
+  return abortErrorWithSuffix(signal, ORPHANED_EXEC_SUFFIX)
 }
 
 /**

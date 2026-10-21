@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { SandboxDiedError } from '../errors.ts'
 import type { Sandbox } from '../types.ts'
 import type { CloudflareSandboxStub } from './cf-sandbox.ts'
@@ -275,6 +275,30 @@ describe('cloudflareSandbox live spawn', () => {
 
     await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError', message: expect.stringContaining('stop now') })
     expect(driven.cancelled()).not.toBe('not cancelled')
+  })
+
+  it('cancels a stream that arrives after the caller aborted while execStream was pending', async () => {
+    const driven = drivenStub()
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const execStream = driven.stub.execStream!.bind(driven.stub)
+    const stub: CloudflareSandboxStub = {
+      ...driven.stub,
+      execStream: async (command, options) => {
+        await gate
+        return execStream(command, options)
+      },
+    }
+    const caller = new AbortController()
+    const proc = await spawnOn(stub, { command: 'long', abortSignal: caller.signal })
+
+    caller.abort(new Error('stop now'))
+
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError', message: expect.stringContaining('stop now') })
+    expect(driven.cancelled()).toBe('not cancelled')
+
+    release!()
+    await vi.waitFor(() => expect(driven.cancelled()).not.toBe('not cancelled'))
   })
 
   it('does not call execStream for a pre-aborted call', async () => {

@@ -4,7 +4,7 @@
 
 import type { Experimental_SandboxProcess } from '@ai-sdk/provider-utils'
 
-import { abortErrorFor, composeTimeoutSignal, roundUpTimeoutMs } from './abort.ts'
+import { abortErrorFor, abortErrorWithSuffix, composeTimeoutSignal, roundUpTimeoutMs } from './abort.ts'
 import { createSandboxFileMethods } from './sandbox-files.ts'
 import { createProcessController } from './sandbox-streams.ts'
 import type {
@@ -110,16 +110,7 @@ function raceExecAbort(
         result => record({ result }),
         (error: unknown) => record({ error }),
       )
-      const base = abortErrorFor(signal)
-      const error = new DOMException(base.message + ORPHANED_EXEC_SUFFIX, 'AbortError')
-      // `cause` is read-only on DOMException in some runtimes.
-      try {
-        Object.defineProperty(error, 'cause', { value: signal.reason, configurable: true })
-      }
-      catch {
-        /* leave cause unset */
-      }
-      reject(error)
+      reject(abortErrorWithSuffix(signal, ORPHANED_EXEC_SUFFIX))
     }
     signal.addEventListener('abort', onAbort, { once: true })
 

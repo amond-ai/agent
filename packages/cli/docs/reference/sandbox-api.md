@@ -8,7 +8,7 @@ A sandbox adapter wraps an execution environment — a provider SDK, a container
 
 **The model never calls this surface.** An agent's model-facing file and shell capabilities are the built-in tools — `read` with offset/limit paging, `edit` string replacement, `grep`, `glob` — built on top of it and documented in [Agent Behavior](/docs/reference/agent-behavior/#built-in-tools). This page is for the two audiences underneath: adapter authors implementing a provider, and application code scripting the environment through [`harness.sandbox`](/docs/reference/agent-api/#harnesssandbox).
 
-All symbols on this page are exported from `@amond-ai/agent`, except `local()` (from `@amond-ai/agent/node`) and `cloudflareSandbox()` (from `@amond-ai/agent/cloudflare`). The former names — `SessionEnv`, `SandboxApi`, `SessionToolFactory`, `createSandboxSessionEnv`, and the factory method `createSessionEnv` — remain available as deprecated aliases, so existing adapters keep compiling and running unchanged.
+All symbols on this page are exported from `@amond-ai/agent`, except `local()` (from `@amond-ai/agent/node`) and `cloudflareSandbox()` (from `@amond-ai/agent/cloudflare`). The former names — `SessionEnv`, `SandboxApi`, `SessionToolFactory`, `createSandboxSessionEnv`, and the factory method `createSessionEnv` — remain available as deprecated aliases. Driver-based adapters keep compiling and running unchanged (`SandboxApi` is `SandboxDriver`, and `createSandboxSessionEnv` calls `sandboxFromDriver`). `SessionEnv` is the same type as `Sandbox`, so a hand-written `SessionEnv` that still implements the former surface (`exec`, `readFileBuffer`, path-string `readFile`/`writeFile`) no longer type-checks and must move to the current `Sandbox` methods.
 
 ## `SandboxFactory`
 
@@ -139,6 +139,8 @@ Most adapters should not implement this interface by hand: [`sandboxFromDriver`]
 
 A buffered `spawn` runs the command through `run`, so abort, `timeoutMs`, and orphan reporting behave as they do there. `kill()` aborts the command the same way.
 
+On `cloudflareSandbox` with `execStream`, there is no remote kill: `kill()` and an abort stop delivering output and reject `wait()` with an `AbortError` whose message names the orphan, but the command may keep running in the container.
+
 ### File methods
 
 Each of the first six methods takes a single options object with `path`.
@@ -147,7 +149,7 @@ Each of the first six methods takes a single options object with `path`.
 - `readBinaryFile({ path })` — reads raw bytes as a `Uint8Array`.
 - `readTextFile({ path, encoding?, startLine?, endLine? })` — reads a file as text. `startLine` and `endLine` select a 1-based, inclusive line range.
 - A read of a path that does not exist resolves with `null` rather than throwing.
-- `writeFile({ path, content })` writes a `ReadableStream<Uint8Array>`, `writeBinaryFile` writes a `Uint8Array`, and `writeTextFile` writes a string. All three create or replace the file and must create missing parent directories — a cross-mode guarantee (`writeTextFile({ path: 'out/nested/report.md', … })` never requires a prior `mkdir`). `sandboxFromDriver`, `bash()`, and `local()` all implement it by retrying a failed write once after `mkdir -p` on the parent; a hand-written sandbox must provide the same guarantee.
+- `writeFile({ path, content })` writes a `ReadableStream<Uint8Array>`, `writeBinaryFile` writes a `Uint8Array`, and `writeTextFile` writes a string. `writeTextFile` accepts only UTF-8 encoding labels (`encoding: 'utf-8'`, `'utf8'`) and rejects any other with a `TypeError`. All three create or replace the file and must create missing parent directories — a cross-mode guarantee (`writeTextFile({ path: 'out/nested/report.md', … })` never requires a prior `mkdir`). `sandboxFromDriver`, `bash()`, and `local()` all implement it by retrying a failed write once after `mkdir -p` on the parent; a hand-written sandbox must provide the same guarantee.
 - `stat(path)` — file metadata. Throws if the path does not exist.
 - `readdir(path)` — directory entry names (names only, no paths). Throws if the path is not a directory.
 - `exists(path)` — `true` if a file or directory exists. Never throws.

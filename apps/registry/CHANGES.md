@@ -56,6 +56,9 @@ and adds a `### Version 2` entry to its Upgrade Guide. Those three edits are one
 | --- | --- | --- |
 | Kills the run and rejects with `AbortError` in `settleExec` when the signal is already aborted. | #7 | v2 |
 | Version bump: `version`, markers, Upgrade Guide entry. | #7 | v2 |
+| Rebuilds the sandbox on `SandboxDriver` and `sandboxFromDriver` instead of a hand-written `Sandbox`, because the `Sandbox` type now follows the AI SDK sandbox session. `createWorkspaceDriver` replaces `createWorkspaceSandbox`, and `normalizePath`, `abortError`, and `settleExec` are removed: the wrapper resolves paths and rejects promptly on abort, and the driver only kills the run best-effort. | AI SDK sandbox session | v3 |
+| Adds a `description` to the sandbox. | AI SDK sandbox session | v3 |
+| Version bump: `version`, markers, Upgrade Guide entry. | AI SDK sandbox session | v3 |
 
 ## `sandbox--cloudflare.md`
 
