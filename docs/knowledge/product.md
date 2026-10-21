@@ -39,7 +39,7 @@ and the `amond` CLI.
 | Agent modules (`'use agent'`), routing, durable submissions, Durable Object SQLite persistence | Flue runtime, shipped as `@amond-ai/agent` | Imported and renamed ([#20](https://github.com/amond-ai/agent/issues/20)) |
 | Vite build to Cloudflare Durable Objects | Flue Vite plugin, shipped as `@amond-ai/agent-vite` | Imported and renamed ([#20](https://github.com/amond-ai/agent/issues/20)) |
 | `amond` CLI and `amond.config.ts` | Flue CLI, shipped as `amond` | Imported and renamed ([#20](https://github.com/amond-ai/agent/issues/20)) |
-| One sandbox for Flue's tools and the harness, plus a Cloudflare provider | Flue `Sandbox` extending `Experimental_SandboxSession` | Planned ([#15](https://github.com/amond-ai/agent/issues/15)) |
+| One sandbox for Flue's tools and the harness, plus a Cloudflare provider | Flue `Sandbox` extending `Experimental_SandboxSession` | `Sandbox` implemented in `@amond-ai/agent`, in review ([#15](https://github.com/amond-ai/agent/issues/15), [#44](https://github.com/amond-ai/agent/pull/44)). The `@amond-ai/sandbox-cloudflare` package is planned in `amond-ai/harness` |
 | Agent-loop seam in Flue's session layer | Refactor of Flue's `session.ts` | Planned ([#16](https://github.com/amond-ai/agent/issues/16)) |
 | Agent turns through the AI SDK harness, Claude Code first | `HarnessV1` via `@amond-ai/harness-claude-code` | Planned ([#17](https://github.com/amond-ai/agent/issues/17)) |
 | Pi removed, Cloudflare end-to-end example | Flue runtime | Planned ([#18](https://github.com/amond-ai/agent/issues/18)) |
@@ -72,7 +72,8 @@ and the `amond` CLI.
 ## Status and success criteria
 
 **Pre-alpha. Flue's packages are imported and renamed ([#20](https://github.com/amond-ai/agent/issues/20)).
-The sandbox, agent-loop seam, harness and Pi removal (#15–#18) have not started.** No amond agent
+The sandbox (#15) is implemented and in review; the agent-loop seam, harness and Pi removal (#16–#18) have
+not started.** No amond agent
 package is published to npm yet. The packages that predate ADR-0003 (`agent-core`, `agent-durable`,
 `agent-durable-cloudflare`) are retiring in #18; the old `amond` package was retired when the
 imported CLI took its name. The harness adapter packages are reassessed once
