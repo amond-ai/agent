@@ -200,10 +200,11 @@ const SHAPES = [
 
 /** Fail instead of hanging when a settle never comes (a stream the session left open). */
 function within<T>(promise: PromiseLike<T>, ms = 2000): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error(`no result within ${ms} ms`)), ms)),
-  ])
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`no result within ${ms} ms`)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
 describe.each(SHAPES)('cloudflareSandbox commands run in their own shell scope ($name)', ({ make }) => {
