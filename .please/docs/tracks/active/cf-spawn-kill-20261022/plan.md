@@ -115,6 +115,10 @@ Rejected alternatives (investigation.md §3):
 
 ## Progress
 
+- [x] (2026-10-22 13:30 KST) T001 Run live spawn through the process API and stop the remote command on `kill()` and caller abort
+  Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` -> 309 passed | 8 skipped (repro red before fix, 2 failed; green after); `bun run check`, `bun run lint` exit 0; `docs-content.test.ts` 14 passed
+  Note: the process-API fake (`fakeProcessStub`) lives in `cf-sandbox.test.ts` beside `fakeStreamingStub`, not in `__contract__/fake-cloudflare-stub.ts`; the scratch repro was folded into `cf-spawn.test.ts` and deleted.
+
 ## Decision Log
 
 ## Surprises & Discoveries

@@ -96,6 +96,13 @@ describe('createExecStreamParser', () => {
     ])
   })
 
+  it('reads the exit event\'s code, or leaves it undefined when absent', () => {
+    expect(parseChunks([frame({ type: 'exit', exitCode: 5 }), frame({ type: 'exit' })])).toEqual([
+      { type: 'exit', exitCode: 5 },
+      { type: 'exit', exitCode: undefined },
+    ])
+  })
+
   it('reads the error event\'s message', () => {
     expect(parseChunks([frame({ type: 'error', error: 'boom' })])).toEqual([{ type: 'error', error: 'boom' }])
   })
@@ -326,5 +333,376 @@ describe('cloudflareSandbox live spawn', () => {
       name: 'AbortError',
     })
     expect(driven.calls).toEqual([])
+  })
+})
+
+interface ProcessStubOptions {
+  /** Holds `startProcess` until the test calls `release`. */
+  gateStart?: boolean
+  /** Makes `killProcess` reject with this error. */
+  killError?: unknown
+  /** Holds `killProcess` until the test calls `releaseKill`. */
+  gateKill?: boolean
+  /** The record `getProcess` answers with; leave out to omit `getProcess`. */
+  record?: { exitCode?: number } | null
+}
+
+/**
+ * A stub that models the container's process table the way a real
+ * `@cloudflare/sandbox` 0.11 container behaves: cancelling an `execStream`
+ * stream does not stop its command, and only `killProcess(id)` stops a process
+ * started with `startProcess`. The test drives the log stream by hand.
+ */
+function processStub(options: ProcessStubOptions = {}) {
+  let status = 'running'
+  const running = new Map<string, string>()
+  const startCalls: { command: string, options?: { cwd?: string, env?: Record<string, string>, timeout?: number } }[] = []
+  const killCalls: string[] = []
+  const streamCalls: string[] = []
+  let logs: ReadableStreamDefaultController<Uint8Array> | undefined
+  let logsCancelled = false
+  let release!: () => void
+  const startGate = new Promise<void>((resolve) => { release = resolve })
+  let releaseKill!: () => void
+  const killGate = new Promise<void>((resolve) => { releaseKill = resolve })
+  const neverSettles = () => new Promise<never>(() => {})
+  const stub: CloudflareSandboxStub = {
+    exec: neverSettles,
+    readFile: neverSettles,
+    writeFile: neverSettles,
+    exists: neverSettles,
+    mkdir: neverSettles,
+    deleteFile: neverSettles,
+    getState: async () => ({ status }),
+    // Present so the tests prove the process path wins over `execStream`.
+    execStream: neverSettles,
+    async startProcess(command, startOptions) {
+      startCalls.push({ command, options: startOptions })
+      if (options.gateStart) { await startGate }
+      const id = `proc-${startCalls.length}`
+      running.set(id, command)
+      return { id }
+    },
+    async streamProcessLogs(id) {
+      streamCalls.push(id)
+      return new ReadableStream<Uint8Array>({
+        start: (controller) => { logs = controller },
+        cancel: () => { logsCancelled = true },
+      })
+    },
+    async killProcess(id) {
+      killCalls.push(id)
+      if (options.gateKill) { await killGate }
+      if (options.killError !== undefined) { throw options.killError }
+      running.delete(id)
+    },
+    ...(options.record !== undefined ? { getProcess: async () => options.record! } : {}),
+  }
+  return {
+    stub,
+    running: () => [...running.values()],
+    startCalls,
+    killCalls,
+    streamCalls,
+    send: (text: string): void => logs!.enqueue(encoder.encode(text)),
+    end: () => logs!.close(),
+    exit: (): void => { running.clear() },
+    release,
+    releaseKill,
+    stop: () => { status = 'stopped' },
+    logsCancelled: () => logsCancelled,
+  }
+}
+
+/** An error as the SDK throws it: the class name and a `code`. */
+function sdkError(name: string, code: string, message = 'stop failed'): Error {
+  return Object.assign(new Error(message), { name, code })
+}
+
+describe('cloudflareSandbox live spawn through the process API', () => {
+  beforeAll(() => {
+    setContainerDeathCadenceForTests({ statePollMs: 5, probeSilenceMs: 200 })
+  })
+
+  afterAll(() => {
+    setContainerDeathCadenceForTests()
+  })
+
+  it('leaves no command running in the container after kill() (#47)', async () => {
+    const fake = processStub()
+    const proc = await spawnOn(fake.stub, { command: 'sleep 100' })
+
+    await proc.kill()
+    await proc.wait().then(undefined, () => {})
+
+    expect(fake.running()).toEqual([])
+  })
+
+  it('leaves no command running after a caller abort (#47)', async () => {
+    const fake = processStub()
+    const caller = new AbortController()
+    const proc = await spawnOn(fake.stub, { command: 'sleep 100', abortSignal: caller.signal })
+
+    caller.abort(new Error('stop now'))
+    await proc.wait().then(undefined, () => {})
+    await vi.waitFor(() => expect(fake.running()).toEqual([]))
+  })
+
+  it('sends a stop requested before startProcess resolves as soon as the id arrives, without opening the logs', async () => {
+    const fake = processStub({ gateStart: true })
+    const proc = await spawnOn(fake.stub, { command: 'sleep 100' })
+    const killed = proc.kill()
+
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fake.killCalls).toEqual([])
+
+    fake.release()
+    await killed
+
+    expect(fake.killCalls).toEqual(['proc-1'])
+    expect(fake.running()).toEqual([])
+    expect(fake.streamCalls).toEqual([])
+  })
+
+  it('sends a caller abort that arrives before startProcess resolves as soon as the id arrives', async () => {
+    const fake = processStub({ gateStart: true })
+    const caller = new AbortController()
+    const proc = await spawnOn(fake.stub, { command: 'sleep 100', abortSignal: caller.signal })
+
+    caller.abort(new Error('stop now'))
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError', message: expect.stringContaining('stop now') })
+    fake.release()
+
+    await vi.waitFor(() => expect(fake.killCalls).toEqual(['proc-1']))
+    expect(fake.streamCalls).toEqual([])
+  })
+
+  it('does not call the stub for a pre-aborted call', async () => {
+    const fake = processStub()
+
+    await expect(spawnOn(fake.stub, { command: 'never', abortSignal: AbortSignal.abort() })).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    expect(fake.startCalls).toEqual([])
+  })
+
+  it('rejects wait() at once with the orphan wording, before the container confirms the stop', async () => {
+    const fake = processStub({ gateKill: true })
+    const proc = await spawnOn(fake.stub, { command: 'long' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    const killed = proc.kill()
+
+    const outcome = await settleWithin(proc.wait(), 500)
+    expect(outcome).toMatchObject({ status: 'rejected', error: { name: 'AbortError' } })
+    expect((outcome as { error: Error }).error.message).toMatch(/could not be confirmed cancelled and may still be running/)
+    expect((await settleWithin(killed, 30)).status).toBe('pending')
+
+    fake.releaseKill()
+    await killed
+  })
+
+  it('sends one stop however many of kill() and an abort fire', async () => {
+    const fake = processStub()
+    const caller = new AbortController()
+    const proc = await spawnOn(fake.stub, { command: 'long', abortSignal: caller.signal })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    await Promise.all([proc.kill(), proc.kill()])
+    caller.abort()
+    await proc.wait().then(undefined, () => {})
+
+    expect(fake.killCalls).toEqual(['proc-1'])
+  })
+
+  it('delivers output before the command completes and resolves wait() with the exit code', async () => {
+    const fake = processStub()
+    const proc = await spawnOn(fake.stub, { command: 'build', workingDirectory: 'sub', env: { A: '1' }, timeoutMs: 1500.4 })
+    const stdout = proc.stdout.getReader()
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    fake.send(frame({ type: 'process_info' }) + frame({ type: 'stdout', data: 'first\n' }) + frame({ type: 'progress' }))
+
+    expect(decoder.decode((await stdout.read()).value)).toBe('first\n')
+    expect((await settleWithin(proc.wait(), 30)).status).toBe('pending')
+
+    fake.send(frame({ type: 'stderr', data: 'warn\n' }) + frame({ type: 'exit', exitCode: 3 }))
+    fake.end()
+
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 3 })
+    expect(await new Response(proc.stderr).text()).toBe('warn\n')
+    expect(await stdout.read()).toEqual({ done: true, value: undefined })
+    expect(fake.startCalls).toEqual([{ command: 'build', options: { cwd: '/workspace/sub', env: { A: '1' }, timeout: 1501 } }])
+    expect(fake.killCalls).toEqual([])
+  })
+
+  it('falls back to getProcess when the exit event has no exit code', async () => {
+    const fake = processStub({ record: { exitCode: 7 } })
+    const proc = await spawnOn(fake.stub, { command: 'x' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    fake.send(frame({ type: 'exit' }))
+
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 7 })
+  })
+
+  it.each([
+    ['getProcess has no exit code', { record: {} }],
+    ['getProcess is absent', {}],
+  ] satisfies [string, ProcessStubOptions][])('rejects wait() when the exit code is missing and %s', async (_name, stubOptions) => {
+    const fake = processStub(stubOptions)
+    const proc = await spawnOn(fake.stub, { command: 'x' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    fake.send(frame({ type: 'exit' }))
+
+    await expect(proc.wait()).rejects.toThrow(/completed without an exit code/)
+  })
+
+  it('stops the command and rejects wait() when the log stream ends without an exit event', async () => {
+    const fake = processStub()
+    const proc = await spawnOn(fake.stub, { command: 'x' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    fake.send(frame({ type: 'stdout', data: 'cut off' }))
+    fake.end()
+
+    await expect(proc.wait()).rejects.toThrow(/ended before the command completed/)
+    await vi.waitFor(() => expect(fake.killCalls).toEqual(['proc-1']))
+  })
+
+  it('rejects wait() with the message of an error event', async () => {
+    const fake = processStub()
+    const proc = await spawnOn(fake.stub, { command: 'x' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    fake.send(frame({ type: 'error', error: 'command not found' }))
+
+    await expect(proc.wait()).rejects.toThrow('command not found')
+  })
+
+  it.each([
+    ['a CommandNotFoundError by name', sdkError('CommandNotFoundError', 'X')],
+    ['a ProcessNotFoundError by name', sdkError('ProcessNotFoundError', 'X')],
+    ['COMMAND_NOT_FOUND by code', sdkError('Error', 'COMMAND_NOT_FOUND')],
+    ['PROCESS_NOT_FOUND by code', sdkError('Error', 'PROCESS_NOT_FOUND')],
+    ['a not-found message with no name or code', new Error('Process not found: proc-1')],
+  ])('settles kill() when killProcess rejects with %s', async (_name, killError) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fake = processStub({ killError })
+    const proc = await spawnOn(fake.stub, { command: 'long' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    await expect(proc.kill()).resolves.toBeUndefined()
+
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('settles kill() and reports an unexpected killProcess failure without an unhandled rejection', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fake = processStub({ killError: new Error('disk on fire') })
+    const proc = await spawnOn(fake.stub, { command: 'long' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    await expect(proc.kill()).resolves.toBeUndefined()
+
+    expect(warn).toHaveBeenCalledOnce()
+    warn.mockRestore()
+  })
+
+  it('does not stop a command that already exited, and keeps the result wait() settled with', async () => {
+    const fake = processStub()
+    const proc = await spawnOn(fake.stub, { command: 'quick' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+    fake.send(frame({ type: 'exit', exitCode: 0 }))
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
+
+    await expect(proc.kill()).resolves.toBeUndefined()
+
+    expect(fake.killCalls).toEqual([])
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
+  })
+
+  it('keeps the first result when the stop finds the command already exited', async () => {
+    const fake = processStub({ killError: sdkError('CommandNotFoundError', 'COMMAND_NOT_FOUND') })
+    const caller = new AbortController()
+    const proc = await spawnOn(fake.stub, { command: 'long', abortSignal: caller.signal })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    caller.abort()
+
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.waitFor(() => expect(fake.killCalls).toHaveLength(1))
+    await expect(proc.kill()).resolves.toBeUndefined()
+  })
+
+  it('rejects wait() with SandboxDiedError when the container dies during startProcess', async () => {
+    const fake = processStub({ gateStart: true })
+    const proc = await spawnOn(fake.stub, { command: 'long' })
+
+    fake.stop()
+
+    const outcome = await settleWithin(proc.wait(), 500)
+    expect((outcome as { error: unknown }).error).toBeInstanceOf(SandboxDiedError)
+    await expect(proc.kill()).resolves.toBeUndefined()
+  })
+
+  it('rejects wait() with SandboxDiedError and errors the streams when the container dies while streaming', async () => {
+    const fake = processStub()
+    const proc = await spawnOn(fake.stub, { command: 'long' })
+    const stdout = proc.stdout.getReader()
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+    fake.send(frame({ type: 'stdout', data: 'partial' }))
+    expect(decoder.decode((await stdout.read()).value)).toBe('partial')
+
+    fake.stop()
+
+    const outcome = await settleWithin(proc.wait(), 500)
+    expect((outcome as { error: unknown }).error).toBeInstanceOf(SandboxDiedError)
+    await expect(stdout.read()).rejects.toBeInstanceOf(SandboxDiedError)
+    await expect(proc.kill()).resolves.toBeUndefined()
+  })
+
+  it('settles kill() when the container dies during the stop', async () => {
+    const fake = processStub({ gateKill: true })
+    const proc = await spawnOn(fake.stub, { command: 'long' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    const killed = proc.kill()
+    fake.stop()
+
+    await expect(settleWithin(killed, 500)).resolves.toMatchObject({ status: 'resolved' })
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it.each(['startProcess', 'streamProcessLogs', 'killProcess'] as const)('falls back to execStream when the stub lacks %s', async (missing) => {
+    const fake = processStub()
+    const driven = drivenStub()
+    const partial: CloudflareSandboxStub = { ...fake.stub, execStream: driven.stub.execStream, [missing]: undefined }
+
+    const proc = await spawnOn(partial, { command: 'echo' })
+    driven.send(frame({ type: 'complete', exitCode: 0 }))
+
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
+    expect(driven.calls).toHaveLength(1)
+    expect(fake.startCalls).toEqual([])
+  })
+
+  it('uses the buffered path for a stub with only some process methods and no execStream', async () => {
+    const fake = processStub()
+    let execCalls = 0
+    const partial: CloudflareSandboxStub = {
+      ...fake.stub,
+      execStream: undefined,
+      killProcess: undefined,
+      exec: async () => { execCalls += 1; return { success: true, stdout: '', stderr: '', exitCode: 0 } },
+    }
+
+    const proc = await spawnOn(partial, { command: 'echo' })
+
+    await expect(proc.wait()).resolves.toEqual({ exitCode: 0 })
+    expect(execCalls).toBe(1)
+    expect(fake.startCalls).toEqual([])
   })
 })

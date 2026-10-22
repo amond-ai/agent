@@ -5,8 +5,8 @@ import { SandboxDiedError } from '../errors.ts'
 import type { SandboxDriver } from '../sandbox.ts'
 import { sandboxFromDriver } from '../sandbox.ts'
 import type { Sandbox, SandboxFactory } from '../types.ts'
-import type { StreamingCloudflareSandboxStub } from './cf-spawn.ts'
-import { spawnLive } from './cf-spawn.ts'
+import type { ProcessCloudflareSandboxStub, StreamingCloudflareSandboxStub } from './cf-spawn.ts'
+import { spawnLive, spawnProcess } from './cf-spawn.ts'
 
 /**
  * Minimal structural surface of a `@cloudflare/sandbox` Durable Object stub
@@ -43,7 +43,8 @@ export interface CloudflareSandboxStub {
    * `stderr`, `complete`, or `error`: `stdout`/`stderr` carry the output in
    * `data`, `complete` carries `exitCode`, and `error` carries an `error`
    * message. Optional: when present, `spawn` delivers output live; without
-   * it, `spawn` delivers the output when the command finishes.
+   * it, `spawn` delivers the output when the command finishes. Cancelling
+   * the stream does not stop the command in the container.
    */
   execStream?(
     command: string,
@@ -53,6 +54,44 @@ export interface CloudflareSandboxStub {
       timeout?: number
     },
   ): Promise<ReadableStream<Uint8Array>>
+  /**
+   * The Cloudflare Sandbox SDK's background process API, first of three
+   * methods that `spawn` uses together: starts `command` and resolves with
+   * its `id` once it is running. Only the id and cloneable options cross the
+   * RPC boundary. Optional: `spawn` stops the command for real on `kill()`
+   * and on a caller abort only when `startProcess`, `streamProcessLogs` and
+   * `killProcess` are all present; with only some of them it uses
+   * `execStream` or the buffered path.
+   */
+  startProcess?(
+    command: string,
+    options?: {
+      cwd?: string
+      env?: Record<string, string>
+      timeout?: number
+    },
+  ): Promise<{ id: string }>
+  /**
+   * Follows the process `id`: resolves to a server-sent-events byte stream
+   * in the same `data: {json}` framing as `execStream`. Its events are
+   * `stdout`/`stderr` (output in `data`, buffered output replayed first) and
+   * a closing `exit` carrying `exitCode`, which can be missing. A
+   * `process_info` event and unknown types are ignored.
+   */
+  streamProcessLogs?(id: string): Promise<ReadableStream<Uint8Array>>
+  /**
+   * Stops the process `id` and its whole process tree (SIGTERM, then
+   * SIGKILL), resolving once it is gone. It rejects with
+   * `CommandNotFoundError` for a command that already exited and
+   * `ProcessNotFoundError` for an unknown id; `spawn` treats both as a stop
+   * that is already done.
+   */
+  killProcess?(id: string): Promise<void>
+  /**
+   * The process `id`'s record. `spawn` reads `exitCode` from it when the
+   * `exit` event lacks one. Optional: without it there is no such fallback.
+   */
+  getProcess?(id: string): Promise<{ exitCode?: number } | null>
 }
 
 export interface CloudflareSandboxOptions {
@@ -326,9 +365,22 @@ function cfSandboxToSandbox(sandbox: CloudflareSandboxStub, cwd: string = '/work
       `A Cloudflare Sandbox Linux container. The working directory is ${cwd}; relative paths and ` +
       'commands resolve against it.',
   })
+  const shared = { cwd, resolvePath: base.resolvePath, guard: guarded }
+  if (hasProcessApi(sandbox)) {
+    const live = { stub: sandbox, ...shared }
+    return { ...base, spawn: options => spawnProcess(live, options) }
+  }
   if (!hasExecStream(sandbox)) { return base }
-  const live = { stub: sandbox, cwd, resolvePath: base.resolvePath, guard: guarded }
+  const live = { stub: sandbox, ...shared }
   return { ...base, spawn: options => spawnLive(live, options) }
+}
+
+function hasProcessApi(
+  sandbox: CloudflareSandboxStub,
+): sandbox is ProcessCloudflareSandboxStub {
+  return typeof sandbox.startProcess === 'function'
+    && typeof sandbox.streamProcessLogs === 'function'
+    && typeof sandbox.killProcess === 'function'
 }
 
 function hasExecStream(
