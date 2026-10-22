@@ -54,10 +54,10 @@ Considered and not built:
 
 ## Tasks
 
-- [ ] T001 Run each caller command in its own subshell on `cloudflareSandbox`, with regression tests and docs (file: packages/agent/src/cloudflare/cf-sandbox.ts)
+- [ ] T001 Run each caller command in its own subshell on `cloudflareSandbox`, with regression tests and docs (file: packages/agent/src/cloudflare/cf-sandbox.ts) [FR-1, FR-2, FR-3, FR-5, FR-6, AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010, AC-011, AC-013, AC-014, AC-015]
   Validation: a stub that models the SDK session shell makes `echo before; exit 3` resolve `run` and `spawn` `wait()` to exit code 3 with stdout `before\n` on the process-API, `execStream`-only and buffered shapes, without `timeoutMs`; the spec's unit-test ACs (AC-001–011, 013–015) pass on that stub; the shared sandbox contract stays green on all three shapes; the two exact-command assertions in `cf-spawn.test.ts` change only their expected command string; errors and orphan reports name the caller's unwrapped command; the scratch loop file is deleted; `sandbox-api.md`'s `cloudflareSandbox` section and the guide's remote-sandbox section state that each command runs in its own shell scope, so `cd` and `export` do not carry over, as on `local()`.
   Method: `mise exec -- npx vitest run src/cloudflare/ src/__contract__/` in `packages/agent`, plus the repo's typecheck and lint
-- [ ] T002 Confirm the fix on a real Cloudflare container and resolve TD-016 (file: .please/docs/tracks/tech-debt-tracker.md) (depends on T001)
+- [ ] T002 Confirm the fix on a real Cloudflare container and resolve TD-016 (file: .please/docs/tracks/tech-debt-tracker.md) (depends on T001) [FR-4, AC-012]
   Validation: on a real container, with the fixed package: `run` and both live `spawn` paths report exit code 3 and `before` for `echo before; exit 3`; the next command runs; `env` and `cwd` reach the command; `kill()` stops a multi-command loop. TD-016 moves to Resolved, pointing at this track.
   Method: the #51 smoke worker (`/tmp/amond-t003`, cases `bareexit`, `live`, `kill`) redeployed only after the user approves the deploy, with each JSON result recorded in this plan
   STOP: the wrapped command still ends the session or hangs on the real container (the SDK does not append its completion step the way the investigation assumes); or `kill()` leaves the wrapped command running
