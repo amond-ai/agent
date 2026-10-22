@@ -16,6 +16,8 @@
 | TD-012 | ai-sdk-sandbox-20261020 | Cloudflare live `spawn` rejects `wait()` on a stream `error` event; `run` and `local()` report launch failures as exit 1 | Low | 2026-10-21 |
 | TD-013 | ai-sdk-sandbox-20261020 | `cloudflareSandbox` supports only `@cloudflare/sandbox` 0.x; 1.x removes the `getSandbox()` stub | Medium | 2026-10-21 |
 | TD-014 | ai-sdk-sandbox-20261020 | `cf-spawn.test.ts` 1 MiB frame parse test asserts < 500 ms; timing-sensitive on slow CI | Low | 2026-10-21 |
+| TD-015 | cf-spawn-kill-20261022 | Cloudflare process-path edge cases kept as plausible in review: process-log `error` message in `data`, no deadline on `kill()` while `startProcess` is pending, undisposed `startProcess` RPC stubs, `complete` frame ignored, `null` exit code from the `getProcess` fallback, orphan after a misdetected death during start (plan.md Decision Log) | Low | 2026-10-22 |
+| TD-016 | cf-spawn-kill-20261022 | A Cloudflare command ending in a bare `exit N` kills the session shell: `spawn` hangs unless `timeoutMs` is set, and `run` rejects with `SessionTerminatedError` | Medium | 2026-10-22 |
 
 ## Resolved
 

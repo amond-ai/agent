@@ -128,6 +128,7 @@ Rejected alternatives (investigation.md §3):
   - live: output arrived about 1 s apart before `wait()` resolved 3 at 4048 ms
   - `kill()` after exit resolved
   - Cleanup: `wrangler delete` and `wrangler containers delete` done; the Worker URL returns 404 and the container list is empty.
+- [x] (2026-10-22 17:15 KST) Review-stage commits (SHA: `3bd2c2ff`, `89dc37b4`)
 
 ## Decision Log
 
@@ -141,10 +142,32 @@ Rejected alternatives (investigation.md §3):
   - A misdetected container death during `startProcess` would orphan the started command.
   - The not-found message fallback in `isExpectedStopError` is loose.
   - The `raceContainerDeath` comment does not name `spawnProcess`.
-  - Out of this diff: `docs/specs/sandbox/spec.md` REQ-006 still describes Cloudflare live spawn as execStream-only.
+  - `docs/specs/sandbox/spec.md` REQ-006 still described Cloudflare live spawn as execStream-only. `/please:finalize` updated REQ-006 alone through a one-line delta; the bugfix FRs were not merged as new product requirements.
 
 ## Surprises & Discoveries
 
 - **The real `streamProcessLogs` frames and `killProcess` errors matched Context.** Frames arrived as `process_info`, then stdout and stderr, then `{type:'exit', exitCode}`, and the stream closed. `getProcess(id)` returned `{status:'failed', exitCode:3}`. Neither T003 STOP condition fired, and the parser and error matching are unchanged.
 - **A command that ends in a bare `exit N` kills the session shell.** This is how the SDK's default session works; it was there before this fix and is not something it introduced. The `execStream` stream and the process log stream both stop after the last output and never complete, so `spawn` hangs unless `timeoutMs` is set. `run` rejects with `SessionTerminatedError: Session '…' shell exited (exit code: 3)`. The next command still runs (`echo alive` → 0). Wrapping the command (`sh -c '…; exit 3'`) avoids it. Worth its own issue, outside #47's scope.
 - **One sandbox per `max_instances: 1` app.** A request on a fresh sandbox id waited for a container slot and looked like a hang. Reusing one id fixed it. This only affects the smoke harness.
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+- Live `spawn` on `cloudflareSandbox` runs through the SDK process API when the stub has `startProcess`, `streamProcessLogs` and `killProcess`. One memoized stop calls `killProcess` for `kill()`, a caller abort, the unread-output cap and a local `timeoutMs` deadline (exit 124). A stop that arrives before the id is sent once the id arrives.
+- A later `kill()` waits for the pending stop, and a `timeoutMs` above the `setTimeout` limit is armed in segments. Both came from the review.
+- An execStream-only stub keeps the old path and wording. The docs and product spec REQ-006 describe the remote stop. TD-010 is resolved.
+
+### What Went Well
+- Reading the SDK source before planning settled the frame shapes, error names and the ignored `timeout`, and the real-container smoke test then matched them, so neither T003 STOP condition fired.
+- The raw-frame smoke case found the bare-`exit` session behavior quickly, instead of leaving it as an unexplained hang.
+- Three engines (gpt, cubic, builtin) independently found the `kill()`-after-settlement gap, and the validator confirmed it before the fix pass.
+
+### What Could Improve
+- The plan's docs promised that `kill()` confirms the stop, but no test covered a second `kill()` after the process settled. A test for each documented promise would have caught it before review.
+- Greptile is enabled in `.please/config.yml` but its CLI is not installed, so every ensemble run ends `needs_human_read` instead of `no_issues`. Install it or disable the engine.
+- The track spec had no `product_spec_domain`, so the product-spec sync needed a hand-built delta. Set it in bugfix specs that change an existing product requirement.
+
+### Tech Debt Created
+- TD-015: unproven edge cases left on the process path (see Decision Log).
+- TD-016: a command ending in a bare `exit N` hangs a Cloudflare `spawn` (pre-existing, found by the smoke test).
+
