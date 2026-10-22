@@ -143,13 +143,13 @@ Most adapters should not implement this interface by hand: [`sandboxFromDriver`]
 | Sandbox | `spawn` output |
 | --- | --- |
 | `local()` | Streams live. |
-| `cloudflareSandbox` | Streams live when the stub has `execStream`; buffered otherwise. |
+| `cloudflareSandbox` | Streams live when the stub has the process methods (`startProcess`, `streamProcessLogs`, `killProcess`) or `execStream`; buffered otherwise. |
 | `bash()` | Buffered: the whole output arrives when the command exits. |
 | `sandboxFromDriver` and driver-backed sandboxes | Buffered: the whole output arrives when the command exits. |
 
 A buffered `spawn` runs the command through `run`, so abort, `timeoutMs`, and orphan reporting behave as they do there. `kill()` aborts the command the same way.
 
-On `cloudflareSandbox` with `execStream`, there is no remote kill: `kill()` and an abort stop delivering output and reject `wait()` with an `AbortError` whose message names the orphan, but the command may keep running in the container.
+On `cloudflareSandbox` with the process methods, `kill()` and an abort stop the command in the container. `wait()` rejects at once with an `AbortError` whose message still says the cancellation could not be confirmed, because it does not wait for the container. `await proc.kill()` resolves once the container has stopped the command, and it does not reject if the command already exited or the container died. On a stub with only `execStream`, there is no remote kill: `kill()` and an abort stop delivering output and reject `wait()` with an `AbortError` whose message names the orphan, but the command may keep running in the container.
 
 ### File methods
 

@@ -7,8 +7,8 @@ depends: []
 conflicts: []
 traces: []
 created_at: 2026-10-21T13:37:31.365Z
-updated_at: 2026-10-21T13:55:59.013Z
-source_tracks: ["ai-sdk-sandbox-20261020"]
+updated_at: 2026-10-22T08:11:45.066Z
+source_tracks: ["ai-sdk-sandbox-20261020", "cf-spawn-kill-20261022"]
 ---
 
 # Spec Specification
@@ -89,10 +89,10 @@ The system MUST keep the existing abort and liveness contract for `run` and `spa
 - WHEN the sandbox dies while `run` is in flight on a provider that detects sandbox death
 - THEN reject with `SandboxDiedError`
 
-### Requirement: deliver `spawn` output live on `local()` and on `cloudflareSandbox` stubs that provide `execStream`, and on completion on `bash()`, driver-backed sandboxes, and `cloudflareSandbox` stubs without `execStream`, with `wait`, `kill`, and abort working on all of them
-<!-- req: REQ-006 tracks=ai-sdk-sandbox-20261020 -->
+### Requirement: deliver `spawn` output live on `local()` and on `cloudflareSandbox` stubs that provide the process methods (`startProcess`, `streamProcessLogs`, `killProcess`) or `execStream`, and on completion on `bash()`, driver-backed sandboxes, and `cloudflareSandbox` stubs with neither, with `wait`, `kill`, and abort working on all of them; on a stub with the process methods, `kill`, an abort, the output cap, and `timeoutMs` stop the command in the container
+<!-- req: REQ-006 tracks=ai-sdk-sandbox-20261020,cf-spawn-kill-20261022 -->
 
-The system MUST deliver `spawn` output live on `local()` and on `cloudflareSandbox` stubs that provide `execStream`, and on completion on `bash()`, driver-backed sandboxes, and `cloudflareSandbox` stubs without `execStream`, with `wait`, `kill`, and abort working on all of them.
+The system MUST deliver `spawn` output live on `local()` and on `cloudflareSandbox` stubs that provide the process methods (`startProcess`, `streamProcessLogs`, `killProcess`) or `execStream`, and on completion on `bash()`, driver-backed sandboxes, and `cloudflareSandbox` stubs with neither, with `wait`, `kill`, and abort working on all of them; on a stub with the process methods, `kill`, an abort, the output cap, and `timeoutMs` stop the command in the container.
 
 #### Scenario: While a command started with `spawn` on `local()` is still running, the system shall deliver the output it has already written on `stdout`.
 
