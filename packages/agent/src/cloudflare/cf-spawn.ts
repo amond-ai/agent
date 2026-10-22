@@ -331,9 +331,27 @@ export async function spawnProcess(
       return stop
     },
     maxBufferedBytes: MAX_BUFFERED_OUTPUT_BYTES,
-    onOverflow: () => stopReading(),
-    overflowNoticeSuffix: 'output reading stopped; the remote command may still be running',
+    onOverflow: () => {
+      clearDeadline()
+      stopReading()
+      // `kill()` is a no-op once the controller has settled, so stop it directly.
+      void terminate()
+    },
+    overflowNoticeSuffix: 'output reading stopped; the remote command is being stopped',
   })
+
+  // `startProcess` ignores its `timeout` on the default session, so the
+  // deadline is enforced here. Like `local()`, expiry resolves `wait()` with
+  // 124 rather than an AbortError.
+  let deadline: ReturnType<typeof setTimeout> | undefined
+  const clearDeadline = (): void => { clearTimeout(deadline) }
+  if (options.timeoutMs !== undefined) {
+    deadline = setTimeout(() => {
+      stopReading()
+      void terminate()
+      controller.exit(124)
+    }, roundUpTimeoutMs(options.timeoutMs))
+  }
 
   const followLogs = async (id: string): Promise<number> => {
     reader = (await stub.streamProcessLogs(id)).getReader()
@@ -361,6 +379,7 @@ export async function spawnProcess(
   }
 
   const onAbort = (): void => {
+    clearDeadline()
     stopReading(signal.reason)
     void terminate()
     controller.fail(orphanedExecAbortError(signal))
@@ -389,12 +408,16 @@ export async function spawnProcess(
   run().then(
     (exitCode) => { if (exitCode !== undefined) { controller.exit(exitCode) } },
     (error: unknown) => {
+      clearDeadline()
       stopReading(error)
       // The command may still be running; stopping it is best-effort.
       if (commandId !== undefined) { void terminate() }
       controller.fail(error)
     },
-  ).finally(() => signal.removeEventListener('abort', onAbort))
+  ).finally(() => {
+    clearDeadline()
+    signal.removeEventListener('abort', onAbort)
+  })
 
   return controller.process
 }

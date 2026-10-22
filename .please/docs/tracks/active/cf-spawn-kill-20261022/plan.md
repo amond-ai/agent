@@ -79,7 +79,7 @@ Rejected alternatives (investigation.md §3):
 
 ## Tasks
 
-- [ ] T001 [TDD] Run live spawn through the process API and stop the remote command on `kill()` and caller abort (file: packages/agent/src/cloudflare/cf-spawn.ts) [FR-1, FR-2, FR-5, FR-6, FR-7, FR-8, AC-002, AC-005, AC-006, AC-007, AC-008, AC-009, AC-011]
+- [x] T001 [TDD] Run live spawn through the process API and stop the remote command on `kill()` and caller abort (file: packages/agent/src/cloudflare/cf-spawn.ts) [FR-1, FR-2, FR-5, FR-6, FR-7, FR-8, AC-002, AC-005, AC-006, AC-007, AC-008, AC-009, AC-011]
   Validation: the regression test made from the scratch repro (`cf-spawn-kill.repro.test.ts`) passes: no command left running after `kill()` or a caller abort, including when the stop arrives before `startProcess` resolves. Output arrives before `wait()` settles and `wait()` resolves with the `exit` code (falling back to `getProcess`), and the provider contract suite passes on a process-API stub. Container death during start, streaming or the stop rejects `wait()` with `SandboxDiedError`, `kill()` still settles, and a stop after exit doesn't reject `kill()`. Execstream-only and buffered stubs behave as before, existing tests pass unchanged, and `sandbox-api.md`'s "no remote kill" paragraph and the `sandboxes.md` cancellation paragraph describe the new behavior.
   Method: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` (incl. `cf-spawn.test.ts`, `cf-sandbox.test.ts`, the contract suite), `mise exec -- bun run check`, `mise exec -- bun run lint`, plus `packages/cli/src/lib/docs-content.test.ts`
 - [ ] T002 Stop the remote command at the output cap and at the `timeoutMs` deadline on the process path (file: packages/agent/src/cloudflare/cf-spawn.ts) (depends on T001) [FR-3, FR-4, AC-003, AC-004, AC-010]
@@ -118,6 +118,8 @@ Rejected alternatives (investigation.md §3):
 - [x] (2026-10-22 13:30 KST) T001 Run live spawn through the process API and stop the remote command on `kill()` and caller abort
   Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` -> 309 passed | 8 skipped (repro red before fix, 2 failed; green after); `bun run check`, `bun run lint` exit 0; `docs-content.test.ts` 14 passed
   Note: the process-API fake (`fakeProcessStub`) lives in `cf-sandbox.test.ts` beside `fakeStreamingStub`, not in `__contract__/fake-cloudflare-stub.ts`; the scratch repro was folded into `cf-spawn.test.ts` and deleted.
+- [x] (2026-10-22 13:35 KST) T002 Stop the remote command at the output cap and at the `timeoutMs` deadline on the process path
+  Evidence: `mise exec -- bunx turbo run test --filter=@amond-ai/agent` -> all pass (cap, 1500.4 ms -> stop at 1501 ms with exit 124, one killProcess, timer cleared on every settlement); `bun run check`, `bun run lint` exit 0
 
 ## Decision Log
 

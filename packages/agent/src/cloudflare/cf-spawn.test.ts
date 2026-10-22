@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SandboxDiedError } from '../errors.ts'
 import type { Sandbox } from '../types.ts'
 import type { CloudflareSandboxStub } from './cf-sandbox.ts'
@@ -674,6 +674,119 @@ describe('cloudflareSandbox live spawn through the process API', () => {
 
     await expect(settleWithin(killed, 500)).resolves.toMatchObject({ status: 'resolved' })
     await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  describe('output cap and deadline', () => {
+    const OVER_CAP = 64 * 1024 * 1024 + 1
+
+    it('stops the command past the unread-output cap and resolves wait() with 1', async () => {
+      const fake = processStub()
+      const proc = await spawnOn(fake.stub, { command: 'flood' })
+      await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+      fake.send(frame({ type: 'stdout', data: 'x'.repeat(OVER_CAP) }))
+
+      await expect(proc.wait()).resolves.toEqual({ exitCode: 1 })
+      await vi.waitFor(() => expect(fake.killCalls).toEqual(['proc-1']))
+      expect(fake.running()).toEqual([])
+      const notice = await new Response(proc.stderr).text()
+      expect(notice).toContain('the remote command is being stopped')
+      expect(notice).not.toContain('may still be running')
+      await proc.kill()
+      expect(fake.killCalls).toHaveLength(1)
+    })
+
+    it('keeps the "may still be running" notice on an execStream-only stub', async () => {
+      const driven = drivenStub()
+      const proc = await spawnOn(driven.stub, { command: 'flood' })
+
+      driven.send(frame({ type: 'stdout', data: 'x'.repeat(OVER_CAP) }))
+
+      await expect(proc.wait()).resolves.toEqual({ exitCode: 1 })
+      expect(await new Response(proc.stderr).text()).toContain('the remote command may still be running')
+    })
+
+    describe('with fake timers', () => {
+      beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }) })
+      afterEach(() => { vi.useRealTimers() })
+
+      it('stops the command no earlier than the rounded-up deadline and resolves wait() with 124', async () => {
+        const fake = processStub()
+        const proc = await spawnOn(fake.stub, { command: 'slow', timeoutMs: 1500.4 })
+        await vi.advanceTimersByTimeAsync(0)
+        fake.send(frame({ type: 'stdout', data: 'tick\n' }))
+
+        await vi.advanceTimersByTimeAsync(1500)
+        expect(fake.killCalls).toEqual([])
+        let settled = false
+        void proc.wait().then(() => { settled = true }, () => { settled = true })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(settled).toBe(false)
+
+        await vi.advanceTimersByTimeAsync(1)
+
+        await expect(proc.wait()).resolves.toEqual({ exitCode: 124 })
+        expect(fake.killCalls).toEqual(['proc-1'])
+        expect(fake.startCalls[0]?.options?.timeout).toBe(1501)
+        expect(await new Response(proc.stdout).text()).toBe('tick\n')
+      })
+
+      it('sends one stop however many of the timeout, kill(), an abort and the cap fire', async () => {
+        const fake = processStub()
+        const caller = new AbortController()
+        const proc = await spawnOn(fake.stub, { command: 'slow', timeoutMs: 100, abortSignal: caller.signal })
+        await vi.advanceTimersByTimeAsync(0)
+
+        await vi.advanceTimersByTimeAsync(100)
+        await proc.kill()
+        caller.abort()
+        await vi.advanceTimersByTimeAsync(10)
+
+        await expect(proc.wait()).resolves.toEqual({ exitCode: 124 })
+        expect(fake.killCalls).toEqual(['proc-1'])
+      })
+
+      it('clears the deadline on exit, failure, kill, abort and overflow', async () => {
+        const settle = {
+          exit: (fake: ReturnType<typeof processStub>) => fake.send(frame({ type: 'exit', exitCode: 0 })),
+          failure: (fake: ReturnType<typeof processStub>) => fake.send(frame({ type: 'error', error: 'boom' })),
+          overflow: (fake: ReturnType<typeof processStub>) => fake.send(frame({ type: 'stdout', data: 'x'.repeat(OVER_CAP) })),
+        }
+        for (const [name, trigger] of Object.entries(settle)) {
+          const fake = processStub()
+          const proc = await spawnOn(fake.stub, { command: name, timeoutMs: 60_000 })
+          await vi.advanceTimersByTimeAsync(0)
+          trigger(fake)
+          await proc.wait().then(undefined, () => {})
+          await vi.advanceTimersByTimeAsync(0)
+          expect(vi.getTimerCount(), name).toBe(0)
+        }
+
+        const killedFake = processStub()
+        const killedProc = await spawnOn(killedFake.stub, { command: 'k', timeoutMs: 60_000 })
+        await vi.advanceTimersByTimeAsync(0)
+        await killedProc.kill()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(vi.getTimerCount()).toBe(0)
+
+        const caller = new AbortController()
+        const abortedFake = processStub()
+        const abortedProc = await spawnOn(abortedFake.stub, { command: 'a', timeoutMs: 60_000, abortSignal: caller.signal })
+        await vi.advanceTimersByTimeAsync(0)
+        caller.abort()
+        await abortedProc.wait().then(undefined, () => {})
+        await vi.advanceTimersByTimeAsync(0)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+
+      it('does not reject wait() with an AbortError on a timeout', async () => {
+        const fake = processStub()
+        const proc = await spawnOn(fake.stub, { command: 'slow', timeoutMs: 5 })
+        await vi.advanceTimersByTimeAsync(5)
+
+        await expect(proc.wait()).resolves.toEqual({ exitCode: 124 })
+      })
+    })
   })
 
   it.each(['startProcess', 'streamProcessLogs', 'killProcess'] as const)('falls back to execStream when the stub lacks %s', async (missing) => {
