@@ -88,15 +88,15 @@ Considered and not built:
 ## Progress
 
 - [x] (2026-10-22 23:01 KST) T001 Run each caller command in its own subshell on `cloudflareSandbox`, with regression tests and docs
-  Evidence: `mise exec -- npx vitest run src/cloudflare/ src/__contract__/` (packages/agent) → 2 files, 199 passed, 3 skipped (red before the fix: 30 failed); `CI=true bun run test` → 22/22 tasks green; `bun run check` and `bun run lint` exit 0
+  Evidence: after the POSIX revise (leading-space wrapper), `mise exec -- npx vitest run src/cloudflare/ src/__contract__/` (packages/agent) → 2 files, 199 passed, 3 skipped (red before the fix: 30 failed); `CI=true bun run test` → 22/22 tasks green; `bun run check` and `bun run lint` exit 0
   Deferred: AC-012 and the `bye` output of AC-014 — need a real container (T002)
 
 ## Decision Log
 
 - 2026-10-22: Wrapper form `( eval '…' )` chosen over `bash -c` and a bare subshell (investigation.md Section 3).
 
-- Decision: wrapper is `( eval -- '…' )`, with `--` added to the specified `( eval '…' )`.
-  Rationale: without `--`, bash reads a command that starts with `-` as an `eval` option (`eval '-x'` gives "invalid option", exit 2, instead of "command not found", 127), which breaks the Review Focus rule that such a command runs unchanged.
+- Decision: wrapper is `( eval ' <command>' )`, with a leading space inside the quoted argument.
+  Rationale: without it, bash reads a command that starts with `-` as an `eval` option (`eval '-x'` gives "invalid option", exit 2, not 127). `eval --` fixes that in bash but is not POSIX: dash runs `--` as a command (`eval: --: not found`, 127), so `--` was ruled out.
   Date/Author: 2026-10-22 / implement-executor
 
 ## Surprises & Discoveries

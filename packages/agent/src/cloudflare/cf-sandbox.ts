@@ -137,11 +137,12 @@ function shellQuote(path: string): string {
  * and leave the call hanging or rejected. The subshell absorbs all of those
  * into an exit status, and still inherits the session's variables, so the
  * per-command `env` and `cwd` reach the command. `eval` turns a parse error
- * or an empty command into a status instead of a dead session, and `--` keeps
- * a command that starts with `-` from being read as an option.
+ * or an empty command into a status instead of a dead session.
  */
 function inOwnShell(command: string): string {
-  return `( eval -- ${shellQuote(command)} )`
+  // The leading space keeps a command that starts with `-` from being read as an
+  // `eval` option; `eval --` is not POSIX (dash runs `--` as a command).
+  return `( eval ${shellQuote(` ${command}`)} )`
 }
 
 /** How often the death detector reads container state while a call is pending. */
