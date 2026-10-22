@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { defineSandboxContract } from '../__contract__/define-sandbox-contract.ts'
+import type { SessionRun } from '../__contract__/fake-cloudflare-stub.ts'
 import { fakeStub } from '../__contract__/fake-cloudflare-stub.ts'
 import type { CloudflareSandboxStub } from './cf-sandbox.ts'
 import { cloudflareSandbox, setContainerDeathCadenceForTests } from './cf-sandbox.ts'
@@ -24,19 +25,21 @@ function fakeStreamingStub(cwd: string) {
       fake.timeouts.push(options?.timeout)
       return new ReadableStream<Uint8Array>({
         start(controller) {
-          void fake.shell.exec(command, { cwd: options?.cwd, env: options?.env }).then(({ stdout, stderr, exitCode }) => {
+          void fake.session(command, { cwd: options?.cwd, env: options?.env }).then((run) => {
+            const { stdout, stderr } = run
             const events = [
               { type: 'start' },
               ...(stdout ? [{ type: 'stdout', data: stdout }] : []),
               ...(stderr ? [{ type: 'stderr', data: stderr }] : []),
-              { type: 'complete', exitCode },
+              // A command that ended the session shell never reaches the completion step.
+              ...(run.ended ? [] : [{ type: 'complete', exitCode: run.exitCode }]),
             ]
             const bytes = encoder.encode(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''))
             try {
               for (let offset = 0; offset < bytes.byteLength; offset += STREAM_CHUNK_BYTES) {
                 controller.enqueue(bytes.slice(offset, offset + STREAM_CHUNK_BYTES))
               }
-              controller.close()
+              if (!run.ended) { controller.close() }
             }
             catch {
               /* the reader cancelled the stream */
@@ -58,7 +61,7 @@ function fakeStreamingStub(cwd: string) {
 function fakeProcessStub(cwd: string) {
   const fake = fakeStub(cwd)
   const encoder = new TextEncoder()
-  const runs = new Map<string, Promise<{ stdout: string, stderr: string, exitCode: number }>>()
+  const runs = new Map<string, Promise<SessionRun>>()
   const killed: string[] = []
   let started = 0
   const stub: CloudflareSandboxStub = {
@@ -66,7 +69,7 @@ function fakeProcessStub(cwd: string) {
     async startProcess(command, options) {
       fake.timeouts.push(options?.timeout)
       const id = `proc-${++started}`
-      runs.set(id, fake.shell.exec(command, { cwd: options?.cwd, env: options?.env }))
+      runs.set(id, fake.session(command, { cwd: options?.cwd, env: options?.env }))
       return { id }
     },
     async streamProcessLogs(id) {
@@ -74,19 +77,21 @@ function fakeProcessStub(cwd: string) {
       if (!run) { throw new Error(`Process not found: ${id}`) }
       return new ReadableStream<Uint8Array>({
         start(controller) {
-          void run.then(({ stdout, stderr, exitCode }) => {
+          void run.then((result) => {
+            const { stdout, stderr } = result
             const events = [
               { type: 'process_info', id },
               ...(stdout ? [{ type: 'stdout', data: stdout }] : []),
               ...(stderr ? [{ type: 'stderr', data: stderr }] : []),
-              { type: 'exit', exitCode },
+              // A command that ended the session shell never reaches the completion step.
+              ...(result.ended ? [] : [{ type: 'exit', exitCode: result.exitCode }]),
             ]
             const bytes = encoder.encode(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''))
             try {
               for (let offset = 0; offset < bytes.byteLength; offset += STREAM_CHUNK_BYTES) {
                 controller.enqueue(bytes.slice(offset, offset + STREAM_CHUNK_BYTES))
               }
-              controller.close()
+              if (!result.ended) { controller.close() }
             }
             catch {
               /* the reader cancelled the stream */
@@ -183,5 +188,128 @@ describe('cloudflareSandbox with a process-API stub', () => {
     await proc.kill()
 
     expect(fake.killed()).toEqual(['proc-1'])
+  })
+})
+
+/** Each stub shape, over the same model of the SDK's session shell. */
+const SHAPES = [
+  { name: 'buffered', make: () => fakeStub('/workspace') },
+  { name: 'execStream', make: () => fakeStreamingStub('/workspace') },
+  { name: 'process API', make: () => fakeProcessStub('/workspace') },
+] as const
+
+/** Fail instead of hanging when a settle never comes (a stream the session left open). */
+function within<T>(promise: PromiseLike<T>, ms = 2000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error(`no result within ${ms} ms`)), ms)),
+  ])
+}
+
+describe.each(SHAPES)('cloudflareSandbox commands run in their own shell scope ($name)', ({ make }) => {
+  async function open() {
+    const fake = make()
+    const sandbox = await cloudflareSandbox(fake.stub, { cwd: '/workspace' }).createSandbox({ id: 'scope' })
+    return { fake, sandbox }
+  }
+
+  it('reports the exit code and output of a bare exit from run (AC-001)', async () => {
+    const { sandbox } = await open()
+    await expect(within(sandbox.run({ command: 'echo before; exit 3' }))).resolves.toMatchObject({ exitCode: 3, stdout: 'before\n' })
+  })
+
+  it('reports the exit code and output of a bare exit from spawn without timeoutMs (AC-002..004)', async () => {
+    const { sandbox } = await open()
+    const proc = await sandbox.spawn({ command: 'echo before; exit 3' })
+    const stdout = new Response(proc.stdout).text()
+    await expect(within(proc.wait())).resolves.toEqual({ exitCode: 3 })
+    await expect(within(stdout)).resolves.toBe('before\n')
+  })
+
+  it('runs the next command after a bare exit (AC-005)', async () => {
+    const { sandbox } = await open()
+    await within(sandbox.run({ command: 'exit 3' }))
+    await expect(within(sandbox.run({ command: 'echo next; exit 4' }))).resolves.toMatchObject({ exitCode: 4, stdout: 'next\n' })
+  })
+
+  it('reports a syntax error as an exit status with the error on stderr (AC-006)', async () => {
+    const { sandbox } = await open()
+    // Real bash reports 2 for a syntax error inside `eval`; just-bash reports 1.
+    const result = await within(sandbox.run({ command: 'echo (' }))
+    expect(result.exitCode).toBeGreaterThan(0)
+    expect(result.stderr).toMatch(/syntax error/)
+  })
+
+  it.each(['', '   ', '# only a comment'])('exits 0 for the empty or comment-only command %j (AC-007)', async (command) => {
+    const { sandbox } = await open()
+    await expect(within(sandbox.run({ command }))).resolves.toMatchObject({ exitCode: 0 })
+    const proc = await sandbox.spawn({ command })
+    await expect(within(proc.wait())).resolves.toEqual({ exitCode: 0 })
+  })
+
+  it('stops at the first failing step under set -e (AC-008)', async () => {
+    const { sandbox } = await open()
+    await expect(within(sandbox.run({ command: 'set -e; false; echo x' }))).resolves.toMatchObject({ exitCode: 1, stdout: '' })
+  })
+
+  it('reports the exit code of an exec-ed program (AC-009)', async () => {
+    const { sandbox } = await open()
+    await expect(within(sandbox.run({ command: `exec sh -c 'exit 5'` }))).resolves.toMatchObject({ exitCode: 5 })
+  })
+
+  it('delivers env and a non-default working directory (AC-010)', async () => {
+    const { fake, sandbox } = await open()
+    await fake.shell.fs.mkdir('/workspace/sub', { recursive: true })
+    const result = await within(sandbox.run({ command: 'echo "$NAME"; pwd', env: { NAME: 'v' }, workingDirectory: 'sub' }))
+    expect(result).toMatchObject({ exitCode: 0, stdout: 'v\n/workspace/sub\n' })
+  })
+
+  it('runs a command with single quotes unchanged (AC-011)', async () => {
+    const { sandbox } = await open()
+    await expect(within(sandbox.run({ command: `printf '%s\\n' 'it'"'"'s'` }))).resolves.toMatchObject({ exitCode: 0, stdout: `it's\n` })
+  })
+
+  it('does not carry an export into the next command (AC-013; just-bash already isolates each exec, so this documents the behavior)', async () => {
+    const { sandbox } = await open()
+    await within(sandbox.run({ command: 'export Z=1' }))
+    await expect(within(sandbox.run({ command: 'echo "[$Z]"' }))).resolves.toMatchObject({ stdout: '[]\n' })
+  })
+
+  it('reports the exit status after an EXIT trap command (AC-014; just-bash has no trap, so `bye` is only checked on a real container)', async () => {
+    const { sandbox } = await open()
+    await expect(within(sandbox.run({ command: `trap 'echo bye' EXIT; exit 2` }))).resolves.toMatchObject({ exitCode: 2 })
+  })
+
+  it('exits nonzero for an unbalanced quote instead of hanging (AC-015)', async () => {
+    const { sandbox } = await open()
+    const result = await within(sandbox.run({ command: 'echo "abc' }))
+    expect(result.exitCode).toBeGreaterThan(0)
+    const proc = await sandbox.spawn({ command: 'echo "abc' })
+    expect((await within(proc.wait())).exitCode).toBeGreaterThan(0)
+  })
+
+  it.each([
+    ['a CRLF line ending', 'echo a\r'],
+    ['a trailing backslash', 'echo a \\'],
+    ['a command starting with a dash', '-x'],
+  ])('gives %s the result it has outside the wrapper', async (_label, command) => {
+    const { fake, sandbox } = await open()
+    const direct = await fake.shell.exec(command)
+    const result = await within(sandbox.run({ command }))
+    expect(result.stdout).toBe(direct.stdout)
+    expect(result.exitCode).toBe(direct.exitCode)
+  })
+
+  it('does not name the wrapper in the abort error of a hung command', async () => {
+    const hung: CloudflareSandboxStub = {
+      ...make().stub,
+      exec: () => new Promise(() => {}),
+    }
+    const sandbox = await cloudflareSandbox(hung, { cwd: '/workspace' }).createSandbox({ id: 'abort' })
+    const controller = new AbortController()
+    const pending = sandbox.run({ command: 'sleep 99', abortSignal: controller.signal })
+    controller.abort()
+    const error = await within(pending).catch((e: unknown) => e)
+    expect(String(error)).not.toMatch(/eval/)
   })
 })

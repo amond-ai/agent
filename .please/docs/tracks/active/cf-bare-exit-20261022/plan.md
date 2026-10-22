@@ -87,8 +87,19 @@ Considered and not built:
 
 ## Progress
 
+- [x] (2026-10-22 23:01 KST) T001 Run each caller command in its own subshell on `cloudflareSandbox`, with regression tests and docs
+  Evidence: `mise exec -- npx vitest run src/cloudflare/ src/__contract__/` (packages/agent) → 2 files, 199 passed, 3 skipped (red before the fix: 30 failed); `CI=true bun run test` → 22/22 tasks green; `bun run check` and `bun run lint` exit 0
+  Deferred: AC-012 and the `bye` output of AC-014 — need a real container (T002)
+
 ## Decision Log
 
 - 2026-10-22: Wrapper form `( eval '…' )` chosen over `bash -c` and a bare subshell (investigation.md Section 3).
 
+- Decision: wrapper is `( eval -- '…' )`, with `--` added to the specified `( eval '…' )`.
+  Rationale: without `--`, bash reads a command that starts with `-` as an `eval` option (`eval '-x'` gives "invalid option", exit 2, instead of "command not found", 127), which breaks the Review Focus rule that such a command runs unchanged.
+  Date/Author: 2026-10-22 / implement-executor
+
 ## Surprises & Discoveries
+
+- Observation: just-bash diverges from real bash on three ACs. Inside `eval`, a syntax error gives exit 1 (real bash: 2, AC-006); `trap` is not implemented ("command not found"), so AC-014 cannot print `bye`; `exec` does not end the shell, so AC-009 passes without the wrapper.
+  Evidence: probe of `( eval '…' )` over just-bash on 2026-10-22. The unit tests assert a nonzero code with "syntax error" on stderr (AC-006) and exit 2 (AC-014); T002 must confirm exit 2 and `bye` on a real container.

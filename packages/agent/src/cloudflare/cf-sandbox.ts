@@ -129,6 +129,21 @@ function shellQuote(path: string): string {
   return `'${path.replace(/'/g, '\'\\\'\'')}'`
 }
 
+/**
+ * Run a caller's command in a subshell of the SDK's session shell. The
+ * session shell is long-lived and the SDK reports completion from a step
+ * that follows the command in that same shell, so a bare `exit`, a failing
+ * `set -e` step, an `exec`, or a syntax error would end it before the report
+ * and leave the call hanging or rejected. The subshell absorbs all of those
+ * into an exit status, and still inherits the session's variables, so the
+ * per-command `env` and `cwd` reach the command. `eval` turns a parse error
+ * or an empty command into a status instead of a dead session, and `--` keeps
+ * a command that starts with `-` from being read as an option.
+ */
+function inOwnShell(command: string): string {
+  return `( eval -- ${shellQuote(command)} )`
+}
+
 /** How often the death detector reads container state while a call is pending. */
 const CONTAINER_STATE_POLL_MS = 5_000
 /** How long a state probe may go unanswered before the container is presumed dead. */
@@ -344,7 +359,7 @@ function cfSandboxToSandbox(sandbox: CloudflareSandboxStub, cwd: string = '/work
       // cloneable execution options cross the RPC boundary.
       const result = await guarded(
         'exec',
-        sandbox.exec(command, {
+        sandbox.exec(inOwnShell(command), {
           cwd: execOpts?.cwd,
           env: execOpts?.env,
           // The Cloudflare sandbox `timeout` option is in milliseconds;
@@ -369,11 +384,11 @@ function cfSandboxToSandbox(sandbox: CloudflareSandboxStub, cwd: string = '/work
   const shared = { cwd, resolvePath: base.resolvePath, guard: guarded }
   if (hasProcessApi(sandbox)) {
     const live = { stub: sandbox, ...shared }
-    return { ...base, spawn: options => spawnProcess(live, options) }
+    return { ...base, spawn: options => spawnProcess(live, { ...options, command: inOwnShell(options.command) }) }
   }
   if (!hasExecStream(sandbox)) { return base }
   const live = { stub: sandbox, ...shared }
-  return { ...base, spawn: options => spawnLive(live, options) }
+  return { ...base, spawn: options => spawnLive(live, { ...options, command: inOwnShell(options.command) }) }
 }
 
 function hasProcessApi(

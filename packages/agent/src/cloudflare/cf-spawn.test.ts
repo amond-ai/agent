@@ -236,7 +236,7 @@ describe('cloudflareSandbox live spawn', () => {
     const driven = drivenStub()
     const proc = await spawnOn(driven.stub, { command: 'pwd', workingDirectory: 'sub', env: { A: '1' }, timeoutMs: 1500.4 })
 
-    expect(driven.calls).toEqual([{ command: 'pwd', options: { cwd: '/workspace/sub', env: { A: '1' }, timeout: 1501 } }])
+    expect(driven.calls).toEqual([{ command: '( eval -- \'pwd\' )', options: { cwd: '/workspace/sub', env: { A: '1' }, timeout: 1501 } }])
 
     driven.send(frame({ type: 'complete', exitCode: 0 }))
     driven.end()
@@ -562,7 +562,7 @@ describe('cloudflareSandbox live spawn through the process API', () => {
     await expect(proc.wait()).resolves.toEqual({ exitCode: 3 })
     expect(await new Response(proc.stderr).text()).toBe('warn\n')
     expect(await stdout.read()).toEqual({ done: true, value: undefined })
-    expect(fake.startCalls).toEqual([{ command: 'build', options: { cwd: '/workspace/sub', env: { A: '1' }, timeout: 1501 } }])
+    expect(fake.startCalls).toEqual([{ command: '( eval -- \'build\' )', options: { cwd: '/workspace/sub', env: { A: '1' }, timeout: 1501 } }])
     expect(fake.killCalls).toEqual([])
   })
 
