@@ -131,6 +131,18 @@ Rejected alternatives (investigation.md §3):
 
 ## Decision Log
 
+- (2026-10-22) **Review known issues.** The `/please:review` ensemble loop ran two iterations. Iteration 1 fixed a later `kill()` resolving before the pending stop (Critical) and a `timeoutMs` above 2^31-1 ms firing at once (`3bd2c2ff`). Iteration 2 found nothing to fix and ended `needs_human_read` only because Greptile is enabled but its CLI is not installed. These Minor findings were kept as plausible but unproven, and are left as they are:
+  - `toEvent` reads an `error` frame's message from `error`; the SDK's process-log type carries it in `data`.
+  - `sandbox-api.md` and the `spawnProcess` JSDoc say `kill()` confirms the stop, but an unexpected `killProcess` failure is only logged.
+  - `kill()` has no deadline while `startProcess` is pending on a live container.
+  - The `startProcess` result's RPC stubs are not disposed, and its "id-only" comment is loose.
+  - A `complete` frame on the process log stream is ignored. The real container sends `exit`.
+  - The `getProcess` fallback does not reject a `null` exit code.
+  - A misdetected container death during `startProcess` would orphan the started command.
+  - The not-found message fallback in `isExpectedStopError` is loose.
+  - The `raceContainerDeath` comment does not name `spawnProcess`.
+  - Out of this diff: `docs/specs/sandbox/spec.md` REQ-006 still describes Cloudflare live spawn as execStream-only.
+
 ## Surprises & Discoveries
 
 - **The real `streamProcessLogs` frames and `killProcess` errors matched Context.** Frames arrived as `process_info`, then stdout and stderr, then `{type:'exit', exitCode}`, and the stream closed. `getProcess(id)` returned `{status:'failed', exitCode:3}`. Neither T003 STOP condition fired, and the parser and error matching are unchanged.
