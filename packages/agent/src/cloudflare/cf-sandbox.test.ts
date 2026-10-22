@@ -207,6 +207,43 @@ function within<T>(promise: PromiseLike<T>, ms = 2000): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
+/**
+ * {@link fakeStub} with a persistent session shell: every exec first replays the
+ * commands received before it (output discarded), so whatever a bare command
+ * changes in the shell (`export`, `cd`) is still in effect for the next one.
+ */
+function persistentSessionStub(cwd: string) {
+  const fake = fakeStub(cwd)
+  const received: string[] = []
+  const stub: CloudflareSandboxStub = {
+    ...fake.stub,
+    async exec(command, options) {
+      const replay = received.map(prior => `{ ${prior}\n} >/dev/null 2>&1\n`).join('')
+      received.push(command)
+      return fake.stub.exec(`${replay}${command}`, options)
+    },
+  }
+  return { stub }
+}
+
+describe('cloudflareSandbox isolation on a persistent session shell (AC-013)', () => {
+  async function open() {
+    return cloudflareSandbox(persistentSessionStub('/workspace').stub, { cwd: '/workspace' }).createSandbox({ id: 'persistent' })
+  }
+
+  it('does not carry an export into the next run', async () => {
+    const sandbox = await open()
+    await within(sandbox.run({ command: 'export Z=1' }))
+    await expect(within(sandbox.run({ command: 'echo "[$Z]"' }))).resolves.toMatchObject({ stdout: '[]\n' })
+  })
+
+  it('does not carry a cd into the next run', async () => {
+    const sandbox = await open()
+    await within(sandbox.run({ command: 'mkdir -p sub && cd sub' }))
+    await expect(within(sandbox.run({ command: 'pwd' }))).resolves.toMatchObject({ stdout: '/workspace\n' })
+  })
+})
+
 describe.each(SHAPES)('cloudflareSandbox commands run in their own shell scope ($name)', ({ make }) => {
   async function open() {
     const fake = make()
@@ -270,7 +307,7 @@ describe.each(SHAPES)('cloudflareSandbox commands run in their own shell scope (
     await expect(within(sandbox.run({ command: `printf '%s\\n' 'it'"'"'s'` }))).resolves.toMatchObject({ exitCode: 0, stdout: `it's\n` })
   })
 
-  it('does not carry an export into the next command (AC-013; just-bash already isolates each exec, so this documents the behavior)', async () => {
+  it('does not carry an export into the next command (AC-013)', async () => {
     const { sandbox } = await open()
     await within(sandbox.run({ command: 'export Z=1' }))
     await expect(within(sandbox.run({ command: 'echo "[$Z]"' }))).resolves.toMatchObject({ stdout: '[]\n' })
