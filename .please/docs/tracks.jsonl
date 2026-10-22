@@ -2,3 +2,4 @@
 {"id":"cli-docs-blueprints-20261018","type":"feature","status":"completed","phase":"review","issue":"#20","created":"2026-10-18","section":"completed"}
 {"id":"blueprint-findings-20261020","type":"bugfix","status":"completed","phase":"implement","issue":"#37","created":"2026-10-20","section":"completed"}
 {"id":"ai-sdk-sandbox-20261020","type":"feature","status":"completed","phase":"implement","issue":"#15","created":"2026-10-20","section":"completed"}
+{"id":"cf-spawn-kill-20261022","type":"bugfix","status":"planned","phase":"spec","issue":"#47","created":"2026-10-22","section":"active"}

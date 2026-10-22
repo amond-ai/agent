@@ -1,0 +1,14 @@
+{
+  "track_id": "cf-spawn-kill-20261022",
+  "type": "bugfix",
+  "status": "planned",
+  "created_at": "2026-10-22T03:29:19Z",
+  "updated_at": "2026-10-22T04:18:11Z",
+  "issue": "#47",
+  "pr": "#51",
+  "project": "",
+  "project_item_id": "",
+  "code_pr": "#51",
+  "code_branch": "tracks/cf-spawn-kill-20261022",
+  "stack_tool": "gh-stack"
+}
