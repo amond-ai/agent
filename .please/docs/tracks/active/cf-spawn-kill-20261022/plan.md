@@ -103,7 +103,7 @@ Rejected alternatives (investigation.md §3):
 ### Observable Outcomes
 
 - [x] The regression test made from the scratch repro fails on `aac7ee9` and passes after T001.
-- [ ] `mise exec -- bun run lint`, `mise exec -- bun run build`, `mise exec -- bun run check` and `CI=true mise exec -- bun run test` all pass.
+- [x] `mise exec -- bun run lint`, `mise exec -- bun run build`, `mise exec -- bun run check` and `CI=true mise exec -- bun run test` all pass.
 - [x] On a real container, a killed, aborted or timed-out live spawn stops printing (T003, recorded in Surprises & Discoveries).
 
 ## Review Focus
