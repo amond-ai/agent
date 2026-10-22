@@ -57,7 +57,7 @@ Considered and not built:
 - [x] T001 Run each caller command in its own subshell on `cloudflareSandbox`, with regression tests and docs (file: packages/agent/src/cloudflare/cf-sandbox.ts) [FR-1, FR-2, FR-3, FR-5, FR-6, AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010, AC-011, AC-013, AC-014, AC-015]
   Validation: a stub that models the SDK session shell makes `echo before; exit 3` resolve `run` and `spawn` `wait()` to exit code 3 with stdout `before\n` on the process-API, `execStream`-only and buffered shapes, without `timeoutMs`; the spec's unit-test ACs (AC-001–011, 013–015) pass on that stub; the shared sandbox contract stays green on all three shapes; the two exact-command assertions in `cf-spawn.test.ts` change only their expected command string; errors and orphan reports name the caller's unwrapped command; the scratch loop file is deleted; `sandbox-api.md`'s `cloudflareSandbox` section and the guide's remote-sandbox section state that each command runs in its own shell scope, so `cd` and `export` do not carry over, as on `local()`.
   Method: `mise exec -- npx vitest run src/cloudflare/ src/__contract__/` in `packages/agent`, plus the repo's typecheck and lint
-- [ ] T002 Confirm the fix on a real Cloudflare container and resolve TD-016 (file: .please/docs/tracks/tech-debt-tracker.md) (depends on T001) [FR-4, AC-012]
+- [x] T002 Confirm the fix on a real Cloudflare container and resolve TD-016 (file: .please/docs/tracks/tech-debt-tracker.md) (depends on T001) [FR-4, AC-012]
   Validation: on a real container, with the fixed package: `run` and both live `spawn` paths report exit code 3 and `before` for `echo before; exit 3`; the next command runs; `env` and `cwd` reach the command; `kill()` stops a multi-command loop. TD-016 moves to Resolved, pointing at this track.
   Method: the #51 smoke worker (`/tmp/amond-t003`, cases `bareexit`, `live`, `kill`) redeployed only after the user approves the deploy, with each JSON result recorded in this plan
   STOP: the wrapped command still ends the session or hangs on the real container (the SDK does not append its completion step the way the investigation assumes); or `kill()` leaves the wrapped command running
@@ -91,6 +91,15 @@ Considered and not built:
   Evidence: after the POSIX revise (leading-space wrapper), `mise exec -- npx vitest run src/cloudflare/ src/__contract__/` (packages/agent) → 2 files, 199 passed, 3 skipped (red before the fix: 30 failed); `CI=true bun run test` → 22/22 tasks green; `bun run check` and `bun run lint` exit 0
   Deferred: AC-012 and the `bye` output of AC-014 — need a real container (T002)
 
+- [x] (2026-10-22 23:15 KST) T002 Confirm the fix on a real Cloudflare container and resolve TD-016
+  Evidence: smoke worker `amond-t003-smoke-980df587` (SDK 0.11.0, image `cloudflare/sandbox:0.11.0`) with the package at `c618d9f7`, deployed with the user's approval and deleted afterwards (worker and container application). `case=fixed`:
+  - `run` gives exitCode 3 and stdout `before` (the SDK trims the trailing newline).
+  - `spawn` (process API) and `spawn` (execStream only) give `wait()` → exitCode 3 and stdout `before\n`.
+  - `envcwd` gives `v` and `/workspace/sub`; `export` gives `[]`; `syntax` gives exitCode 2 with the bash syntax error on stderr; `trap` gives `bye` and exitCode 2; `-x` gives exitCode 127.
+  - After each case, the next command `echo alive` exits 0.
+  - `case=kill` and `case=abort` stop the multi-command loop at 3 lines, still 3 lines four seconds later.
+  TD-016 moved to Resolved.
+
 ## Decision Log
 
 - 2026-10-22: Wrapper form `( eval '…' )` chosen over `bash -c` and a bare subshell (investigation.md Section 3).
@@ -100,6 +109,8 @@ Considered and not built:
   Date/Author: 2026-10-22 / implement-executor
 
 ## Surprises & Discoveries
+
+- The first request after the deploy timed out at 15 s for both `run` and the following `echo alive` while the container cold-started. The two re-runs on the warm container passed. The SDK session shell on the real container is bash (`bash: eval: line 469: …`).
 
 - Observation: just-bash diverges from real bash on three ACs. Inside `eval`, a syntax error gives exit 1 (real bash: 2, AC-006); `trap` is not implemented ("command not found"), so AC-014 cannot print `bye`; `exec` does not end the shell, so AC-009 passes without the wrapper.
   Evidence: probe of `( eval '…' )` over just-bash on 2026-10-22. The unit tests assert a nonzero code with "syntax error" on stderr (AC-006) and exit 2 (AC-014); T002 must confirm exit 2 and `bye` on a real container.
