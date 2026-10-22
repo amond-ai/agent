@@ -226,6 +226,32 @@ function persistentSessionStub(cwd: string) {
   return { stub }
 }
 
+/**
+ * {@link fakeStub} where a top-level `exec` replaces the session shell: a command
+ * that is not inside a subshell and runs `exec` never reaches the completion
+ * step, so `exec` rejects as the SDK does with `SessionTerminatedError`.
+ */
+function execReplacesShellStub(cwd: string) {
+  const fake = fakeStub(cwd)
+  const stub: CloudflareSandboxStub = {
+    ...fake.stub,
+    async exec(command, options) {
+      if (!command.trimStart().startsWith('(') && /(?:^|[;&|\n])\s*exec\s/.test(command)) {
+        throw new Error('SessionTerminatedError: Session \'default\' shell exited (exit code: 5)')
+      }
+      return fake.stub.exec(command, options)
+    },
+  }
+  return { stub }
+}
+
+describe('cloudflareSandbox with an exec that replaces the session shell (AC-009)', () => {
+  it('reports the exit code of an exec-ed program only when the command ran in a subshell', async () => {
+    const sandbox = await cloudflareSandbox(execReplacesShellStub('/workspace').stub, { cwd: '/workspace' }).createSandbox({ id: 'exec-replaces' })
+    await expect(within(sandbox.run({ command: `exec sh -c 'exit 5'` }))).resolves.toMatchObject({ exitCode: 5 })
+  })
+})
+
 describe('cloudflareSandbox isolation on a persistent session shell (AC-013)', () => {
   async function open() {
     return cloudflareSandbox(persistentSessionStub('/workspace').stub, { cwd: '/workspace' }).createSandbox({ id: 'persistent' })
@@ -339,15 +365,21 @@ describe.each(SHAPES)('cloudflareSandbox commands run in their own shell scope (
   })
 
   it('does not name the wrapper in the abort error of a hung command', async () => {
+    const received: string[] = []
     const hung: CloudflareSandboxStub = {
       ...make().stub,
-      exec: () => new Promise(() => {}),
+      exec: (command) => {
+        received.push(command)
+        return new Promise(() => {})
+      },
     }
     const sandbox = await cloudflareSandbox(hung, { cwd: '/workspace' }).createSandbox({ id: 'abort' })
     const controller = new AbortController()
     const pending = sandbox.run({ command: 'sleep 99', abortSignal: controller.signal })
     controller.abort()
     const error = await within(pending).catch((e: unknown) => e)
+    expect(received).toHaveLength(1)
+    expect(received[0]).toMatch(/^\( eval /)
     expect(String(error)).not.toMatch(/eval/)
   })
 })
