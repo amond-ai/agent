@@ -16,6 +16,9 @@ import { createProcessController, MAX_BUFFERED_OUTPUT_BYTES } from '../sandbox-s
 import type { SandboxRunOptions } from '../types.ts'
 import type { CloudflareSandboxStub } from './cf-sandbox.ts'
 
+/** The longest delay `setTimeout` honors; a larger one fires after 1 ms. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647
+
 /** One event of the streaming exec, as amond reads it. Unknown event types are dropped by the parser. */
 export type ExecStreamEvent =
   | { type: 'start' }
@@ -345,12 +348,21 @@ export async function spawnProcess(
   // 124 rather than an AbortError.
   let deadline: ReturnType<typeof setTimeout> | undefined
   const clearDeadline = (): void => { clearTimeout(deadline) }
-  if (options.timeoutMs !== undefined) {
+  // `setTimeout` replaces a delay above 2^31-1 ms with 1 ms, so a longer
+  // deadline is armed in segments.
+  const armDeadline = (remainingMs: number): void => {
     deadline = setTimeout(() => {
+      if (remainingMs > MAX_TIMER_DELAY_MS) {
+        armDeadline(remainingMs - MAX_TIMER_DELAY_MS)
+        return
+      }
       stopReading()
       void terminate()
       controller.exit(124)
-    }, roundUpTimeoutMs(options.timeoutMs))
+    }, Math.min(remainingMs, MAX_TIMER_DELAY_MS))
+  }
+  if (options.timeoutMs !== undefined && Number.isFinite(options.timeoutMs)) {
+    armDeadline(roundUpTimeoutMs(options.timeoutMs))
   }
 
   const followLogs = async (id: string): Promise<number> => {
@@ -419,5 +431,8 @@ export async function spawnProcess(
     signal.removeEventListener('abort', onAbort)
   })
 
-  return controller.process
+  // Once a stop is requested (kill, abort or deadline), the process is already
+  // settled, so `kill()` must wait on the stop itself rather than the controller.
+  const process = controller.process
+  return { ...process, kill: () => terminated ?? process.kill() }
 }

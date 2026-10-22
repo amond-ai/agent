@@ -502,6 +502,36 @@ describe('cloudflareSandbox live spawn through the process API', () => {
     await killed
   })
 
+  it('keeps kill() pending until the container stops the command, even after an abort settled the process', async () => {
+    const fake = processStub({ gateKill: true })
+    const caller = new AbortController()
+    const proc = await spawnOn(fake.stub, { command: 'long', abortSignal: caller.signal })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    caller.abort()
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError' })
+    const again = proc.kill()
+    expect((await settleWithin(again, 30)).status).toBe('pending')
+
+    fake.releaseKill()
+    await again
+    expect(fake.killCalls).toEqual(['proc-1'])
+  })
+
+  it('keeps a second kill() pending until the container stops the command', async () => {
+    const fake = processStub({ gateKill: true })
+    const proc = await spawnOn(fake.stub, { command: 'long' })
+    await vi.waitFor(() => expect(fake.streamCalls).toHaveLength(1))
+
+    const first = proc.kill()
+    await expect(proc.wait()).rejects.toMatchObject({ name: 'AbortError' })
+    const second = proc.kill()
+    expect((await settleWithin(second, 30)).status).toBe('pending')
+
+    fake.releaseKill()
+    await Promise.all([first, second])
+  })
+
   it('sends one stop however many of kill() and an abort fire', async () => {
     const fake = processStub()
     const caller = new AbortController()
@@ -729,6 +759,43 @@ describe('cloudflareSandbox live spawn through the process API', () => {
         expect(fake.killCalls).toEqual(['proc-1'])
         expect(fake.startCalls[0]?.options?.timeout).toBe(1501)
         expect(await new Response(proc.stdout).text()).toBe('tick\n')
+      })
+
+      it('keeps kill() pending after the deadline until the container stops the command', async () => {
+        const fake = processStub({ gateKill: true })
+        const proc = await spawnOn(fake.stub, { command: 'slow', timeoutMs: 100 })
+        await vi.advanceTimersByTimeAsync(0)
+
+        await vi.advanceTimersByTimeAsync(100)
+        await expect(proc.wait()).resolves.toEqual({ exitCode: 124 })
+        const killed = proc.kill()
+        let done = false
+        void killed.then(() => { done = true })
+        await vi.advanceTimersByTimeAsync(10)
+        expect(done).toBe(false)
+
+        fake.releaseKill()
+        await killed
+        expect(fake.killCalls).toEqual(['proc-1'])
+      })
+
+      it('does not fire a deadline above the setTimeout limit early, and fires it once fully elapsed', async () => {
+        // A 5 ms state poll would make advancing 2^31 ms take millions of ticks.
+        setContainerDeathCadenceForTests({ statePollMs: 2 ** 30, probeSilenceMs: 2 ** 30 })
+        const fake = processStub()
+        const proc = await spawnOn(fake.stub, { command: 'slow', timeoutMs: 2 ** 31 })
+        await vi.advanceTimersByTimeAsync(0)
+
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(fake.killCalls).toEqual([])
+        let settled = false
+        void proc.wait().then(() => { settled = true }, () => { settled = true })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(settled).toBe(false)
+
+        await vi.advanceTimersByTimeAsync(2 ** 31 - 1000)
+        await expect(proc.wait()).resolves.toEqual({ exitCode: 124 })
+        expect(fake.killCalls).toEqual(['proc-1'])
       })
 
       it('sends one stop however many of the timeout, kill(), an abort and the cap fire', async () => {
