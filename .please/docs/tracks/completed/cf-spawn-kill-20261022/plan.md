@@ -94,7 +94,7 @@ Rejected alternatives (investigation.md §3):
 ## Key Files
 
 - Modify: `packages/agent/src/cloudflare/cf-spawn.ts` (`spawnLive`, parser event mapping), `packages/agent/src/cloudflare/cf-sandbox.ts` (`CloudflareSandboxStub`, `cfSandboxToSandbox` selection)
-- Test: `packages/agent/src/cloudflare/cf-spawn.test.ts`, `packages/agent/src/cloudflare/cf-sandbox.test.ts` (third contract variant), `packages/agent/src/__contract__/fake-cloudflare-stub.ts` (process-API fake), the untracked scratch `cf-spawn-kill.repro.test.ts` (becomes the regression test)
+- Test: `packages/agent/src/cloudflare/cf-spawn.test.ts` (regression tests, scratch repro folded in), `packages/agent/src/cloudflare/cf-sandbox.test.ts` (`fakeProcessStub` process-API fake and third contract variant)
 - Reuse: `createProcessController` (`sandbox-streams.ts`), `orphanedExecAbortError` (`sandbox.ts`), `roundUpTimeoutMs`/`abortErrorFor` (`abort.ts`), `local()`'s live spawn (`node/local-env.ts:216-250`) as the kill/overflow/timeout model
 - Docs: `packages/cli/docs/reference/sandbox-api.md` (table row and "no remote kill" paragraph), `packages/cli/docs/guide/sandboxes.md` (cancellation paragraph), `.please/docs/tracks/tech-debt-tracker.md` (TD-010)
 

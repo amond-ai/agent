@@ -738,7 +738,10 @@ describe('cloudflareSandbox live spawn through the process API', () => {
 
     describe('with fake timers', () => {
       beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }) })
-      afterEach(() => { vi.useRealTimers() })
+      afterEach(() => {
+        vi.useRealTimers()
+        setContainerDeathCadenceForTests({ statePollMs: 5, probeSilenceMs: 200 })
+      })
 
       it('stops the command no earlier than the rounded-up deadline and resolves wait() with 124', async () => {
         const fake = processStub()

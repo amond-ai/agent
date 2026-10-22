@@ -21,13 +21,13 @@ Reproduced, both on a real container and against a fake stub.
 ### Feedback Loop
 
 - **Loop type:** failing test
-- **How to run:** `cd packages/agent && CI=true mise exec -- bunx vitest run src/cloudflare/cf-spawn-kill.repro.test.ts`
+- **How to run:** `cd packages/agent && CI=true mise exec -- bunx vitest run src/cloudflare/cf-spawn.test.ts -t '#47'` (the scratch repro below was folded into these two regression tests)
 - **Pass/fail criteria:** green = the fake container's process table is empty after `kill()` and after a caller abort; red = it still holds the command (`expected [ 'sleep 100' ] to deeply equal []`).
 - **Reproduction rate:** N/A (deterministic).
 - **Debug tag:** `[DEBUG-7c3e]`. No instrumentation was added.
 - **Bypass approved:** no
 
-The scratch file `packages/agent/src/cloudflare/cf-spawn-kill.repro.test.ts` is untracked. Its fake stub models the container's process table:
+The scratch file `packages/agent/src/cloudflare/cf-spawn-kill.repro.test.ts` was untracked and has since been deleted; its cases live on in `cf-spawn.test.ts` ("leaves no command running … (#47)"). Its fake stub models the container's process table:
 
 - A command started with `execStream` is added to the table and stays there when its stream is cancelled, as on the real container.
 - `startProcess` adds a command and returns its id.

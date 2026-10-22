@@ -60,11 +60,12 @@ function fakeProcessStub(cwd: string) {
   const encoder = new TextEncoder()
   const runs = new Map<string, Promise<{ stdout: string, stderr: string, exitCode: number }>>()
   const killed: string[] = []
+  let started = 0
   const stub: CloudflareSandboxStub = {
     ...fake.stub,
     async startProcess(command, options) {
       fake.timeouts.push(options?.timeout)
-      const id = `proc-${runs.size + 1}`
+      const id = `proc-${++started}`
       runs.set(id, fake.shell.exec(command, { cwd: options?.cwd, env: options?.env }))
       return { id }
     },

@@ -45,7 +45,7 @@ A *live spawn* below is a `spawn` on a Cloudflare stub that provides the SDK's p
 - [ ] AC-005 (FR-1, FR-2): If `kill()` is called twice, or `kill()` and an abort both happen, then the system shall send one stop request to the container.
 - [ ] AC-006 (FR-6): If the command has already exited when a stop is requested, then the system shall not reject `kill()`.
 - [ ] AC-007 (FR-6): If the command has already exited when a stop is requested, then the system shall keep the result `wait()` settled with first.
-- [ ] AC-008 (FR-6): If the container dies while a live spawn is starting, running, or being stopped, then the system shall reject `wait()` with `SandboxDiedError`.
+- [ ] AC-008 (FR-6): If the container dies while a live spawn is starting or running and no stop has settled it, then the system shall reject `wait()` with `SandboxDiedError`. A `kill()` or abort that came first keeps its `AbortError`.
 - [ ] AC-009 (FR-6): If the container dies while a stop is in progress, then the system shall settle `kill()`.
 - [ ] AC-010 (FR-7): Where a Cloudflare stub offers streaming commands but not the process methods, the system shall keep today's output-cap notice saying the command may still be running.
 - [ ] AC-011 (FR-8): When a live-spawned command prints a line and keeps running, the system shall deliver that line before `wait()` settles.
@@ -62,4 +62,4 @@ A *live spawn* below is a `spawn` on a Cloudflare stub that provides the SDK's p
 - The Cloudflare Sandbox SDK's process methods (`startProcess`, `streamProcessLogs`, `killProcess`) behave in 0.11.0, the version the Cloudflare blueprint installs, as its source reads. The real stub that `getSandbox()` returns provides them, so every live spawn on a real container moves to them, and FR-8 guards against losing today's live output. The real-container check (AC-001) confirms this.
 - Output the container produced before a live spawn started following it is delivered all stdout first, then all stderr, so their relative order inside that first burst can differ from today's. Running it creates a billable Cloudflare resource, so it needs the user's approval at that time.
 - The container stops a killed command's whole process tree, first with SIGTERM and then with SIGKILL, and this can take up to about 10 seconds. `kill()` may resolve after that wait. `wait()` does not wait for it (AC-002).
-- `timeoutMs` is not enforced by the container on its default transport for either way of starting a command (investigation.md, hypothesis 5). The fix therefore enforces it, which AC-005 checks.
+- `timeoutMs` is not enforced by the container on its default transport for either way of starting a command (investigation.md, hypothesis 5). The fix therefore enforces it, which AC-004 checks.

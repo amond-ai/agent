@@ -20,7 +20,7 @@ Hello. The issue you reported has been fixed, and here is what changed.
 
 **How it was fixed**: Stopping a command on a Cloudflare sandbox now stops it in the container, together with any processes it started. This covers stopping it directly, cancelling it, hitting the output limit, and reaching its time limit. Waiting for the result still returns at once when you stop a command, and a command that runs past its time limit now reports exit code 124.
 
-**What to expect**: Start a long-running command, such as a loop that writes a line to a file every second, and stop it after a few seconds. The file stops growing. We checked this on a real Cloudflare container for each way of stopping a command. A Cloudflare sandbox set up without the SDK's process controls behaves as before.
+**What to expect**: Start a long-running command, such as a loop that writes a line to a file every second, and stop it after a few seconds. The file stops growing. We checked stopping it directly, cancelling it, and the time limit on a real Cloudflare container; automated tests cover the output limit. A Cloudflare sandbox set up without the SDK's process controls behaves as before.
 
 **Release status**: The fix is in PR #51, which is in review. It will be released after it merges.
 

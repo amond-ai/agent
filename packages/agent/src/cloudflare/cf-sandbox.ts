@@ -43,8 +43,9 @@ export interface CloudflareSandboxStub {
    * `stderr`, `complete`, or `error`: `stdout`/`stderr` carry the output in
    * `data`, `complete` carries `exitCode`, and `error` carries an `error`
    * message. Optional: when present, `spawn` delivers output live; without
-   * it, `spawn` delivers the output when the command finishes. Cancelling
-   * the stream does not stop the command in the container.
+   * it, `spawn` delivers the output when the command finishes, unless
+   * `startProcess`, `streamProcessLogs` and `killProcess` are all present.
+   * Cancelling the stream does not stop the command in the container.
    */
   execStream?(
     command: string,
