@@ -149,7 +149,7 @@ Most adapters should not implement this interface by hand: [`sandboxFromDriver`]
 
 A buffered `spawn` runs the command through `run`, so abort, `timeoutMs`, and orphan reporting behave as they do there. `kill()` aborts the command the same way.
 
-On `cloudflareSandbox` with the process methods, `kill()` and an abort stop the command in the container. `wait()` rejects at once with an `AbortError` whose message still says the cancellation could not be confirmed, because it does not wait for the container. `await proc.kill()` resolves once the container has stopped the command, and it does not reject if the command already exited or the container died. On a stub with only `execStream`, there is no remote kill: `kill()` and an abort stop delivering output and reject `wait()` with an `AbortError` whose message names the orphan, but the command may keep running in the container.
+On `cloudflareSandbox`, each spawned command runs in its own shell scope, so a command that ends with `exit N` makes `wait()` resolve to exit code `N`. On `cloudflareSandbox` with the process methods, `kill()` and an abort stop the command in the container. `wait()` rejects at once with an `AbortError` whose message still says the cancellation could not be confirmed, because it does not wait for the container. `await proc.kill()` resolves once the container has stopped the command, and it does not reject if the command already exited or the container died. On a stub with only `execStream`, there is no remote kill: `kill()` and an abort stop delivering output and reject `wait()` with an `AbortError` whose message names the orphan, but the command may keep running in the container.
 
 ### File methods
 
@@ -451,6 +451,8 @@ interface CloudflareSandboxOptions {
 Cloudflare target. Wraps a `@cloudflare/sandbox` Durable Object stub (the value `getSandbox()` returns) into a `SandboxFactory`. `CloudflareSandboxStub` is structural, so `@amond-ai/agent` does not depend on `@cloudflare/sandbox`.
 
 - `cwd` — working directory inside the container. Defaults to `/workspace`.
+
+Each command runs in its own shell scope, a subshell of the SDK's session shell, as on `local()`. A `cd` or `export` in one command does not carry over to the next, and `env` and the working directory you pass reach the command. A command that ends with `exit N` reports exit code `N`, and one that fails to parse reports a non-zero exit code with the shell's error on stderr.
 
 See [Cloudflare Sandbox](/docs/guide/cloudflare-target/#cloudflare-sandbox) in the target guide and the [ecosystem entry](/docs/ecosystem/sandboxes/cloudflare/).
 

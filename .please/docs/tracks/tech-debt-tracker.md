@@ -16,13 +16,14 @@
 | TD-012 | ai-sdk-sandbox-20261020 | Cloudflare live `spawn` rejects `wait()` on a stream `error` event; `run` and `local()` report launch failures as exit 1 | Low | 2026-10-21 |
 | TD-013 | ai-sdk-sandbox-20261020 | `cloudflareSandbox` supports only `@cloudflare/sandbox` 0.x; 1.x removes the `getSandbox()` stub | Medium | 2026-10-21 |
 | TD-014 | ai-sdk-sandbox-20261020 | `cf-spawn.test.ts` 1 MiB frame parse test asserts < 500 ms; timing-sensitive on slow CI | Low | 2026-10-21 |
+| TD-017 | cf-bare-exit-20261022 | Cloudflare subshell wrapper edge cases kept as plausible in review: `kill()`, an abort and `timeoutMs` on a wrapped single long-running child (`sleep 600`) not checked on a real container (the T002 kill run stopped a loop that runs in the subshell itself); `execReplacesShellStub` accepts an `eval` wrapper without the subshell; the AC-014 test cannot see trap output on just-bash; the fake's completion marker is fooled by a command that prints it and then ends the shell; an unterminated heredoc (REQ-016) has no test, because the just-bash fake cannot model it | Low | 2026-10-23 |
 | TD-015 | cf-spawn-kill-20261022 | Cloudflare process-path edge cases kept as plausible in review: process-log `error` message in `data`, no deadline on `kill()` while `startProcess` is pending, undisposed `startProcess` RPC stubs, `complete` frame ignored, `null` exit code from the `getProcess` fallback, orphan after a misdetected death during start (plan.md Decision Log) | Low | 2026-10-22 |
-| TD-016 | cf-spawn-kill-20261022 | A Cloudflare command ending in a bare `exit N` kills the session shell: `spawn` hangs unless `timeoutMs` is set, and `run` rejects with `SessionTerminatedError` | Medium | 2026-10-22 |
 
 ## Resolved
 
 | ID | Source Track | Description | Resolved In | Date |
 |----|------------|-------------|-------------|------|
+| TD-016 | cf-spawn-kill-20261022 | A Cloudflare command ending in a bare `exit N` killed the session shell: `cloudflareSandbox` now runs each caller command in its own subshell, so `run` and both live `spawn` paths report exit code N. Verified on a real container | cf-bare-exit-20261022 (#52) | 2026-10-22 |
 | TD-010 | ai-sdk-sandbox-20261020 | Cloudflare live `spawn` `kill()` left the remote command running: live spawn now runs through `startProcess`/`streamProcessLogs`, and `kill()`, a caller abort, the output cap and `timeoutMs` stop it with `killProcess`. Verified on a real container | cf-spawn-kill-20261022 (#51) | 2026-10-22 |
 | TD-007 | blueprint-findings-20261020 | islo `writeFile` left its `/tmp` staging file when an `exec` rejected: cleanup now runs in a `finally` (best-effort: a failed `rm -f` is ignored) | blueprint-findings-20261020 (PR #42 review) | 2026-10-20 |
 | TD-005 | flue-import-rename-20261017 | `docs-pages.ts` candidate to move to `apps/docs`: dropped, pages live in `packages/cli/docs` | cli-docs-blueprints-20261018 (T002) | 2026-10-19 |

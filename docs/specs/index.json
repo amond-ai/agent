@@ -84,10 +84,11 @@
       "domain": "sandbox",
       "feature": "spec",
       "created_at": "2026-10-21T13:37:31.365Z",
-      "updated_at": "2026-10-22T08:11:45.066Z",
+      "updated_at": "2026-10-23T08:07:22.205Z",
       "source_tracks": [
         "ai-sdk-sandbox-20261020",
-        "cf-spawn-kill-20261022"
+        "cf-spawn-kill-20261022",
+        "cf-bare-exit-20261022"
       ],
       "traces": [],
       "requirements": [
@@ -160,6 +161,36 @@
           "id": "REQ-014",
           "kind": "non-functional",
           "statement": "cover the new `Sandbox` contract with tests that run on all three built-in providers. `@amond-ai/agent` has no tests today, so these are new"
+        },
+        {
+          "id": "REQ-015",
+          "kind": "functional",
+          "statement": "report the exit code and output of a command that ends with an `exit` builtin, for `run` and for `spawn`, on every Cloudflare sandbox shape: the process API, `execStream` only, and neither."
+        },
+        {
+          "id": "REQ-016",
+          "kind": "functional",
+          "statement": "report an exit code, instead of failing or hanging, for any command that would otherwise end the SDK's session shell: a failing step under `set -e`, `exec`, an `EXIT` trap, a syntax error, an unbalanced quote, or an unterminated heredoc."
+        },
+        {
+          "id": "REQ-017",
+          "kind": "functional",
+          "statement": "keep delivering the caller's working directory and environment variables to the command."
+        },
+        {
+          "id": "REQ-018",
+          "kind": "functional",
+          "statement": "keep `kill()` and a caller abort stopping a spawned command in the container."
+        },
+        {
+          "id": "REQ-019",
+          "kind": "functional",
+          "statement": "run each command in a fresh shell scope, so that `cd` and `export` in one command do not carry over to the next. This matches `local()`; the guide's Cloudflare section states it."
+        },
+        {
+          "id": "REQ-020",
+          "kind": "functional",
+          "statement": "keep the result of every command that already completes correctly today unchanged, including empty and comment-only commands and commands that contain quotes or heredocs."
         }
       ]
     }
