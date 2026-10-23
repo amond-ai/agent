@@ -100,6 +100,8 @@ Considered and not built:
   - `case=kill` and `case=abort` stop the multi-command loop at 3 lines, still 3 lines four seconds later.
   TD-016 moved to Resolved.
 
+- [x] (2026-10-23 17:17 KST) Review-stage commits (SHA: `9ae767e8`, `e38ea657`, `36bf885d`, `94772cdc`)
+
 ## Decision Log
 
 - 2026-10-22: Wrapper form `( eval '…' )` chosen over `bash -c` and a bare subshell (investigation.md Section 3).
@@ -114,3 +116,29 @@ Considered and not built:
 
 - Observation: just-bash diverges from real bash on three ACs. Inside `eval`, a syntax error gives exit 1 (real bash: 2, AC-006); `trap` is not implemented ("command not found"), so AC-014 cannot print `bye`; `exec` does not end the shell, so AC-009 passes without the wrapper.
   Evidence: probe of `( eval '…' )` over just-bash on 2026-10-22. The unit tests assert a nonzero code with "syntax error" on stderr (AC-006) and exit 2 (AC-014); T002 must confirm exit 2 and `bye` on a real container.
+
+## Outcomes & Retrospective
+
+### What Was Shipped
+
+- `cloudflareSandbox` runs each caller command as `( eval ' <command>' )`, at the driver `exec` and both live `spawn` routes. A bare `exit N`, a failing `set -e` step, `exec` or a syntax error now reports an exit status through `run` and `spawn`, instead of rejecting with `SessionTerminatedError` or hanging.
+- The test fake models the SDK's session shell, and the scope tests run over the buffered, `execStream` and process-API stub shapes.
+- Two test-only stubs prove the wrapper is load-bearing: `persistentSessionStub` shows `cd` and `export` do not carry over, and `execReplacesShellStub` shows an `exec`-ed program's exit code is reported.
+- The guide and the sandbox API reference state that each command runs in its own shell scope.
+- Verified on a real Cloudflare container (SDK 0.11.0). TD-016 is resolved.
+
+### What Went Well
+
+- The scratch failing-test loop from the investigation became the session-shell model in the committed tests, so the bug was reproduced on all three stub shapes before the fix.
+- The real-container smoke worker from #51 was reused, which caught that the session shell is bash and settled AC-012 and the `bye` output of AC-014.
+- Review found tests that passed with the wrapper removed (AC-009, AC-013, the abort-message test). Each was strengthened and checked to fail with the wrapper removed.
+
+### What Could Improve
+
+- just-bash diverges from bash on `exec`, `trap` and syntax-error codes, so several tests first proved less than their titles claimed. Running a "remove the fix" check on each new regression test during implementation would have caught this before review.
+- The review ran four ensemble iterations. Repeated findings with new wording (kill reach, the three wrap sites, `cd`/`export` persistence) cost validator passes each time, because the rejected-findings ledger matches only on exact titles.
+- greptile was not installed, so every review exit was `needs_human_read` rather than `no_issues`.
+
+### Tech Debt Created
+
+- TD-017: wrapper edge cases kept as plausible in review. They are kill reach on a single long-running child, the `execReplacesShellStub` regex, trap output on just-bash, and the fake's completion marker.

@@ -7,10 +7,11 @@
   "conflicts": [],
   "traces": [],
   "created_at": "2026-10-21T13:37:31.365Z",
-  "updated_at": "2026-10-22T08:11:45.066Z",
+  "updated_at": "2026-10-23T08:07:22.205Z",
   "source_tracks": [
     "ai-sdk-sandbox-20261020",
-    "cf-spawn-kill-20261022"
+    "cf-spawn-kill-20261022",
+    "cf-bare-exit-20261022"
   ],
   "requirements": [
     {
@@ -300,6 +301,198 @@
       "statement": "cover the new `Sandbox` contract with tests that run on all three built-in providers. `@amond-ai/agent` has no tests today, so these are new",
       "source_tracks": [
         "ai-sdk-sandbox-20261020"
+      ]
+    },
+    {
+      "id": "REQ-015",
+      "kind": "functional",
+      "statement": "report the exit code and output of a command that ends with an `exit` builtin, for `run` and for `spawn`, on every Cloudflare sandbox shape: the process API, `execStream` only, and neither.",
+      "source_tracks": [
+        "cf-bare-exit-20261022"
+      ],
+      "scenarios": [
+        {
+          "name": "When `run` executes `echo before; exit 3`, the system shall resolve with exit code 3 and stdout `before\\n`.",
+          "given": [],
+          "when": [
+            "`run` executes `echo before; exit 3`"
+          ],
+          "then": [
+            "resolve with exit code 3 and stdout `before\\n`"
+          ]
+        },
+        {
+          "name": "When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`.",
+          "given": [],
+          "when": [],
+          "then": [
+            "When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`"
+          ]
+        },
+        {
+          "name": "When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`.",
+          "given": [],
+          "when": [],
+          "then": [
+            "When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`"
+          ]
+        },
+        {
+          "name": "When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\\n`.",
+          "given": [],
+          "when": [],
+          "then": [
+            "When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\\n`"
+          ]
+        },
+        {
+          "name": "When a command that ended with a bare `exit` has finished, the next `run` on the same sandbox shall run and report its own exit code.",
+          "given": [],
+          "when": [
+            "a command that ended with a bare `exit` has finished"
+          ],
+          "then": [
+            "run and report its own exit code"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-016",
+      "kind": "functional",
+      "statement": "report an exit code, instead of failing or hanging, for any command that would otherwise end the SDK's session shell: a failing step under `set -e`, `exec`, an `EXIT` trap, a syntax error, an unbalanced quote, or an unterminated heredoc.",
+      "source_tracks": [
+        "cf-bare-exit-20261022"
+      ],
+      "scenarios": [
+        {
+          "name": "If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr.",
+          "given": [],
+          "when": [],
+          "then": [
+            "If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr"
+          ]
+        },
+        {
+          "name": "If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout.",
+          "given": [],
+          "when": [],
+          "then": [
+            "If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout"
+          ]
+        },
+        {
+          "name": "If a command runs `exec` on another program, then `run` shall resolve with that program's exit code.",
+          "given": [],
+          "when": [],
+          "then": [
+            "If a command runs `exec` on another program, then `run` shall resolve with that program's exit code"
+          ]
+        },
+        {
+          "name": "If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\\n`.",
+          "given": [],
+          "when": [],
+          "then": [
+            "If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\\n`"
+          ]
+        },
+        {
+          "name": "If a command has an unbalanced quote, such as `echo \"abc`, then `run` shall resolve with a nonzero exit code instead of hanging.",
+          "given": [],
+          "when": [],
+          "then": [
+            "If a command has an unbalanced quote, such as `echo \"abc`, then `run` shall resolve with a nonzero exit code instead of hanging"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-017",
+      "kind": "functional",
+      "statement": "keep delivering the caller's working directory and environment variables to the command.",
+      "source_tracks": [
+        "cf-bare-exit-20261022"
+      ],
+      "scenarios": [
+        {
+          "name": "When `run` executes a command that prints `$NAME` and the working directory, with `env: { NAME: 'v' }` and a working directory other than the default, the system shall print `v` and that directory.",
+          "given": [],
+          "when": [
+            "`run` executes a command that prints `$NAME` and the working directory, with `env: { NAME: 'v' }` and a working directory other than the default"
+          ],
+          "then": [
+            "print `v` and that directory"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-018",
+      "kind": "functional",
+      "statement": "keep `kill()` and a caller abort stopping a spawned command in the container.",
+      "source_tracks": [
+        "cf-bare-exit-20261022"
+      ],
+      "scenarios": [
+        {
+          "name": "When `kill()` is called on a spawned multi-command loop on a real Cloudflare container, the loop shall stop writing within a second.",
+          "given": [],
+          "when": [
+            "`kill()` is called on a spawned multi-command loop on a real Cloudflare container"
+          ],
+          "then": [
+            "stop writing within a second"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-019",
+      "kind": "functional",
+      "statement": "run each command in a fresh shell scope, so that `cd` and `export` in one command do not carry over to the next. This matches `local()`; the guide's Cloudflare section states it.",
+      "source_tracks": [
+        "cf-bare-exit-20261022"
+      ],
+      "scenarios": [
+        {
+          "name": "When one `run` executes `export Z=1` and the next `run` prints `$Z`, the second command shall print an empty line.",
+          "given": [],
+          "when": [
+            "one `run` executes `export Z=1` and the next `run` prints `$Z`"
+          ],
+          "then": [
+            "print an empty line"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "REQ-020",
+      "kind": "functional",
+      "statement": "keep the result of every command that already completes correctly today unchanged, including empty and comment-only commands and commands that contain quotes or heredocs.",
+      "source_tracks": [
+        "cf-bare-exit-20261022"
+      ],
+      "scenarios": [
+        {
+          "name": "If a command is empty or only a comment, then `run` shall resolve with exit code 0.",
+          "given": [],
+          "when": [],
+          "then": [
+            "If a command is empty or only a comment, then `run` shall resolve with exit code 0"
+          ]
+        },
+        {
+          "name": "When a command contains single quotes, such as `printf '%s\\n' 'it'\"'\"'s'`, the system shall run it unchanged and print `it's`.",
+          "given": [],
+          "when": [
+            "a command contains single quotes, such as `printf '%s\\n' 'it'\"'\"'s'`"
+          ],
+          "then": [
+            "run it unchanged and print `it's`"
+          ]
+        }
       ]
     }
   ]

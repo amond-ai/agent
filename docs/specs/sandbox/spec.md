@@ -7,8 +7,8 @@ depends: []
 conflicts: []
 traces: []
 created_at: 2026-10-21T13:37:31.365Z
-updated_at: 2026-10-22T08:11:45.066Z
-source_tracks: ["ai-sdk-sandbox-20261020", "cf-spawn-kill-20261022"]
+updated_at: 2026-10-23T08:07:22.205Z
+source_tracks: ["ai-sdk-sandbox-20261020", "cf-spawn-kill-20261022", "cf-bare-exit-20261022"]
 ---
 
 # Spec Specification
@@ -152,6 +152,102 @@ The system MUST keep the public `session.fs` and `session.shell` unchanged in na
 
 - WHEN `session.fs.readFile` targets a missing file
 - THEN reject, as it does today
+
+### Requirement: report the exit code and output of a command that ends with an `exit` builtin, for `run` and for `spawn`, on every Cloudflare sandbox shape: the process API, `execStream` only, and neither.
+<!-- req: REQ-015 tracks=cf-bare-exit-20261022 -->
+
+The system MUST report the exit code and output of a command that ends with an `exit` builtin, for `run` and for `spawn`, on every Cloudflare sandbox shape: the process API, `execStream` only, and neither.
+
+#### Scenario: When `run` executes `echo before; exit 3`, the system shall resolve with exit code 3 and stdout `before\n`.
+
+- WHEN `run` executes `echo before; exit 3`
+- THEN resolve with exit code 3 and stdout `before\n`
+
+#### Scenario: When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`.
+
+- THEN When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`
+
+#### Scenario: When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`.
+
+- THEN When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`
+
+#### Scenario: When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\n`.
+
+- THEN When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\n`
+
+#### Scenario: When a command that ended with a bare `exit` has finished, the next `run` on the same sandbox shall run and report its own exit code.
+
+- WHEN a command that ended with a bare `exit` has finished
+- THEN run and report its own exit code
+
+### Requirement: report an exit code, instead of failing or hanging, for any command that would otherwise end the SDK's session shell: a failing step under `set -e`, `exec`, an `EXIT` trap, a syntax error, an unbalanced quote, or an unterminated heredoc.
+<!-- req: REQ-016 tracks=cf-bare-exit-20261022 -->
+
+The system MUST report an exit code, instead of failing or hanging, for any command that would otherwise end the SDK's session shell: a failing step under `set -e`, `exec`, an `EXIT` trap, a syntax error, an unbalanced quote, or an unterminated heredoc.
+
+#### Scenario: If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr.
+
+- THEN If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr
+
+#### Scenario: If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout.
+
+- THEN If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout
+
+#### Scenario: If a command runs `exec` on another program, then `run` shall resolve with that program's exit code.
+
+- THEN If a command runs `exec` on another program, then `run` shall resolve with that program's exit code
+
+#### Scenario: If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\n`.
+
+- THEN If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\n`
+
+#### Scenario: If a command has an unbalanced quote, such as `echo "abc`, then `run` shall resolve with a nonzero exit code instead of hanging.
+
+- THEN If a command has an unbalanced quote, such as `echo "abc`, then `run` shall resolve with a nonzero exit code instead of hanging
+
+### Requirement: keep delivering the caller's working directory and environment variables to the command.
+<!-- req: REQ-017 tracks=cf-bare-exit-20261022 -->
+
+The system MUST keep delivering the caller's working directory and environment variables to the command.
+
+#### Scenario: When `run` executes a command that prints `$NAME` and the working directory, with `env: { NAME: 'v' }` and a working directory other than the default, the system shall print `v` and that directory.
+
+- WHEN `run` executes a command that prints `$NAME` and the working directory, with `env: { NAME: 'v' }` and a working directory other than the default
+- THEN print `v` and that directory
+
+### Requirement: keep `kill()` and a caller abort stopping a spawned command in the container.
+<!-- req: REQ-018 tracks=cf-bare-exit-20261022 -->
+
+The system MUST keep `kill()` and a caller abort stopping a spawned command in the container.
+
+#### Scenario: When `kill()` is called on a spawned multi-command loop on a real Cloudflare container, the loop shall stop writing within a second.
+
+- WHEN `kill()` is called on a spawned multi-command loop on a real Cloudflare container
+- THEN stop writing within a second
+
+### Requirement: run each command in a fresh shell scope, so that `cd` and `export` in one command do not carry over to the next. This matches `local()`; the guide's Cloudflare section states it.
+<!-- req: REQ-019 tracks=cf-bare-exit-20261022 -->
+
+The system MUST run each command in a fresh shell scope, so that `cd` and `export` in one command do not carry over to the next. This matches `local()`; the guide's Cloudflare section states it.
+
+#### Scenario: When one `run` executes `export Z=1` and the next `run` prints `$Z`, the second command shall print an empty line.
+
+- WHEN one `run` executes `export Z=1` and the next `run` prints `$Z`
+- THEN print an empty line
+
+### Requirement: keep the result of every command that already completes correctly today unchanged, including empty and comment-only commands and commands that contain quotes or heredocs.
+<!-- req: REQ-020 tracks=cf-bare-exit-20261022 -->
+
+The system MUST keep the result of every command that already completes correctly today unchanged, including empty and comment-only commands and commands that contain quotes or heredocs.
+
+#### Scenario: If a command is empty or only a comment, then `run` shall resolve with exit code 0.
+
+- THEN If a command is empty or only a comment, then `run` shall resolve with exit code 0
+
+#### Scenario: When a command contains single quotes, such as `printf '%s\n' 'it'"'"'s'`, the system shall run it unchanged and print `it's`.
+
+- WHEN a command contains single quotes, such as `printf '%s\n' 'it'"'"'s'`
+- THEN run it unchanged and print `it's`
 
 ## Non-functional Requirements
 
