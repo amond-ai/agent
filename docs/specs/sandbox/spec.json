@@ -312,37 +312,43 @@
       ],
       "scenarios": [
         {
-          "name": "When `run` executes `echo before; exit 3`, the system shall resolve with exit code 3 and stdout `before\\n`.",
+          "name": "When `run` executes `echo before; exit 3`, the system shall resolve with exit code 3 and stdout `before`, with or without a trailing newline.",
           "given": [],
           "when": [
             "`run` executes `echo before; exit 3`"
           ],
           "then": [
-            "resolve with exit code 3 and stdout `before\\n`"
+            "resolve with exit code 3 and stdout `before`, with or without a trailing newline; the Cloudflare SDK trims the trailing newline from buffered output, so a real container returns it without the newline and the in-memory fakes with it"
           ]
         },
         {
           "name": "When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`.",
           "given": [],
-          "when": [],
+          "when": [
+            "`spawn` executes `echo before; exit 3` on a sandbox with the process API, without `timeoutMs`"
+          ],
           "then": [
-            "When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`"
+            "`wait()` resolves to exit code 3, and stdout delivers `before\\n`"
           ]
         },
         {
           "name": "When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`.",
           "given": [],
-          "when": [],
+          "when": [
+            "`spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, without `timeoutMs`"
+          ],
           "then": [
-            "When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\\n`"
+            "`wait()` resolves to exit code 3, and stdout delivers `before\\n`"
           ]
         },
         {
-          "name": "When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\\n`.",
+          "name": "When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before`, with or without a trailing newline.",
           "given": [],
-          "when": [],
+          "when": [
+            "`spawn` executes `echo before; exit 3` on a sandbox with neither streaming method"
+          ],
           "then": [
-            "When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\\n`"
+            "`wait()` resolves to exit code 3, and stdout delivers `before`, with or without a trailing newline; this shape runs through the buffered path, and the Cloudflare SDK trims the trailing newline from buffered output, so a real container returns it without the newline and the in-memory fakes with it"
           ]
         },
         {
@@ -368,41 +374,51 @@
         {
           "name": "If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr.",
           "given": [],
-          "when": [],
+          "when": [
+            "a command is a syntax error such as `echo (`"
+          ],
           "then": [
-            "If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr"
+            "`run` resolves with exit code 2 and the shell's error on stderr"
           ]
         },
         {
           "name": "If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout.",
           "given": [],
-          "when": [],
+          "when": [
+            "a command runs `set -e; false; echo x`"
+          ],
           "then": [
-            "If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout"
+            "`run` resolves with exit code 1 and without `x` on stdout"
           ]
         },
         {
           "name": "If a command runs `exec` on another program, then `run` shall resolve with that program's exit code.",
           "given": [],
-          "when": [],
+          "when": [
+            "a command runs `exec` on another program"
+          ],
           "then": [
-            "If a command runs `exec` on another program, then `run` shall resolve with that program's exit code"
+            "`run` resolves with that program's exit code"
           ]
         },
         {
-          "name": "If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\\n`.",
+          "name": "If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye`, with or without a trailing newline.",
           "given": [],
-          "when": [],
+          "when": [
+            "a command runs `trap 'echo bye' EXIT; exit 2`"
+          ],
           "then": [
-            "If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\\n`"
+            "`run` resolves with exit code 2 and stdout `bye`, with or without a trailing newline; the Cloudflare SDK trims the trailing newline from buffered output, so a real container returns it without the newline and the in-memory fakes with it"
           ]
         },
         {
           "name": "If a command has an unbalanced quote, such as `echo \"abc`, then `run` shall resolve with a nonzero exit code instead of hanging.",
           "given": [],
-          "when": [],
+          "when": [
+            "a command has an unbalanced quote, such as `echo \"abc`"
+          ],
           "then": [
-            "If a command has an unbalanced quote, such as `echo \"abc`, then `run` shall resolve with a nonzero exit code instead of hanging"
+            "`run` resolves with a nonzero exit code instead of hanging"
           ]
         }
       ]
@@ -444,6 +460,16 @@
           "then": [
             "stop writing within a second"
           ]
+        },
+        {
+          "name": "When a caller aborts a spawned multi-command loop on a real Cloudflare container, the loop shall have stopped writing six seconds later and stay stopped.",
+          "given": [],
+          "when": [
+            "a caller aborts a spawned multi-command loop on a real Cloudflare container"
+          ],
+          "then": [
+            "the loop has stopped writing six seconds later, and writes nothing more in the following four seconds"
+          ]
         }
       ]
     },
@@ -478,9 +504,11 @@
         {
           "name": "If a command is empty or only a comment, then `run` shall resolve with exit code 0.",
           "given": [],
-          "when": [],
+          "when": [
+            "a command is empty or only a comment"
+          ],
           "then": [
-            "If a command is empty or only a comment, then `run` shall resolve with exit code 0"
+            "`run` resolves with exit code 0"
           ]
         },
         {

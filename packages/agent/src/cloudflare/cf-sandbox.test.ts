@@ -380,6 +380,8 @@ describe.each(SHAPES)('cloudflareSandbox commands run in their own shell scope (
     const error = await within(pending).catch((e: unknown) => e)
     expect(received).toHaveLength(1)
     expect(received[0]).toMatch(/^\( eval /)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).name).toBe('AbortError')
     expect(String(error)).not.toMatch(/eval/)
   })
 })

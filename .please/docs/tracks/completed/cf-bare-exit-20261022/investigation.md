@@ -23,7 +23,7 @@ Real-container results (worker `case=bareexit` and `case=raw`):
 ### Feedback Loop
 
 - **Loop type:** failing test.
-- **How to run:** `cd packages/agent && mise exec -- npx vitest run src/cloudflare/bare-exit.loop.test.ts`
+- **How to run:** not committed. The scratch loop file was untracked and was deleted once the regression tests landed (see below); its session model now lives in `fake-cloudflare-stub.ts` and the scope tests in `cf-sandbox.test.ts`.
 - **Model:** `bare-exit.loop.test.ts` models the SDK session over the just-bash fake. It runs the command, then a completion marker. A missing marker means the session shell ended: `exec` throws `SessionTerminatedError`, and the streams stay open after the last output.
 - **Pass/fail criteria:**
   - All 7 tests green = fixed.
@@ -74,11 +74,11 @@ The SDK documents this on `SessionTerminatedError`: a user `exit` ends the sessi
 
 ### 3. Proposed Solutions
 
-**Recommended:** run every caller command in a child subshell that `eval`s the single-quoted command, `( eval '<command>' )`. This lands in `cf-sandbox.ts` at the driver's `exec` (347) and the two `spawn:` routes (372, 376), which pass `{ ...options, command: wrap(options.command) }`. It reuses `shellQuote` (`cf-sandbox.ts:128`).
+**Recommended:** run every caller command in a child subshell that `eval`s the single-quoted command, `( eval ' <command>' )` (the leading space was added in T001 so a command starting with `-` is not read as an `eval` option). This lands in `cf-sandbox.ts` at the driver's `exec` (347) and the two `spawn:` routes (372, 376), which pass `{ ...options, command: wrap(options.command) }`. It reuses `shellQuote` (`cf-sandbox.ts:128`).
 
 Why it beats the alternatives:
 
-- A subshell inherits the session's variables and directory, so the `cwd` and `env` the SDK applies still reach the command, and the contract passes on all three stub shapes.
+- A subshell inherits the session's variables and directory, so the `cwd` and `env` the SDK applies still reach the command, and the contract passes on all three stub shapes. When this was written, only the fake showed it for `env`; the real-container check in T002 later confirmed both (`envcwd` printed `v` and `/workspace/sub`).
 - The subshell contains every way a command can end the shell: `exit`, `set -e`, `trap … EXIT`, `exec`.
 - `eval` turns a parse error, an unbalanced quote or an unterminated heredoc into exit code 2 instead of a dead session.
 - It handles empty and comment-only commands.

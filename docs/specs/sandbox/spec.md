@@ -158,22 +158,25 @@ The system MUST keep the public `session.fs` and `session.shell` unchanged in na
 
 The system MUST report the exit code and output of a command that ends with an `exit` builtin, for `run` and for `spawn`, on every Cloudflare sandbox shape: the process API, `execStream` only, and neither.
 
-#### Scenario: When `run` executes `echo before; exit 3`, the system shall resolve with exit code 3 and stdout `before\n`.
+#### Scenario: When `run` executes `echo before; exit 3`, the system shall resolve with exit code 3 and stdout `before`, with or without a trailing newline.
 
 - WHEN `run` executes `echo before; exit 3`
-- THEN resolve with exit code 3 and stdout `before\n`
+- THEN resolve with exit code 3 and stdout `before`, with or without a trailing newline; the Cloudflare SDK trims the trailing newline from buffered output, so a real container returns it without the newline and the in-memory fakes with it
 
 #### Scenario: When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`.
 
-- THEN When `spawn` executes `echo before; exit 3` on a sandbox with the process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`
+- WHEN `spawn` executes `echo before; exit 3` on a sandbox with the process API, without `timeoutMs`
+- THEN `wait()` resolves to exit code 3, and stdout delivers `before\n`
 
 #### Scenario: When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`.
 
-- THEN When `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, `wait()` shall resolve to exit code 3 without `timeoutMs`, and stdout shall deliver `before\n`
+- WHEN `spawn` executes `echo before; exit 3` on a sandbox with `execStream` and no process API, without `timeoutMs`
+- THEN `wait()` resolves to exit code 3, and stdout delivers `before\n`
 
-#### Scenario: When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\n`.
+#### Scenario: When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before`, with or without a trailing newline.
 
-- THEN When `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method, `wait()` shall resolve to exit code 3, and stdout shall deliver `before\n`
+- WHEN `spawn` executes `echo before; exit 3` on a sandbox with neither streaming method
+- THEN `wait()` resolves to exit code 3, and stdout delivers `before`, with or without a trailing newline; this shape runs through the buffered path, and the Cloudflare SDK trims the trailing newline from buffered output, so a real container returns it without the newline and the in-memory fakes with it
 
 #### Scenario: When a command that ended with a bare `exit` has finished, the next `run` on the same sandbox shall run and report its own exit code.
 
@@ -187,23 +190,28 @@ The system MUST report an exit code, instead of failing or hanging, for any comm
 
 #### Scenario: If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr.
 
-- THEN If a command is a syntax error such as `echo (`, then `run` shall resolve with exit code 2 and the shell's error on stderr
+- WHEN a command is a syntax error such as `echo (`
+- THEN `run` resolves with exit code 2 and the shell's error on stderr
 
 #### Scenario: If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout.
 
-- THEN If a command runs `set -e; false; echo x`, then `run` shall resolve with exit code 1 and without `x` on stdout
+- WHEN a command runs `set -e; false; echo x`
+- THEN `run` resolves with exit code 1 and without `x` on stdout
 
 #### Scenario: If a command runs `exec` on another program, then `run` shall resolve with that program's exit code.
 
-- THEN If a command runs `exec` on another program, then `run` shall resolve with that program's exit code
+- WHEN a command runs `exec` on another program
+- THEN `run` resolves with that program's exit code
 
-#### Scenario: If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\n`.
+#### Scenario: If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye`, with or without a trailing newline.
 
-- THEN If a command runs `trap 'echo bye' EXIT; exit 2`, then `run` shall resolve with exit code 2 and stdout `bye\n`
+- WHEN a command runs `trap 'echo bye' EXIT; exit 2`
+- THEN `run` resolves with exit code 2 and stdout `bye`, with or without a trailing newline; the Cloudflare SDK trims the trailing newline from buffered output, so a real container returns it without the newline and the in-memory fakes with it
 
 #### Scenario: If a command has an unbalanced quote, such as `echo "abc`, then `run` shall resolve with a nonzero exit code instead of hanging.
 
-- THEN If a command has an unbalanced quote, such as `echo "abc`, then `run` shall resolve with a nonzero exit code instead of hanging
+- WHEN a command has an unbalanced quote, such as `echo "abc`
+- THEN `run` resolves with a nonzero exit code instead of hanging
 
 ### Requirement: keep delivering the caller's working directory and environment variables to the command.
 <!-- req: REQ-017 tracks=cf-bare-exit-20261022 -->
@@ -225,6 +233,11 @@ The system MUST keep `kill()` and a caller abort stopping a spawned command in t
 - WHEN `kill()` is called on a spawned multi-command loop on a real Cloudflare container
 - THEN stop writing within a second
 
+#### Scenario: When a caller aborts a spawned multi-command loop on a real Cloudflare container, the loop shall have stopped writing six seconds later and stay stopped.
+
+- WHEN a caller aborts a spawned multi-command loop on a real Cloudflare container
+- THEN the loop has stopped writing six seconds later, and writes nothing more in the following four seconds
+
 ### Requirement: run each command in a fresh shell scope, so that `cd` and `export` in one command do not carry over to the next. This matches `local()`; the guide's Cloudflare section states it.
 <!-- req: REQ-019 tracks=cf-bare-exit-20261022 -->
 
@@ -242,7 +255,8 @@ The system MUST keep the result of every command that already completes correctl
 
 #### Scenario: If a command is empty or only a comment, then `run` shall resolve with exit code 0.
 
-- THEN If a command is empty or only a comment, then `run` shall resolve with exit code 0
+- WHEN a command is empty or only a comment
+- THEN `run` resolves with exit code 0
 
 #### Scenario: When a command contains single quotes, such as `printf '%s\n' 'it'"'"'s'`, the system shall run it unchanged and print `it's`.
 

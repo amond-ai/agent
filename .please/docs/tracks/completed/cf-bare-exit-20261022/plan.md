@@ -9,7 +9,7 @@
 - **Track**: cf-bare-exit-20261022
 - **Issue**: #52
 - **Created**: 2026-10-22
-- **Approach**: `cloudflareSandbox` runs every caller command as `( eval '<command>' )`, so anything that would end the SDK's session shell ends only a subshell, and the SDK still reports the exit code.
+- **Approach**: `cloudflareSandbox` runs every caller command as `( eval ' <command>' )`, so anything that would end the SDK's session shell ends only a subshell, and the SDK still reports the exit code.
 - **Testing**: tdd
 - **Plan Depth**: lightweight
 - **Planned At**: 0e530e7
