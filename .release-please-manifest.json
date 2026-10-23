@@ -3,9 +3,9 @@
   "packages/durable": "0.1.0",
   "packages/durable-cloudflare": "0.1.0",
   "packages/harness-claude-code": "0.1.0",
-  "packages/agent": "0.1.0",
-  "packages/agent-vite": "0.1.0",
-  "packages/cli": "0.1.0",
-  "packages/agent-sdk": "0.1.0",
-  "packages/agent-react": "0.1.0"
+  "packages/agent": "0.2.0",
+  "packages/agent-vite": "0.2.0",
+  "packages/cli": "0.2.0",
+  "packages/agent-sdk": "0.2.0",
+  "packages/agent-react": "0.2.0"
 }
